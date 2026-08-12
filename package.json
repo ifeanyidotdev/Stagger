@@ -1,7 +1,9 @@
 {
-  "name": "tauri-app",
+  "name": "stagenode",
   "private": true,
   "version": "0.1.0",
+  "license": "GPL-3.0-or-later",
+  "description": "A modern, lightning-fast desktop Git staging & branch workflow client built with Tauri and React.",
   "type": "module",
   "scripts": {
     "dev": "vite",
