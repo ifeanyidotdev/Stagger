@@ -23,7 +23,15 @@ import {
   ChevronDown,
   FolderPlus,
   Archive,
-  Eye
+  Eye,
+  GitMerge,
+  Globe,
+  ArrowUp,
+  ArrowDown,
+  RefreshCcw,
+  DownloadCloud,
+  X,
+  MoreVertical
 } from "lucide-react";
 import "./App.css";
 
@@ -37,6 +45,12 @@ interface GitFileStatus {
 interface GitStatusResult {
   files: GitFileStatus[];
   current_branch: string;
+}
+
+interface BranchInfo {
+  name: string;
+  is_remote: boolean;
+  upstream?: string | null;
 }
 
 interface CommitInfo {
@@ -188,10 +202,24 @@ function App() {
   const [coAuthor, setCoAuthor] = useState("");
   const [amendCommit, setAmendCommit] = useState(false);
 
+  // --- REMOTE & BRANCH MANAGEMENT STATE ---
+  const [allBranches, setAllBranches] = useState<BranchInfo[]>([]);
+  const [remoteBranches, setRemoteBranches] = useState<string[]>([]);
+  const [hasUpstream, setHasUpstream] = useState<boolean>(false);
+  const [upstreamBranchName, setUpstreamBranchName] = useState<string | null>(null);
+  const [unpushedCount, setUnpushedCount] = useState<number>(0);
+  const [isFetchingRemote, setIsFetchingRemote] = useState<boolean>(false);
+  const [isPushingRemote, setIsPushingRemote] = useState<boolean>(false);
+  const [isPullingRemote, setIsPullingRemote] = useState<boolean>(false);
+  const [isRemoteBranchListExpanded, setIsRemoteBranchListExpanded] = useState<boolean>(true);
+  const [isBranchOpsDropdownOpen, setIsBranchOpsDropdownOpen] = useState<boolean>(false);
+  const [mergeRebaseMode, setMergeRebaseMode] = useState<"merge" | "rebase">("merge");
+  const [targetMergeBranch, setTargetMergeBranch] = useState<string>("");
+
   // --- POPUPS & INTERACTIVE INPUT STATES ---
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [cliOutput, setCliOutput] = useState<GitCliResult | null>(null);
-  const [dialogType, setDialogType] = useState<"branch" | "checkout" | "clone" | "publish" | "pr-create" | "login" | "workspace-add" | "git-init-confirm" | "delete-branch-confirm" | "git-delete-force-confirm" | "checkout-conflict" | "stash-name" | "stash-inspector" | null>(null);
+  const [dialogType, setDialogType] = useState<"branch" | "checkout" | "clone" | "publish" | "set-remote" | "pr-create" | "login" | "workspace-add" | "git-init-confirm" | "delete-branch-confirm" | "git-delete-force-confirm" | "checkout-conflict" | "stash-name" | "stash-inspector" | "merge-rebase" | null>(null);
   const [dialogInput, setDialogInput] = useState("");
   const [dialogInput2, setDialogInput2] = useState(""); 
 
@@ -375,6 +403,51 @@ function App() {
 
       setBranchList(branchesList);
 
+      // Fetch all branches (local + remote) and upstream info
+      try {
+        const allBranchesInfo = await invoke<BranchInfo[]>("get_all_branches", { repoPath: path });
+        setAllBranches(allBranchesInfo);
+        const remotes = allBranchesInfo.filter(b => b.is_remote).map(b => b.name);
+        setRemoteBranches(remotes);
+
+        const currentInfo = allBranchesInfo.find(b => !b.is_remote && b.name === statusRes.current_branch);
+        if (currentInfo && currentInfo.upstream) {
+          setHasUpstream(true);
+          setUpstreamBranchName(currentInfo.upstream);
+        } else {
+          const upstreamRes = await invoke<GitCliResult>("run_git_cli_cmd", {
+            repoPath: path,
+            args: ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"]
+          });
+          if (upstreamRes.exit_code === 0 && upstreamRes.stdout.trim()) {
+            setHasUpstream(true);
+            setUpstreamBranchName(upstreamRes.stdout.trim());
+          } else {
+            setHasUpstream(false);
+            setUpstreamBranchName(null);
+          }
+        }
+      } catch (_) {
+        setHasUpstream(false);
+        setUpstreamBranchName(null);
+      }
+
+      // Check unpushed commits count
+      try {
+        const unpushedRes = await invoke<GitCliResult>("run_git_cli_cmd", {
+          repoPath: path,
+          args: ["rev-list", "@{u}..HEAD", "--count"]
+        });
+        if (unpushedRes.exit_code === 0) {
+          const count = parseInt(unpushedRes.stdout.trim(), 10);
+          setUnpushedCount(isNaN(count) ? 0 : count);
+        } else {
+          setUnpushedCount(0);
+        }
+      } catch (_) {
+        setUnpushedCount(0);
+      }
+
       const remoteRes = await invoke<GitCliResult>("run_git_cli_cmd", {
         repoPath: path,
         args: ["remote", "get-url", "origin"]
@@ -416,6 +489,173 @@ function App() {
     }
   };
 
+  // --- GIT REMOTE & MERGE/REBASE ACTIONS ---
+  const handleGitFetch = async (allRemotes: boolean = false) => {
+    setIsFetchingRemote(true);
+    try {
+      const args = allRemotes ? ["fetch", "--all", "--prune"] : ["fetch", "origin"];
+      const res = await invoke<GitCliResult>("run_git_cli_cmd", {
+        repoPath,
+        args
+      });
+      setCliOutput(res);
+      if (res.exit_code === 0) {
+        setErrorMessage(null);
+        await refreshRepository();
+      } else {
+        setErrorMessage(`Fetch failed:\n${res.stderr || res.stdout}`);
+      }
+    } catch (err: any) {
+      setErrorMessage(err.toString());
+    } finally {
+      setIsFetchingRemote(false);
+    }
+  };
+
+  const handleGitPush = async (publish: boolean = false) => {
+    if (!remoteUrl) {
+      setDialogInput("");
+      setDialogType("set-remote");
+      return;
+    }
+    setIsPushingRemote(true);
+    try {
+      let args = ["push", "origin", currentBranch];
+      if (publish || !hasUpstream) {
+        args = ["push", "-u", "origin", currentBranch];
+      }
+      const res = await invoke<GitCliResult>("run_git_cli_cmd", {
+        repoPath,
+        args
+      });
+      setCliOutput(res);
+      if (res.exit_code === 0) {
+        setErrorMessage(null);
+        await refreshRepository();
+      } else {
+        if (res.stderr.includes("does not appear to be a git repository") || res.stderr.includes("No such remote") || res.stderr.includes("destination specifier")) {
+          setDialogInput("");
+          setDialogType("set-remote");
+        } else {
+          setErrorMessage(`Push failed:\n${res.stderr || res.stdout}`);
+        }
+      }
+    } catch (err: any) {
+      setErrorMessage(err.toString());
+    } finally {
+      setIsPushingRemote(false);
+    }
+  };
+
+  const handleSetRemoteUrl = async () => {
+    if (!dialogInput.trim()) return;
+    const url = dialogInput.trim();
+    try {
+      let res = await invoke<GitCliResult>("run_git_cli_cmd", {
+        repoPath,
+        args: ["remote", "add", "origin", url]
+      });
+
+      if (res.exit_code !== 0 && res.stderr.includes("already exists")) {
+        res = await invoke<GitCliResult>("run_git_cli_cmd", {
+          repoPath,
+          args: ["remote", "set-url", "origin", url]
+        });
+      }
+
+      if (res.exit_code === 0) {
+        setRemoteUrl(url);
+        setDialogType(null);
+        setDialogInput("");
+        await refreshRepository();
+        await handleGitPush(true);
+      } else {
+        setErrorMessage(`Failed to set remote origin:\n${res.stderr || res.stdout}`);
+      }
+    } catch (err: any) {
+      setErrorMessage(err.toString());
+    }
+  };
+
+  const handleGitPull = async () => {
+    setIsPullingRemote(true);
+    try {
+      const res = await invoke<GitCliResult>("run_git_cli_cmd", {
+        repoPath,
+        args: ["pull", "origin", currentBranch]
+      });
+      setCliOutput(res);
+      if (res.exit_code === 0) {
+        setErrorMessage(null);
+        await refreshRepository();
+      } else {
+        setErrorMessage(`Pull failed:\n${res.stderr || res.stdout}`);
+      }
+    } catch (err: any) {
+      setErrorMessage(err.toString());
+    } finally {
+      setIsPullingRemote(false);
+    }
+  };
+
+  const openMergeRebaseModal = (initialTarget: string = "", mode: "merge" | "rebase" = "merge") => {
+    setMergeRebaseMode(mode);
+    const available = branchList.filter(b => b !== currentBranch);
+    setTargetMergeBranch(initialTarget || available[0] || remoteBranches[0] || "");
+    setDialogType("merge-rebase");
+  };
+
+  const handleExecuteMergeOrRebase = async () => {
+    if (!targetMergeBranch) return;
+    try {
+      const args = mergeRebaseMode === "merge"
+        ? ["merge", targetMergeBranch]
+        : ["rebase", targetMergeBranch];
+      
+      const res = await invoke<GitCliResult>("run_git_cli_cmd", {
+        repoPath,
+        args
+      });
+      setCliOutput(res);
+      setDialogType(null);
+      if (res.exit_code === 0) {
+        setErrorMessage(null);
+        await refreshRepository();
+      } else {
+        setErrorMessage(`${mergeRebaseMode === "merge" ? "Merge" : "Rebase"} conflict or error:\n${res.stderr || res.stdout}`);
+        await refreshRepository();
+      }
+    } catch (err: any) {
+      setErrorMessage(err.toString());
+      setDialogType(null);
+    }
+  };
+
+  const handleCheckoutRemoteBranch = async (remoteName: string) => {
+    const localName = remoteName.replace(/^[^/]+\//, "");
+    try {
+      const res = await invoke<GitCliResult>("run_git_cli_cmd", {
+        repoPath,
+        args: ["checkout", "-b", localName, remoteName]
+      });
+      if (res.exit_code === 0) {
+        await refreshRepository();
+      } else {
+        const fallbackRes = await invoke<GitCliResult>("run_git_cli_cmd", {
+          repoPath,
+          args: ["checkout", localName]
+        });
+        if (fallbackRes.exit_code === 0) {
+          await refreshRepository();
+        } else {
+          setErrorMessage(`Failed to checkout remote branch:\n${res.stderr}`);
+        }
+      }
+    } catch (err: any) {
+      setErrorMessage(err.toString());
+    }
+  };
+
   // --- INITIALIZE NEW REPO ---
   const initializeGitRepo = async () => {
     try {
@@ -436,6 +676,7 @@ function App() {
 
   // --- GIT BRANCH ACTIONS ---
   const startCheckoutBranch = (branchName: string) => {
+    if (branchName === currentBranch) return;
     if (commits.length === 0) {
       handleCheckoutBranch(branchName);
       return;
@@ -449,6 +690,7 @@ function App() {
   };
 
   const handleCheckoutBranch = async (branchName: string) => {
+    if (branchName === currentBranch) return;
     try {
       let args = ["checkout", branchName];
       if (commits.length === 0) {
@@ -885,11 +1127,14 @@ function App() {
   // --- NODE INTERACTION (DRAGGING) ---
   const handleNodeMouseDown = (e: React.MouseEvent, nodeId: string) => {
     const node = canvasNodes.find(n => n.id === nodeId);
-    if (!node) return;
+    if (!node || !canvasRef.current) return;
     setDraggingNodeId(nodeId);
+    const rect = canvasRef.current.getBoundingClientRect();
+    const scrollLeft = canvasRef.current.scrollLeft;
+    const scrollTop = canvasRef.current.scrollTop;
     dragOffset.current = {
-      x: e.clientX - node.x,
-      y: e.clientY - node.y
+      x: (e.clientX - rect.left + scrollLeft) - node.x,
+      y: (e.clientY - rect.top + scrollTop) - node.y
     };
     e.stopPropagation();
   };
@@ -897,10 +1142,13 @@ function App() {
   const handleCanvasMouseMove = (e: React.MouseEvent) => {
     if (!draggingNodeId || !canvasRef.current) return;
     const rect = canvasRef.current.getBoundingClientRect();
-    let newX = e.clientX - dragOffset.current.x;
-    let newY = e.clientY - dragOffset.current.y;
-    newX = Math.max(10, Math.min(rect.width - 340, newX));
-    newY = Math.max(10, Math.min(rect.height - 180, newY));
+    const scrollLeft = canvasRef.current.scrollLeft;
+    const scrollTop = canvasRef.current.scrollTop;
+
+    let newX = (e.clientX - rect.left + scrollLeft) - dragOffset.current.x;
+    let newY = (e.clientY - rect.top + scrollTop) - dragOffset.current.y;
+    newX = Math.max(10, newX);
+    newY = Math.max(10, newY);
     setCanvasNodes(prev => prev.map(n => n.id === draggingNodeId ? { ...n, x: newX, y: newY } : n));
   };
 
@@ -1343,12 +1591,12 @@ function App() {
         {/* Sidebar Content */}
         <div className="sidebar-content">
           
-          {/* Branch Section */}
+          {/* Local Branches Section */}
           <div className="sidebar-section">
             <div 
               className="section-title" 
               onClick={() => setIsBranchListExpanded(!isBranchListExpanded)} 
-              style={{ cursor: "pointer", userSelect: "none" }}
+              style={{ cursor: "pointer", userSelect: "none", position: "relative" }}
             >
               <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                 <span style={{ 
@@ -1359,17 +1607,124 @@ function App() {
                 }}>
                   ▶
                 </span>
-                <span>Branches</span>
+                <span>Local Branches</span>
               </div>
-              <Plus 
-                size={14} 
-                style={{ cursor: "pointer" }} 
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setDialogType("branch");
-                  setDialogInput("");
-                }} 
-              />
+              <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                <span
+                  title="Git Operations & Sync Menu"
+                  style={{ display: "inline-flex", alignItems: "center", cursor: "pointer", padding: "2px" }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsBranchOpsDropdownOpen(!isBranchOpsDropdownOpen);
+                  }}
+                >
+                  <MoreVertical size={14} />
+                </span>
+                <span
+                  title="New Branch"
+                  style={{ display: "inline-flex", alignItems: "center", cursor: "pointer", padding: "2px" }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setDialogType("branch");
+                    setDialogInput("");
+                  }}
+                >
+                  <Plus size={14} />
+                </span>
+              </div>
+
+              {/* SIDEBAR BRANCH & REMOTE OPERATIONS DROPDOWN MENU */}
+              {isBranchOpsDropdownOpen && (
+                <div 
+                  className="branch-ops-dropdown"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="dropdown-section-header">GIT SYNC & REMOTE</div>
+                  
+                  <div 
+                    className="dropdown-menu-item"
+                    onClick={() => {
+                      setIsBranchOpsDropdownOpen(false);
+                      handleGitFetch(false);
+                    }}
+                  >
+                    <DownloadCloud size={13} style={{ color: "var(--accent-blue)" }} />
+                    <span>Fetch Origin</span>
+                  </div>
+
+                  <div 
+                    className="dropdown-menu-item"
+                    onClick={() => {
+                      setIsBranchOpsDropdownOpen(false);
+                      handleGitFetch(true);
+                    }}
+                  >
+                    <RefreshCcw size={13} style={{ color: "var(--accent-purple)" }} />
+                    <span>Refetch All Remote Branches</span>
+                  </div>
+
+                  <div 
+                    className="dropdown-menu-item"
+                    onClick={() => {
+                      setIsBranchOpsDropdownOpen(false);
+                      handleGitPull();
+                    }}
+                  >
+                    <ArrowDown size={13} className={isPullingRemote ? "spin-icon" : ""} style={{ color: "var(--color-staged)" }} />
+                    <span>Pull from Origin</span>
+                  </div>
+
+                  {!hasUpstream ? (
+                    <div 
+                      className="dropdown-menu-item highlight"
+                      onClick={() => {
+                        setIsBranchOpsDropdownOpen(false);
+                        handleGitPush(true);
+                      }}
+                    >
+                      <Globe size={13} className={isPushingRemote ? "spin-icon" : ""} style={{ color: "#61afef" }} />
+                      <span>Publish Branch to Origin</span>
+                    </div>
+                  ) : (
+                    <div 
+                      className="dropdown-menu-item"
+                      onClick={() => {
+                        setIsBranchOpsDropdownOpen(false);
+                        handleGitPush(false);
+                      }}
+                    >
+                      <ArrowUp size={13} className={isPushingRemote ? "spin-icon" : ""} style={{ color: "var(--color-staged)" }} />
+                      <span>Push to {upstreamBranchName || "Origin"}</span>
+                    </div>
+                  )}
+
+                  <div className="dropdown-divider" />
+                  <div className="dropdown-section-header">BRANCH MANAGEMENT</div>
+
+                  <div 
+                    className="dropdown-menu-item"
+                    onClick={() => {
+                      setIsBranchOpsDropdownOpen(false);
+                      openMergeRebaseModal();
+                    }}
+                  >
+                    <GitMerge size={13} style={{ color: "var(--color-modified)" }} />
+                    <span>Merge / Rebase Branch...</span>
+                  </div>
+
+                  <div 
+                    className="dropdown-menu-item"
+                    onClick={() => {
+                      setIsBranchOpsDropdownOpen(false);
+                      setDialogType("branch");
+                      setDialogInput("");
+                    }}
+                  >
+                    <Plus size={13} style={{ color: "var(--color-text-main)" }} />
+                    <span>Create New Branch...</span>
+                  </div>
+                </div>
+              )}
             </div>
             {isBranchListExpanded && (
               <div className="branch-list">
@@ -1385,37 +1740,109 @@ function App() {
                     }}
                   >
                     <GitBranch size={14} />
-                    <span>{bName}</span>
+                    <span style={{ flex: 1, textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>{bName}</span>
                     {currentBranch === bName ? (
                       <span className="branch-tick" title="Focused Branch">✓</span>
                     ) : draggedCommitSha ? (
                       <span style={{ marginLeft: "auto", fontSize: "0.65rem", color: "var(--color-conflict)" }}>Merge Drop</span>
                     ) : (
-                      <button 
-                        style={{ 
-                          background: "none", 
-                          border: "none", 
-                          cursor: "pointer", 
-                          padding: "2px",
-                          color: "var(--color-text-muted)",
-                          marginLeft: "auto",
-                          display: "flex",
-                          alignItems: "center"
-                        }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          startDeleteBranch(bName);
-                        }}
-                        title="Delete Branch"
-                      >
-                        <Trash2 size={12} style={{ color: "var(--color-deleted)", opacity: 0.7 }} />
-                      </button>
+                      <div className="branch-item-actions" style={{ display: "flex", gap: "4px", alignItems: "center", marginLeft: "auto" }}>
+                        <button
+                          className="branch-action-icon-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openMergeRebaseModal(bName, "merge");
+                          }}
+                          title={`Merge '${bName}' into '${currentBranch}'`}
+                        >
+                          <GitMerge size={12} style={{ color: "var(--color-modified)" }} />
+                        </button>
+                        <button 
+                          className="branch-action-icon-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            startDeleteBranch(bName);
+                          }}
+                          title="Delete Branch"
+                        >
+                          <Trash2 size={12} style={{ color: "var(--color-deleted)", opacity: 0.7 }} />
+                        </button>
+                      </div>
                     )}
                   </div>
                 ))}
               </div>
             )}
           </div>
+
+          {/* Remote Branches Section */}
+          {hasRepo && (
+            <div className="sidebar-section">
+              <div 
+                className="section-title" 
+                onClick={() => setIsRemoteBranchListExpanded(!isRemoteBranchListExpanded)} 
+                style={{ cursor: "pointer", userSelect: "none" }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                  <span style={{ 
+                    transform: isRemoteBranchListExpanded ? "rotate(90deg)" : "none", 
+                    transition: "transform 0.15s ease", 
+                    display: "inline-block",
+                    fontSize: "0.6rem"
+                  }}>
+                    ▶
+                  </span>
+                  <span>Remote Branches ({remoteBranches.length})</span>
+                </div>
+                <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                  <span
+                    title="Refetch All Remote Branches (git fetch --all --prune)"
+                    style={{ display: "inline-flex", alignItems: "center", cursor: "pointer" }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleGitFetch(true);
+                    }}
+                  >
+                    <RefreshCcw 
+                      size={13} 
+                      className={isFetchingRemote ? "spin-icon" : ""}
+                    />
+                  </span>
+                </div>
+              </div>
+              {isRemoteBranchListExpanded && (
+                <div className="branch-list">
+                  {remoteBranches.length === 0 ? (
+                    <span style={{ fontSize: "0.73rem", color: "var(--color-text-dark)", padding: "4px 8px" }}>No remote branches fetched</span>
+                  ) : (
+                    remoteBranches.map(rName => (
+                      <div 
+                        key={rName} 
+                        className="branch-item remote-branch-item"
+                        onClick={() => handleCheckoutRemoteBranch(rName)}
+                        title={`Click to checkout local branch tracking ${rName}`}
+                      >
+                        <Globe size={13} style={{ color: "var(--accent-blue)", flexShrink: 0 }} />
+                        <span style={{ flex: 1, textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>{rName}</span>
+                        <div className="branch-item-actions" style={{ display: "flex", gap: "4px", alignItems: "center", marginLeft: "auto" }}>
+                          <button
+                            className="branch-action-icon-btn"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openMergeRebaseModal(rName, "merge");
+                            }}
+                            title={`Merge '${rName}' into '${currentBranch}'`}
+                          >
+                            <GitMerge size={12} style={{ color: "var(--color-modified)" }} />
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Pull Requests Section */}
           {githubToken && remoteUrl && (
@@ -1450,49 +1877,70 @@ function App() {
           {/* Stash section */}
           {hasRepo && (
             <div className="sidebar-section">
-              <div
-                className="section-title"
-                style={{ cursor: "pointer" }}
-                onClick={() => setIsStashListExpanded(v => !v)}
+              <div 
+                className="section-title" 
+                onClick={() => setIsStashListExpanded(!isStashListExpanded)} 
+                style={{ cursor: "pointer", userSelect: "none" }}
               >
-                <span>Stashes</span>
-                <div style={{ display: "flex", gap: "6px", alignItems: "center", marginLeft: "auto" }}>
-                  <Plus
-                    size={14}
-                    style={{ cursor: "pointer" }}
-                    onClick={e => { e.stopPropagation(); startPushStash(); }}
-                  />
-                  <ChevronDown
-                    size={14}
-                    style={{ transition: "transform 0.2s", transform: isStashListExpanded ? "rotate(0deg)" : "rotate(-90deg)" }}
-                  />
+                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                  <span style={{ 
+                    transform: isStashListExpanded ? "rotate(90deg)" : "none", 
+                    transition: "transform 0.15s ease", 
+                    display: "inline-block",
+                    fontSize: "0.6rem"
+                  }}>
+                    ▶
+                  </span>
+                  <span>Stashes</span>
                 </div>
+                <Plus 
+                  size={14} 
+                  style={{ cursor: "pointer" }} 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    startPushStash();
+                  }} 
+                />
               </div>
               {isStashListExpanded && (
                 <div className="branch-list">
-                  {stashes.length === 0 && (
-                    <span style={{ fontSize: "0.73rem", color: "var(--color-text-dark)", padding: "4px 8px" }}>No stashes</span>
-                  )}
                   {stashes.map((stash, index) => {
                     const label = stash.replace(/^stash@\{\d+\}:\s*(On [^:]+:\s*)?/, "").trim();
                     return (
-                      <div
-                        key={index}
+                      <div 
+                        key={index} 
                         className={`branch-item ${selectedStashIndex === index && dialogType === "stash-inspector" ? "active" : ""}`}
                         onClick={() => openStashInspector(index)}
                       >
-                        <Archive size={13} style={{ flexShrink: 0 }} />
-                        <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label || `stash@{${index}}`}</span>
-                        <button
-                          style={{ background: "none", border: "none", cursor: "pointer", padding: "2px", display: "flex", alignItems: "center", marginLeft: "auto" }}
-                          title="Drop stash"
-                          onClick={e => { e.stopPropagation(); dropStash(index); }}
+                        <Archive size={14} />
+                        <span>{label || `stash@{${index}}`}</span>
+                        <button 
+                          style={{ 
+                            background: "none", 
+                            border: "none", 
+                            cursor: "pointer", 
+                            padding: "2px",
+                            color: "var(--color-text-muted)",
+                            marginLeft: "auto",
+                            display: "flex",
+                            alignItems: "center"
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            dropStash(index);
+                          }}
+                          title="Delete Stash"
                         >
                           <Trash2 size={12} style={{ color: "var(--color-deleted)", opacity: 0.7 }} />
                         </button>
                       </div>
                     );
                   })}
+                  {stashes.length === 0 && (
+                    <div className="branch-item" style={{ color: "var(--color-text-muted)", cursor: "default" }}>
+                      <span style={{ fontSize: "0.75rem" }}>No stashes</span>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1523,13 +1971,40 @@ function App() {
         {/* Sidebar Footer */}
         <div className="sidebar-footer">
           <div style={{ display: "flex", gap: "8px", marginBottom: "4px" }}>
-            <button 
-              className="sync-button" 
-              style={{ flex: 1 }}
-              onClick={() => refreshRepository()}
-            >
-              Fetch Repo
-            </button>
+            {!hasUpstream ? (
+              <button 
+                className="sync-button" 
+                style={{ flex: 1, background: "var(--accent-purple)" }}
+                onClick={() => handleGitPush(true)}
+                disabled={isPushingRemote}
+                title="Publish branch to remote origin"
+              >
+                <Globe size={14} className={isPushingRemote ? "spin-icon" : ""} />
+                {isPushingRemote ? "Publishing..." : "Publish Branch"}
+              </button>
+            ) : unpushedCount > 0 ? (
+              <button 
+                className="sync-button" 
+                style={{ flex: 1, background: "var(--accent-purple)" }}
+                onClick={() => handleGitPush(false)}
+                disabled={isPushingRemote}
+                title={`Push ${unpushedCount} local commit(s) to origin`}
+              >
+                <ArrowUp size={14} className={isPushingRemote ? "spin-icon" : ""} />
+                {isPushingRemote ? "Pushing..." : `Push Origin (${unpushedCount})`}
+              </button>
+            ) : (
+              <button 
+                className="sync-button" 
+                style={{ flex: 1 }}
+                onClick={() => handleGitFetch(false)}
+                disabled={isFetchingRemote}
+                title="Fetch updates from origin"
+              >
+                <RefreshCw size={14} className={isFetchingRemote ? "spin-icon" : ""} />
+                {isFetchingRemote ? "Fetching..." : "Fetch Origin"}
+              </button>
+            )}
           </div>
           {remoteUrl && (
             <div style={{ fontSize: "0.65rem", color: "var(--color-text-muted)", marginTop: "6px", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
@@ -1589,24 +2064,6 @@ function App() {
                 <History size={14} />
                 <span>History Graph</span>
               </button>
-            </div>
-
-            {/* Active Branch Indicator in Topbar */}
-            <div style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "6px",
-              padding: "5px 10px",
-              background: "var(--bg-panel-secondary)",
-              border: "1px solid var(--border-color)",
-              borderRadius: "4px",
-              fontSize: "0.75rem",
-              color: "var(--color-text-bright)",
-              fontWeight: 550,
-              marginLeft: "12px"
-            }}>
-              <GitBranch size={12} style={{ color: "var(--color-staged)" }} />
-              <span>Current Branch: <strong>{currentBranch}</strong></span>
             </div>
           </div>
 
@@ -1981,7 +2438,6 @@ function App() {
                   </div>
                 )}
               </div>
-
               {/* --- FILE PANE RESIZE HANDLE --- */}
               <div 
                 className={`resize-handle ${activeResizer === 'filepane' ? 'active' : ''}`}
@@ -1990,136 +2446,161 @@ function App() {
 
               {/* The Mesh (Staging Canvas) */}
               <div className="staging-mesh-pane">
-                <div 
-                  className="canvas-container" 
-                  ref={canvasRef}
-                  onMouseMove={handleCanvasMouseMove}
-                  onMouseUp={handleCanvasMouseUp}
-                >
-                  
-                  {/* Collaboration Peer Visual Cursor */}
-                  {collabPeers.map((peer, i) => (
+                {(() => {
+                  const canvasMinHeight = Math.max(
+                    ...canvasNodes.map(n => n.y + 260),
+                    600
+                  );
+                  const canvasMinWidth = Math.max(
+                    ...canvasNodes.map(n => n.x + 400),
+                    750
+                  );
+
+                  return (
                     <div 
-                      key={i}
-                      className="peer-avatar-cursor"
-                      style={{
-                        transform: `translate(${peer.x}px, ${peer.y}px)`
-                      }}
+                      className="canvas-container" 
+                      ref={canvasRef}
+                      onMouseMove={handleCanvasMouseMove}
+                      onMouseUp={handleCanvasMouseUp}
                     >
-                      <UserCheck size={16} style={{ color: "var(--color-conflict)" }} />
-                      <span className="peer-cursor-label">{peer.name}</span>
-                    </div>
-                  ))}
-
-                  <div className="canvas-header">
-                    <div className="canvas-instruction">
-                      {selectedFile ? `Staging Mesh for ${selectedFile}` : "Select a modified file on the left to see its hunks"}
-                    </div>
-                  </div>
-
-                  {/* Connections Overlay */}
-                  <svg className="mesh-overlay-svg">
-                    {canvasNodes.map((node) => {
-                      if (canvasRef.current) {
-                        const rect = canvasRef.current.getBoundingClientRect();
-                        const targetX = rect.width - 200;
-                        const targetY = rect.height / 2 - 40;
-                        const startX = node.x + 310;
-                        const startY = node.y + 55;
-
-                        return (
-                          <path
-                            key={`link-${node.id}`}
-                            className="connector-line"
-                            d={`M ${startX} ${startY} C ${(startX + targetX) / 2} ${startY}, ${(startX + targetX) / 2} ${targetY}, ${targetX} ${targetY}`}
-                            style={{
-                              stroke: node.isStaged ? "var(--color-staged)" : "var(--border-active)"
-                            }}
-                          />
-                        );
-                      }
-                      return null;
-                    })}
-                  </svg>
-
-                  {/* Floating Hunk Nodes */}
-                  {canvasNodes.map((node) => (
-                    <div
-                      key={node.id}
-                      className="mesh-node"
-                      style={{
-                        left: `${node.x}px`,
-                        top: `${node.y}px`,
-                        cursor: draggingNodeId === node.id ? "grabbing" : "grab"
-                      }}
-                      onMouseDown={(e) => handleNodeMouseDown(e, node.id)}
-                    >
-                      <div className="node-header">
-                        <span className="node-title">{node.hunk.header}</span>
-                        <button 
-                          className="node-action"
-                          onMouseDown={(e) => e.stopPropagation()} 
-                          onClick={() => stageSingleHunk(node)}
-                        >
-                          Stage Hunk
-                        </button>
-                      </div>
-
-                      <div 
-                        className="node-diff-preview"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setActiveDetailHunk(node.hunk);
+                      <div
+                        className="canvas-content-wrapper"
+                        style={{
+                          minWidth: `${canvasMinWidth}px`,
+                          minHeight: `${canvasMinHeight}px`,
+                          position: "relative",
+                          width: "100%",
+                          height: "100%"
                         }}
-                        style={{ cursor: "pointer" }}
-                        title="Click to view detailed changes"
                       >
-                        <div className="diff-hunk-header">{node.hunk.header}</div>
-                        <div style={{ maxHeight: "110px", overflowY: "auto" }}>
-                          {node.hunk.lines.slice(0, 10).map((line, idx) => (
-                            <div 
-                              key={idx} 
-                              className={`diff-line ${
-                                line.origin === "+" ? "addition" : 
-                                line.origin === "-" ? "deletion" : "context"
-                              }`}
-                            >
-                              <span>{line.origin}</span>
-                              <span>{line.content.trim()}</span>
-                            </div>
-                          ))}
+                        {/* Collaboration Peer Visual Cursor */}
+                        {collabPeers.map((peer, i) => (
+                          <div 
+                            key={i}
+                            className="peer-avatar-cursor"
+                            style={{
+                              transform: `translate(${peer.x}px, ${peer.y}px)`
+                            }}
+                          >
+                            <UserCheck size={16} style={{ color: "var(--color-conflict)" }} />
+                            <span className="peer-cursor-label">{peer.name}</span>
+                          </div>
+                        ))}
+
+                        <div className="canvas-header">
+                          <div className="canvas-instruction">
+                            {selectedFile ? `Staging Mesh for ${selectedFile} (${canvasNodes.length} hunk${canvasNodes.length === 1 ? '' : 's'})` : "Select a modified file on the left to see its hunks"}
+                          </div>
                         </div>
+
+                        {/* Connections Overlay */}
+                        <svg 
+                          className="mesh-overlay-svg"
+                          style={{
+                            width: `${canvasMinWidth}px`,
+                            height: `${canvasMinHeight}px`
+                          }}
+                        >
+                          {canvasNodes.map((node) => {
+                            const targetX = canvasMinWidth - 180;
+                            const targetY = 100;
+                            const startX = node.x + 310;
+                            const startY = node.y + 55;
+
+                            return (
+                              <path
+                                key={`link-${node.id}`}
+                                className="connector-line"
+                                d={`M ${startX} ${startY} C ${(startX + targetX) / 2} ${startY}, ${(startX + targetX) / 2} ${targetY}, ${targetX} ${targetY}`}
+                                style={{
+                                  stroke: node.isStaged ? "var(--color-staged)" : "var(--border-active)"
+                                }}
+                              />
+                            );
+                          })}
+                        </svg>
+
+                        {/* Floating Hunk Nodes */}
+                        {canvasNodes.map((node) => (
+                          <div
+                            key={node.id}
+                            className="mesh-node"
+                            style={{
+                              left: `${node.x}px`,
+                              top: `${node.y}px`,
+                              cursor: draggingNodeId === node.id ? "grabbing" : "grab"
+                            }}
+                            onMouseDown={(e) => handleNodeMouseDown(e, node.id)}
+                          >
+                            <div className="node-header">
+                              <span className="node-title">{node.hunk.header}</span>
+                              <button 
+                                className="node-action"
+                                onMouseDown={(e) => e.stopPropagation()} 
+                                onClick={() => stageSingleHunk(node)}
+                              >
+                                Stage Hunk
+                              </button>
+                            </div>
+
+                            <div 
+                              className="node-diff-preview"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveDetailHunk(node.hunk);
+                              }}
+                              style={{ cursor: "pointer" }}
+                              title="Click to view detailed changes"
+                            >
+                              <div className="diff-hunk-header">{node.hunk.header}</div>
+                              <div style={{ maxHeight: "110px", overflowY: "auto" }}>
+                                {node.hunk.lines.slice(0, 10).map((line, idx) => (
+                                  <div 
+                                    key={idx} 
+                                    className={`diff-line ${
+                                      line.origin === "+" ? "addition" : 
+                                      line.origin === "-" ? "deletion" : "context"
+                                    }`}
+                                  >
+                                    <span>{line.origin}</span>
+                                    <span>{line.content.trim()}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+
+                        {/* Staged Target Zone Node */}
+                        {selectedFile && (
+                          <div 
+                            className="mesh-node staged-zone"
+                            style={{
+                              left: `${canvasMinWidth - 200}px`,
+                              top: "50px",
+                              position: "absolute",
+                              width: "160px",
+                              pointerEvents: "none"
+                            }}
+                          >
+                            <div style={{ textAlign: "center", display: "flex", flexDirection: "column", gap: "6px", alignItems: "center", justifyContent: "center", height: "90px" }}>
+                              <GitPullRequest size={22} style={{ color: "var(--color-staged)" }} />
+                              <span style={{ fontWeight: 550, fontSize: "0.8rem", color: "var(--color-text-bright)" }}>Staging Area</span>
+                              <span style={{ fontSize: "0.7rem", color: "var(--color-text-muted)" }}>Drop hunks connection</span>
+                            </div>
+                          </div>
+                        )}
+
+                        {canvasNodes.length === 0 && (
+                          <div className="empty-canvas">
+                            <Layers size={36} className="empty-canvas-icon" />
+                            <span className="empty-canvas-text">Select modified file to stage individual hunks</span>
+                          </div>
+                        )}
                       </div>
                     </div>
-                  ))}
-
-                  {/* Staged Target Zone Node */}
-                  {selectedFile && canvasRef.current && (
-                    <div 
-                      className="mesh-node staged-zone"
-                      style={{
-                        right: "40px",
-                        top: "calc(50% - 60px)",
-                        position: "absolute",
-                        width: "160px",
-                        pointerEvents: "none"
-                      }}
-                    >
-                      <div style={{ textAlign: "center", display: "flex", flexDirection: "column", gap: "6px", alignItems: "center", justifyContent: "center", height: "90px" }}>
-                        <GitPullRequest size={22} style={{ color: "var(--color-staged)" }} />
-                        <span style={{ fontWeight: 550, fontSize: "0.8rem", color: "var(--color-text-bright)" }}>Staging Area</span>
-                        <span style={{ fontSize: "0.7rem", color: "var(--color-text-muted)" }}>Drop hunks connection</span>
-                      </div>
-                    </div>
-                  )}
-
-                  {canvasNodes.length === 0 && (
-                    <div className="empty-canvas">
-                      <Layers size={36} className="empty-canvas-icon" />
-                      <span className="empty-canvas-text">Select modified file to stage individual hunks</span>
-                    </div>
-                  )}
-                </div>
+                  );
+                })()}
 
                 {/* Commit Builder Panel */}
                 <div className="commit-builder">
@@ -2177,9 +2658,7 @@ function App() {
                     </button>
                   </div>
                 </div>
-
               </div>
-
             </div>
           ) : (
             /* --- HISTORY VIEW (COMMIT GRAPH & CHERRY PICK) --- */
@@ -2320,33 +2799,41 @@ function App() {
                     </div>
 
                     <div className="details-content">
-                      <div style={{ fontSize: "0.7rem", textTransform: "uppercase", color: "var(--color-text-muted)", fontWeight: "bold", marginBottom: "8px", letterSpacing: "0.5px" }}>
-                        Files Changed
+                      <div className="details-section-header">
+                        <span>Files Changed</span>
+                        <span className="details-count-badge">{selectedCommitDiffFiles.length}</span>
                       </div>
-                      <div style={{ display: "flex", flexDirection: "column", gap: "4px", marginBottom: "16px" }}>
-                        {selectedCommitDiffFiles.map(file => (
-                          <div 
-                            key={file} 
-                            style={{ 
-                              padding: "5px 8px", 
-                              background: selectedCommitDiffFile === file ? "var(--bg-active)" : "var(--bg-app)",
-                              border: "1px solid var(--border-color)",
-                              borderRadius: "4px",
-                              fontSize: "0.8rem",
-                              cursor: "pointer",
-                              color: selectedCommitDiffFile === file ? "var(--color-text-bright)" : "var(--color-text-main)"
-                            }}
-                            onClick={() => showCommitFileDiff(selectedCommit.id, file)}
-                          >
-                            {file}
-                          </div>
-                        ))}
+                      <div className="commit-files-list">
+                        {selectedCommitDiffFiles.map(file => {
+                          const lastSlash = file.lastIndexOf("/");
+                          const dir = lastSlash !== -1 ? file.substring(0, lastSlash + 1) : "";
+                          const name = lastSlash !== -1 ? file.substring(lastSlash + 1) : file;
+                          return (
+                            <div 
+                              key={file} 
+                              className={`commit-file-item ${selectedCommitDiffFile === file ? "active" : ""}`}
+                              onClick={() => showCommitFileDiff(selectedCommit.id, file)}
+                            >
+                              <FileCode size={14} className="commit-file-icon" />
+                              <div className="commit-file-path-container" title={file}>
+                                {dir && <span className="commit-file-dir">{dir}</span>}
+                                <span className="commit-file-name">{name}</span>
+                              </div>
+                              <ChevronRight size={13} className="commit-file-arrow" />
+                            </div>
+                          );
+                        })}
                       </div>
 
                       {selectedCommitFileDiff && (
                         <div>
-                          <div style={{ fontSize: "0.7rem", textTransform: "uppercase", color: "var(--color-text-muted)", fontWeight: "bold", marginBottom: "6px", letterSpacing: "0.5px" }}>
-                            Diff Preview
+                          <div className="details-section-header" style={{ marginTop: "12px" }}>
+                            <span>Diff Preview</span>
+                            {selectedCommitDiffFile && (
+                              <span className="commit-file-name" style={{ fontSize: "0.7rem", color: "var(--accent-purple-bright)" }}>
+                                {selectedCommitDiffFile.split("/").pop()}
+                              </span>
+                            )}
                           </div>
                           <div className="node-diff-preview" style={{ maxHeight: "280px", overflowY: "auto" }}>
                             {selectedCommitFileDiff.hunks[0]?.lines.map((line, idx) => (
@@ -2384,24 +2871,39 @@ function App() {
         <div className="dialog-overlay">
           <div className={`dialog-content${dialogType === "stash-inspector" ? " dialog-content--wide" : ""}`}>
             <div className="dialog-title">
-              {dialogType === "branch" && "Create Branch"}
-              {dialogType === "checkout" && "Checkout Branch"}
-              {dialogType === "clone" && "Clone Remote Repository"}
-              {dialogType === "publish" && "Publish Repository to GitHub"}
-              {dialogType === "pr-create" && "Create GitHub Pull Request"}
-              {dialogType === "login" && "Connect GitHub Account"}
-              {dialogType === "workspace-add" && "Add Workspace Project"}
-              {dialogType === "git-init-confirm" && "Initialize Git Repository?"}
-              {dialogType === "delete-branch-confirm" && "Delete Branch?"}
-              {dialogType === "git-delete-force-confirm" && "Force Delete Branch?"}
-              {dialogType === "checkout-conflict" && "Uncommitted Changes"}
-              {dialogType === "stash-name" && "Save Stash"}
-              {dialogType === "stash-inspector" && (
-                <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                  <Archive size={15} />
-                  {selectedStashIndex !== null ? stashes[selectedStashIndex]?.replace(/^stash@\{\d+\}:\s*(On [^:]+:\s*)?/, "").trim() || `stash@{${selectedStashIndex}}` : "Stash Inspector"}
-                </span>
-              )}
+              <span>
+                {dialogType === "branch" && "Create Branch"}
+                {dialogType === "checkout" && "Checkout Branch"}
+                {dialogType === "clone" && "Clone Remote Repository"}
+                {(dialogType === "publish" || dialogType === "set-remote") && "Set Remote Repository URL"}
+                {dialogType === "pr-create" && "Create GitHub Pull Request"}
+                {dialogType === "login" && "Connect GitHub Account"}
+                {dialogType === "workspace-add" && "Add Workspace Project"}
+                {dialogType === "git-init-confirm" && "Initialize Git Repository?"}
+                {dialogType === "delete-branch-confirm" && "Delete Branch?"}
+                {dialogType === "git-delete-force-confirm" && "Force Delete Branch?"}
+                {dialogType === "checkout-conflict" && "Uncommitted Changes"}
+                {dialogType === "stash-name" && "Save Stash"}
+                {dialogType === "merge-rebase" && "Merge / Rebase Branch"}
+                {dialogType === "stash-inspector" && (
+                  <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <Archive size={15} />
+                    {selectedStashIndex !== null ? stashes[selectedStashIndex]?.replace(/^stash@\{\d+\}:\s*(On [^:]+:\s*)?/, "").trim() || `stash@{${selectedStashIndex}}` : "Stash Inspector"}
+                  </span>
+                )}
+              </span>
+              <button 
+                className="dialog-close-btn"
+                onClick={() => {
+                  setDialogType(null);
+                  setDialogInput("");
+                  setDialogInput2("");
+                }}
+                title="Close"
+                type="button"
+              >
+                <X size={16} />
+              </button>
             </div>
 
             {/* STASH NAME DIALOG */}
@@ -2608,44 +3110,32 @@ function App() {
 
             {/* CHECKOUT CONFLICT DIALOG */}
             {dialogType === "checkout-conflict" && (
-              <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-                <span style={{ fontSize: "0.8rem", color: "var(--color-text-main)" }}>
-                  You have uncommitted changes on branch <strong>{currentBranch}</strong>. What would you like to do with these changes when switching to <strong>{pendingCheckoutBranch}</strong>?
-                </span>
+              <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+                <p style={{ fontSize: "0.82rem", color: "var(--color-text-main)", lineHeight: 1.5, margin: 0 }}>
+                  You have uncommitted changes on branch <span className="branch-inline-badge">{currentBranch}</span>. What would you like to do with these changes when switching to <span className="branch-inline-badge">{pendingCheckoutBranch}</span>?
+                </p>
                 
-                <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                  <div 
-                    onClick={handleCheckoutBringChanges}
-                    style={{
-                      padding: "10px",
-                      background: "var(--bg-app)",
-                      border: "1px solid var(--border-color)",
-                      borderRadius: "6px",
-                      cursor: "pointer",
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: "4px"
-                    }}
-                  >
-                    <span style={{ fontSize: "0.8rem", fontWeight: "bold", color: "var(--color-text-bright)" }}>Bring my changes to {pendingCheckoutBranch}</span>
-                    <span style={{ fontSize: "0.7rem", color: "var(--color-text-muted)" }}>Your dirty files will be carried over to the new branch.</span>
+                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                  <div className="conflict-option-card" onClick={handleCheckoutBringChanges}>
+                    <div className="conflict-option-icon conflict-option-icon--carry">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+                    </div>
+                    <div className="conflict-option-text">
+                      <span className="conflict-option-title">Bring my changes to {pendingCheckoutBranch}</span>
+                      <span className="conflict-option-desc">Your uncommitted files will be carried over to {pendingCheckoutBranch}.</span>
+                    </div>
+                    <svg className="conflict-option-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>
                   </div>
 
-                  <div 
-                    onClick={handleCheckoutStashChanges}
-                    style={{
-                      padding: "10px",
-                      background: "var(--bg-app)",
-                      border: "1px solid var(--border-color)",
-                      borderRadius: "6px",
-                      cursor: "pointer",
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: "4px"
-                    }}
-                  >
-                    <span style={{ fontSize: "0.8rem", fontWeight: "bold", color: "var(--color-text-bright)" }}>Leave my changes on {currentBranch} (Stash)</span>
-                    <span style={{ fontSize: "0.7rem", color: "var(--color-text-muted)" }}>Stash uncommitted changes on current branch and then switch.</span>
+                  <div className="conflict-option-card" onClick={handleCheckoutStashChanges}>
+                    <div className="conflict-option-icon conflict-option-icon--stash">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg>
+                    </div>
+                    <div className="conflict-option-text">
+                      <span className="conflict-option-title">Leave my changes on {currentBranch} (Stash)</span>
+                      <span className="conflict-option-desc">Stash uncommitted changes on {currentBranch} before switching.</span>
+                    </div>
+                    <svg className="conflict-option-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>
                   </div>
                 </div>
 
@@ -2706,33 +3196,89 @@ function App() {
             {dialogType === "workspace-add" && (
               <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
                 <span style={{ fontSize: "0.8rem", color: "var(--color-text-muted)" }}>
-                  Tie a new workspace to a folder on your local file system, or clone a new git remote repository:
+                  Select a local folder on your computer to add as a workspace project, or clone a remote repository:
                 </span>
-                <input 
-                  className="dialog-input"
-                  value={dialogInput}
-                  onChange={(e) => setDialogInput(e.target.value)}
-                  placeholder="Absolute folder directory path..."
-                />
+                
+                <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                  <input 
+                    className="dialog-input"
+                    style={{ flex: 1 }}
+                    value={dialogInput}
+                    onChange={(e) => setDialogInput(e.target.value)}
+                    placeholder="Selected folder path..."
+                  />
+                  <button 
+                    className="dialog-button secondary"
+                    style={{ display: "flex", alignItems: "center", gap: "6px", whiteSpace: "nowrap" }}
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        const folder = await invoke<string | null>("select_folder");
+                        if (folder) {
+                          setDialogInput(folder);
+                        }
+                      } catch (err: any) {
+                        console.error(err);
+                      }
+                    }}
+                    title="Open native folder picker"
+                  >
+                    <FolderPlus size={15} />
+                    Browse...
+                  </button>
+                </div>
                 
                 <div style={{ display: "flex", gap: "8px", marginTop: "4px" }}>
                   <button 
                     className="sync-button" 
-                    style={{ flex: 1 }}
-                    onClick={handleWorkspaceAddSubmit}
+                    style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
+                    onClick={async () => {
+                      if (!dialogInput) {
+                        try {
+                          const folder = await invoke<string | null>("select_folder");
+                          if (folder) {
+                            setDialogInput(folder);
+                            const targetPath = folder;
+                            try {
+                              await invoke("get_git_status", { repoPath: targetPath });
+                              const newList = [...workspaces];
+                              if (!newList.includes(targetPath)) {
+                                newList.push(targetPath);
+                              }
+                              setWorkspaces(newList);
+                              localStorage.setItem("sn_workspaces", JSON.stringify(newList));
+                              setRepoPath(targetPath);
+                              setDialogType(null);
+                              setDialogInput("");
+                              await refreshRepository(targetPath);
+                            } catch (err: any) {
+                              setPendingWorkspacePath(targetPath);
+                              setDialogType("git-init-confirm");
+                              setDialogInput("");
+                            }
+                          }
+                        } catch (err: any) {
+                          console.error(err);
+                        }
+                        return;
+                      }
+                      handleWorkspaceAddSubmit();
+                    }}
                   >
-                    Open Local Folder
+                    <FolderPlus size={14} />
+                    {dialogInput ? "Open Selected Folder" : "Choose Folder..."}
                   </button>
                   
                   <button 
                     className="sync-button" 
-                    style={{ flex: 1, background: "rgba(255,255,255,0.06)", border: "1px solid var(--border-color)" }}
+                    style={{ flex: 1, background: "rgba(255,255,255,0.06)", border: "1px solid var(--border-color)", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
                     onClick={() => {
-                      setDialogInput2(dialogInput); // Prefill path if typed
+                      setDialogInput2(dialogInput); // Prefill path if typed or picked
                       setDialogInput("");
                       setDialogType("clone");
                     }}
                   >
+                    <FolderSync size={14} />
                     Clone Remote Repo
                   </button>
                 </div>
@@ -2782,12 +3328,34 @@ function App() {
                   onChange={(e) => setDialogInput(e.target.value)}
                   placeholder="Or enter git URL (https://github.com/...)"
                 />
-                <input 
-                  className="dialog-input"
-                  value={dialogInput2}
-                  onChange={(e) => setDialogInput2(e.target.value)}
-                  placeholder="Local destination path..."
-                />
+                <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                  <input 
+                    className="dialog-input"
+                    style={{ flex: 1 }}
+                    value={dialogInput2}
+                    onChange={(e) => setDialogInput2(e.target.value)}
+                    placeholder="Local destination path..."
+                  />
+                  <button 
+                    className="dialog-button secondary"
+                    style={{ display: "flex", alignItems: "center", gap: "6px", whiteSpace: "nowrap" }}
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        const folder = await invoke<string | null>("select_folder");
+                        if (folder) {
+                          setDialogInput2(folder);
+                        }
+                      } catch (err: any) {
+                        console.error(err);
+                      }
+                    }}
+                    title="Open native folder picker"
+                  >
+                    <FolderPlus size={15} />
+                    Browse...
+                  </button>
+                </div>
                 <button className="sync-button" onClick={handleCloneRepo}>
                   Clone Repository
                 </button>
@@ -2834,7 +3402,181 @@ function App() {
               </>
             )}
 
-            {dialogType !== "branch" && dialogType !== "checkout" && dialogType !== "workspace-add" && dialogType !== "git-init-confirm" && dialogType !== "checkout-conflict" && dialogType !== "delete-branch-confirm" && dialogType !== "git-delete-force-confirm" && dialogType !== "stash-name" && dialogType !== "stash-inspector" && (
+            {/* MERGE / REBASE BRANCH DIALOG */}
+            {dialogType === "merge-rebase" && (
+              <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+                {/* Mode Selector Tabs */}
+                <div style={{
+                  display: "flex",
+                  background: "var(--bg-app)",
+                  borderRadius: "6px",
+                  padding: "3px",
+                  border: "1px solid var(--border-color)"
+                }}>
+                  <button
+                    type="button"
+                    style={{
+                      flex: 1,
+                      padding: "6px 12px",
+                      border: "none",
+                      borderRadius: "4px",
+                      background: mergeRebaseMode === "merge" ? "var(--bg-panel-secondary)" : "transparent",
+                      color: mergeRebaseMode === "merge" ? "var(--color-text-bright)" : "var(--color-text-muted)",
+                      fontWeight: mergeRebaseMode === "merge" ? 600 : 400,
+                      cursor: "pointer",
+                      fontSize: "0.8rem",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: "6px"
+                    }}
+                    onClick={() => setMergeRebaseMode("merge")}
+                  >
+                    <GitMerge size={14} style={{ color: "var(--color-modified)" }} />
+                    Merge Branch
+                  </button>
+                  <button
+                    type="button"
+                    style={{
+                      flex: 1,
+                      padding: "6px 12px",
+                      border: "none",
+                      borderRadius: "4px",
+                      background: mergeRebaseMode === "rebase" ? "var(--bg-panel-secondary)" : "transparent",
+                      color: mergeRebaseMode === "rebase" ? "var(--color-text-bright)" : "var(--color-text-muted)",
+                      fontWeight: mergeRebaseMode === "rebase" ? 600 : 400,
+                      cursor: "pointer",
+                      fontSize: "0.8rem",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: "6px"
+                    }}
+                    onClick={() => setMergeRebaseMode("rebase")}
+                  >
+                    <GitCommit size={14} style={{ color: "var(--accent-purple)" }} />
+                    Rebase Branch
+                  </button>
+                </div>
+
+                <div style={{ fontSize: "0.78rem", color: "var(--color-text-muted)" }}>
+                  {mergeRebaseMode === "merge" ? (
+                    <span>Integrate changes from target branch into current branch (<strong>{currentBranch}</strong>). ({allBranches.length} branches registered)</span>
+                  ) : (
+                    <span>Reapply commits from current branch (<strong>{currentBranch}</strong>) onto top of target branch. ({allBranches.length} branches registered)</span>
+                  )}
+                </div>
+
+                {/* Target Branch Dropdown */}
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  <label style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", fontWeight: 500 }}>
+                    Select Target Branch:
+                  </label>
+                  <select
+                    className="dialog-input"
+                    value={targetMergeBranch}
+                    onChange={(e) => setTargetMergeBranch(e.target.value)}
+                    style={{
+                      padding: "8px 10px",
+                      background: "var(--bg-app)",
+                      border: "1px solid var(--border-color)",
+                      color: "var(--color-text-bright)",
+                      borderRadius: "6px",
+                      fontSize: "0.82rem"
+                    }}
+                  >
+                    <optgroup label="Local Branches">
+                      {branchList.filter(b => b !== currentBranch).map(b => (
+                        <option key={b} value={b}>{b}</option>
+                      ))}
+                    </optgroup>
+                    {remoteBranches.length > 0 && (
+                      <optgroup label="Remote Branches">
+                        {remoteBranches.map(r => (
+                          <option key={r} value={r}>{r}</option>
+                        ))}
+                      </optgroup>
+                    )}
+                  </select>
+                </div>
+
+                <div className="dialog-actions" style={{ marginTop: "10px" }}>
+                  <button
+                    className="dialog-button secondary"
+                    onClick={() => setDialogType(null)}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    className="dialog-button"
+                    style={{
+                      background: mergeRebaseMode === "merge" ? "var(--accent-blue)" : "var(--accent-purple)",
+                      color: "white"
+                    }}
+                    disabled={!targetMergeBranch}
+                    onClick={handleExecuteMergeOrRebase}
+                  >
+                    {mergeRebaseMode === "merge"
+                      ? `Merge '${targetMergeBranch}' into '${currentBranch}'`
+                      : `Rebase '${currentBranch}' onto '${targetMergeBranch}'`}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* SET REMOTE URL / PUBLISH DIALOG */}
+            {(dialogType === "set-remote" || dialogType === "publish") && (
+              <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                <span style={{ fontSize: "0.8rem", color: "var(--color-text-muted)" }}>
+                  No remote repository URL is configured for <strong>origin</strong>. Enter the HTTPS or SSH clone URL for your remote repository to publish this branch:
+                </span>
+                
+                <input 
+                  className="dialog-input"
+                  value={dialogInput}
+                  onChange={(e) => setDialogInput(e.target.value)}
+                  placeholder="e.g. https://github.com/username/repository.git"
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      handleSetRemoteUrl();
+                    }
+                  }}
+                />
+
+                {githubRepos.length > 0 && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                    <span style={{ fontSize: "0.72rem", color: "var(--color-text-muted)" }}>Or choose from your GitHub repositories:</span>
+                    <select 
+                      className="dialog-input"
+                      value={dialogInput}
+                      onChange={(e) => setDialogInput(e.target.value)}
+                    >
+                      <option value="">-- Choose GitHub Repository --</option>
+                      {githubRepos.map(repo => (
+                        <option key={repo.full_name} value={repo.clone_url}>{repo.full_name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                <div className="dialog-actions" style={{ marginTop: "6px" }}>
+                  <button className="dialog-button secondary" onClick={() => setDialogType(null)}>
+                    Cancel
+                  </button>
+                  <button 
+                    className="sync-button" 
+                    style={{ background: "var(--accent-button)", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
+                    onClick={handleSetRemoteUrl}
+                  >
+                    <Globe size={14} />
+                    Set Remote & Publish
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {dialogType !== "branch" && dialogType !== "checkout" && dialogType !== "workspace-add" && dialogType !== "git-init-confirm" && dialogType !== "checkout-conflict" && dialogType !== "delete-branch-confirm" && dialogType !== "git-delete-force-confirm" && dialogType !== "stash-name" && dialogType !== "stash-inspector" && dialogType !== "merge-rebase" && dialogType !== "set-remote" && dialogType !== "publish" && (
               <div className="dialog-actions" style={{ marginTop: "6px" }}>
                 <button className="dialog-button secondary" style={{ width: "100%" }} onClick={() => setDialogType(null)}>Cancel</button>
               </div>

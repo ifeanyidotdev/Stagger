@@ -82,4 +82,12 @@ pub fn unstage_files(repo_path: String, file_paths: Vec<String>) -> Result<(), S
     git::unstage_files_impl(&repo_path, file_paths)
 }
 
+#[tauri::command]
+pub fn select_folder() -> Option<String> {
+    rfd::FileDialog::new()
+        .set_title("Select Workspace Folder")
+        .pick_folder()
+        .map(|path| path.to_string_lossy().into_owned())
+}
+
 
