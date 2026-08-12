@@ -147,30 +147,42 @@ pub fn get_git_log_impl(repo_path: &str, limit: Option<usize>) -> Result<Vec<Com
     let mut revwalk = repo.revwalk()
         .map_err(|e| format!("Failed to initialize revwalk: {}", e))?;
     
+    // Push all references (heads, remotes, tags, stashes) and HEAD
+    revwalk.push_glob("refs/*").ok();
     revwalk.push_head().ok();
-    
-    if let Ok(branches) = repo.branches(Some(git2::BranchType::Local)) {
-        for branch_res in branches {
-            if let Ok((branch, _)) = branch_res {
-                if let Ok(reference) = branch.into_reference().resolve() {
-                    if let Ok(oid) = reference.target().ok_or("No target") {
-                        revwalk.push(oid).ok();
-                    }
-                }
-            }
+
+    // Include stashes in revwalk
+    if let Ok(reflog) = repo.reflog("refs/stash") {
+        for entry in reflog.iter() {
+            revwalk.push(entry.id_new()).ok();
         }
     }
 
     revwalk.set_sorting(git2::Sort::TOPOLOGICAL | git2::Sort::TIME).ok();
 
     let mut commit_branches: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
-    if let Ok(branches) = repo.branches(Some(git2::BranchType::Local)) {
-        for branch_res in branches {
-            if let Ok((branch, _)) = branch_res {
-                if let Ok(name) = branch.name().map(|n| n.unwrap_or("").to_string()) {
-                    if let Ok(reference) = branch.into_reference().resolve() {
-                        if let Some(target) = reference.target() {
-                            commit_branches.entry(target.to_string()).or_default().push(name);
+
+    // Map all references (local branches, remote branches, tags)
+    if let Ok(references) = repo.references() {
+        for reference_res in references {
+            if let Ok(reference) = reference_res {
+                if let (Some(name), Some(target)) = (reference.name(), reference.target()) {
+                    let clean_name = if name.starts_with("refs/heads/") {
+                        name.strip_prefix("refs/heads/").unwrap_or(name).to_string()
+                    } else if name.starts_with("refs/remotes/") {
+                        name.strip_prefix("refs/remotes/").unwrap_or(name).to_string()
+                    } else if name.starts_with("refs/tags/") {
+                        format!("tag: {}", name.strip_prefix("refs/tags/").unwrap_or(name))
+                    } else if name.starts_with("refs/stash") {
+                        "stash".to_string()
+                    } else {
+                        name.to_string()
+                    };
+
+                    if clean_name != "HEAD" && !clean_name.starts_with("HEAD ") && !clean_name.contains("detached") {
+                        let entries = commit_branches.entry(target.to_string()).or_default();
+                        if !entries.contains(&clean_name) {
+                            entries.push(clean_name);
                         }
                     }
                 }
@@ -178,8 +190,20 @@ pub fn get_git_log_impl(repo_path: &str, limit: Option<usize>) -> Result<Vec<Com
         }
     }
 
+    // Map stashes with indices (stash@{0}, stash@{1}, etc.)
+    if let Ok(reflog) = repo.reflog("refs/stash") {
+        for (i, entry) in reflog.iter().enumerate() {
+            let target = entry.id_new().to_string();
+            let label = format!("stash@{{{}}}", i);
+            let entries = commit_branches.entry(target).or_default();
+            if !entries.contains(&label) {
+                entries.push(label);
+            }
+        }
+    }
+
     let mut commits = Vec::new();
-    let max_commits = limit.unwrap_or(1000);
+    let max_commits = limit.unwrap_or(2000);
 
     for oid_res in revwalk {
         if commits.len() >= max_commits {

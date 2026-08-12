@@ -176,6 +176,7 @@ function App() {
   const [selectedCommitDiffFiles, setSelectedCommitDiffFiles] = useState<string[]>([]);
   const [selectedCommitFileDiff, setSelectedCommitFileDiff] = useState<DiffInfo | null>(null);
   const [selectedCommitDiffFile, setSelectedCommitDiffFile] = useState<string | null>(null);
+  const [historySearchQuery, setHistorySearchQuery] = useState<string>("");
 
   // --- STAGE HUNK DETAIL DIALOG OVERLAY ---
   const [activeDetailHunk, setActiveDetailHunk] = useState<DiffHunk | null>(null);
@@ -192,6 +193,7 @@ function App() {
   const [selectedStashIndex, setSelectedStashIndex] = useState<number | null>(null);
   const [stashFiles, setStashFiles] = useState<{ path: string; status: string }[]>([]);
   const [stashFileDiff, setStashFileDiff] = useState<string | null>(null);
+  const [stashDiffLoading, setStashDiffLoading] = useState(false);
   const [selectedStashFile, setSelectedStashFile] = useState<string | null>(null);
   const [checkedStashFiles, setCheckedStashFiles] = useState<Set<string>>(new Set());
   const [stashNameInput, setStashNameInput] = useState("");
@@ -570,7 +572,7 @@ function App() {
 
       setConflictedFiles(Array.from(cPaths));
 
-      const logRes = await invoke<CommitInfo[]>("get_git_log", { repoPath: path, limit: 100 });
+      const logRes = await invoke<CommitInfo[]>("get_git_log", { repoPath: path, limit: 2000 });
       setCommits(logRes);
 
       const stashRes = await invoke<GitCliResult>("run_git_cli_cmd", {
@@ -943,6 +945,7 @@ function App() {
     setStashFileDiff(null);
     setSelectedStashFile(null);
     setCheckedStashFiles(new Set());
+    setDialogType("stash-inspector");
     try {
       const res = await invoke<GitCliResult>("run_git_cli_cmd", {
         repoPath,
@@ -958,26 +961,41 @@ function App() {
           });
         setStashFiles(parsed);
         setCheckedStashFiles(new Set(parsed.map(f => f.path)));
+        // Auto-select first file to immediately show diff
+        if (parsed.length > 0) {
+          fetchStashFileDiff(index, parsed[0].path);
+        }
       }
     } catch (err: any) {
       setErrorMessage(err.toString());
     }
-    setDialogType("stash-inspector");
   };
 
   const fetchStashFileDiff = async (index: number, filePath: string) => {
     setSelectedStashFile(filePath);
     setStashFileDiff(null);
+    setStashDiffLoading(true);
     try {
       const res = await invoke<GitCliResult>("run_git_cli_cmd", {
         repoPath,
-        args: ["stash", "show", "-p", `stash@{${index}}`, "--", filePath]
+        args: ["stash", "show", "-p", "--stat", `stash@{${index}}`, "--", filePath]
       });
-      if (res.exit_code === 0) {
+      if (res.exit_code === 0 && res.stdout.trim()) {
         setStashFileDiff(res.stdout);
+      } else {
+        // Fallback: try without --stat for added files
+        const res2 = await invoke<GitCliResult>("run_git_cli_cmd", {
+          repoPath,
+          args: ["stash", "show", "-p", `stash@{${index}}`, "--", filePath]
+        });
+        if (res2.exit_code === 0) {
+          setStashFileDiff(res2.stdout || "(no diff available for this file)");
+        }
       }
     } catch (err: any) {
       setErrorMessage(err.toString());
+    } finally {
+      setStashDiffLoading(false);
     }
   };
 
@@ -1613,7 +1631,20 @@ function App() {
 
   const stagedFiles = files.filter(f => f.staged_status !== null);
   const unstagedFiles = files.filter(f => f.unstaged_status !== null);
-  const { paths: graphPaths, nodes: graphNodes } = calculateGraphPaths(commits);
+
+  const filteredCommits = React.useMemo(() => {
+    if (!historySearchQuery.trim()) return commits;
+    const q = historySearchQuery.toLowerCase();
+    return commits.filter(commit =>
+      commit.message.toLowerCase().includes(q) ||
+      commit.author.toLowerCase().includes(q) ||
+      commit.short_id.toLowerCase().includes(q) ||
+      commit.id.toLowerCase().includes(q) ||
+      commit.branches.some(b => b.toLowerCase().includes(q))
+    );
+  }, [commits, historySearchQuery]);
+
+  const { paths: graphPaths, nodes: graphNodes } = calculateGraphPaths(filteredCommits);
 
   // Active workspace directory name
   const activeWorkspaceName = repoPath.split("/").pop() || repoPath;
@@ -2894,115 +2925,163 @@ function App() {
             <div className="history-view">
               
               {/* Commit Graph Pane */}
-              <div className="graph-pane">
-                {commits.length === 0 ? (
-                  <div className="empty-canvas">
-                    <GitCommit size={36} className="empty-canvas-icon" />
-                    <span>No commits found in history</span>
+              <div className="graph-pane" style={{ display: "flex", flexDirection: "column" }}>
+                {/* Search & Filter Toolbar */}
+                <div style={{
+                  padding: "8px 14px",
+                  background: "var(--bg-panel)",
+                  borderBottom: "1px solid var(--border-color)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: "12px",
+                  flexShrink: 0,
+                  zIndex: 10
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", flex: 1, maxWidth: "420px" }}>
+                    <input
+                      className="dialog-input"
+                      style={{ padding: "6px 12px", fontSize: "0.76rem", width: "100%" }}
+                      placeholder="Search commits by message, author, SHA, branch, or stash..."
+                      value={historySearchQuery}
+                      onChange={(e) => setHistorySearchQuery(e.target.value)}
+                    />
                   </div>
-                ) : (
-                  <div style={{ position: "relative", minHeight: "100%" }}>
-                    
-                    {/* SVG Connector Lines */}
-                    <svg 
-                      style={{
-                        position: "absolute",
-                        top: 0,
-                        left: 0,
-                        width: "120px",
-                        height: `${commits.length * 48}px`,
-                        pointerEvents: "none",
-                        zIndex: 1
-                      }}
-                    >
-                      {graphPaths.map(path => (
-                        <path
-                          key={path.id}
-                          d={path.d}
-                          stroke={path.color}
-                          strokeWidth={1.5}
-                          fill="none"
-                          opacity={0.6}
-                        />
-                      ))}
-                    </svg>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "0.72rem", color: "var(--color-text-muted)" }}>
+                    <History size={14} style={{ color: "var(--accent-purple-bright)" }} />
+                    <span>Showing <strong>{filteredCommits.length}</strong> of <strong>{commits.length}</strong> commits</span>
+                  </div>
+                </div>
 
-                    {/* Commit Rows list */}
-                    {commits.map((commit) => {
-                      const node = graphNodes.find(n => n.id === commit.id);
-                      return (
-                        <div 
-                          key={commit.id} 
-                          className={`commit-row ${selectedCommit?.id === commit.id ? "selected" : ""}`}
-                          onClick={() => selectCommitDetails(commit)}
-                          draggable={true}
-                          onDragStart={(e) => handleDragStartCommit(e, commit.id)}
-                          style={{
-                            paddingLeft: "110px", 
-                            position: "relative"
-                          }}
-                        >
-                          {/* Render node circles */}
-                          {node && (
+                <div style={{ flex: 1, overflowY: "auto", position: "relative" }}>
+                  {filteredCommits.length === 0 ? (
+                    <div className="empty-canvas">
+                      <GitCommit size={36} className="empty-canvas-icon" />
+                      <span>No commits found matching filter</span>
+                    </div>
+                  ) : (
+                    <div style={{ position: "relative", minHeight: "100%" }}>
+                      
+                      {/* SVG Connector Lines */}
+                      <svg 
+                        style={{
+                          position: "absolute",
+                          top: 0,
+                          left: 0,
+                          width: "120px",
+                          height: `${filteredCommits.length * 48}px`,
+                          pointerEvents: "none",
+                          zIndex: 1
+                        }}
+                      >
+                        {graphPaths.map(path => (
+                          <path
+                            key={path.id}
+                            d={path.d}
+                            stroke={path.color}
+                            strokeWidth={1.5}
+                            fill="none"
+                            opacity={0.6}
+                          />
+                        ))}
+                      </svg>
+
+                      {/* Commit Rows list */}
+                      {filteredCommits.map((commit) => {
+                          const node = graphNodes.find(n => n.id === commit.id);
+                          return (
                             <div 
+                              key={commit.id} 
+                              className={`commit-row ${selectedCommit?.id === commit.id ? "selected" : ""}`}
+                              onClick={() => selectCommitDetails(commit)}
+                              draggable={true}
+                              onDragStart={(e) => handleDragStartCommit(e, commit.id)}
                               style={{
-                                position: "absolute",
-                                left: `${node.x - 5}px`,
-                                top: `${node.y - 5}px`,
-                                width: "10px",
-                                height: "10px",
-                                borderRadius: "50%",
-                                backgroundColor: draggedCommitSha === commit.id ? "var(--color-conflict)" : "var(--border-active)",
-                                border: "2px solid var(--bg-app)",
-                                zIndex: 2
+                                paddingLeft: "110px", 
+                                position: "relative"
                               }}
-                            />
-                          )}
+                            >
+                              {/* Render node circles */}
+                              {node && (
+                                <div 
+                                  style={{
+                                    position: "absolute",
+                                    left: `${node.x - 5}px`,
+                                    top: `${node.y - 5}px`,
+                                    width: "10px",
+                                    height: "10px",
+                                    borderRadius: "50%",
+                                    backgroundColor: draggedCommitSha === commit.id ? "var(--color-conflict)" : "var(--border-active)",
+                                    border: "2px solid var(--bg-app)",
+                                    zIndex: 2
+                                  }}
+                                />
+                              )}
 
-                          <div style={{ display: "flex", gap: "10px", alignItems: "center", overflow: "hidden", width: "100%" }}>
-                            {commit.branches.map(b => (
-                              <span 
-                                key={b}
-                                style={{
-                                  background: "var(--bg-active)",
-                                  border: "1px solid var(--border-active)",
-                                  borderRadius: "2px",
-                                  fontSize: "0.7rem",
-                                  color: "var(--color-text-bright)",
-                                  padding: "0px 4px",
-                                  fontWeight: 500,
-                                  whiteSpace: "nowrap"
-                                }}
-                              >
-                                {b}
-                              </span>
-                            ))}
-                            <span style={{ 
-                              fontSize: "0.8rem", 
-                              fontWeight: 500, 
-                              whiteSpace: "nowrap", 
-                              overflow: "hidden", 
-                              textOverflow: "ellipsis",
-                              color: selectedCommit?.id === commit.id ? "var(--color-text-bright)" : "var(--color-text-main)"
-                            }}>
-                              {commit.message}
-                            </span>
-                            <span style={{ 
-                              fontSize: "0.75rem", 
-                              color: "var(--color-text-muted)", 
-                              marginLeft: "auto", 
-                              paddingRight: "16px",
-                              flexShrink: 0
-                            }}>
-                              {commit.author} • {new Date(commit.timestamp * 1000).toLocaleDateString()}
-                            </span>
-                          </div>
-                        </div>
-                      );
-                    })}
+                              <div style={{ display: "flex", gap: "10px", alignItems: "center", overflow: "hidden", width: "100%" }}>
+                                {commit.branches.map(b => {
+                                  const isRemote = b.includes("/");
+                                  const isStash = b.startsWith("stash");
+                                  const isTag = b.startsWith("tag:");
+                                  return (
+                                    <span 
+                                      key={b}
+                                      onClick={(e) => {
+                                        if (isStash) {
+                                          e.stopPropagation();
+                                          const match = b.match(/\d+/);
+                                          const idx = match ? parseInt(match[0], 10) : 0;
+                                          openStashInspector(idx);
+                                        }
+                                      }}
+                                      style={{
+                                        display: "inline-flex",
+                                        alignItems: "center",
+                                        gap: "4px",
+                                        background: isStash ? "rgba(244, 63, 94, 0.15)" : isTag ? "rgba(245, 158, 11, 0.15)" : isRemote ? "rgba(56, 189, 248, 0.15)" : "rgba(168, 85, 247, 0.15)",
+                                        border: isStash ? "1px solid rgba(244, 63, 94, 0.35)" : isTag ? "1px solid rgba(245, 158, 11, 0.35)" : isRemote ? "1px solid rgba(56, 189, 248, 0.35)" : "1px solid rgba(168, 85, 247, 0.35)",
+                                        color: isStash ? "var(--color-conflict)" : isTag ? "var(--color-untracked)" : isRemote ? "var(--color-modified)" : "var(--accent-purple-bright)",
+                                        borderRadius: "4px",
+                                        fontSize: "0.68rem",
+                                        padding: "1px 6px",
+                                        fontWeight: 600,
+                                        whiteSpace: "nowrap",
+                                        cursor: isStash ? "pointer" : "default"
+                                      }}
+                                      title={isStash ? "Click to open Stash Inspector" : b}
+                                    >
+                                      {isStash ? <Archive size={10} /> : isRemote ? <Globe size={10} /> : <GitBranch size={10} />}
+                                      {b}
+                                    </span>
+                                  );
+                                })}
+                                <span style={{ 
+                                  fontSize: "0.8rem", 
+                                  fontWeight: 500, 
+                                  whiteSpace: "nowrap", 
+                                  overflow: "hidden", 
+                                  textOverflow: "ellipsis",
+                                  color: selectedCommit?.id === commit.id ? "var(--color-text-bright)" : "var(--color-text-main)"
+                                }}>
+                                  {commit.message}
+                                </span>
+                                <span style={{ 
+                                  fontSize: "0.75rem", 
+                                  color: "var(--color-text-muted)", 
+                                  marginLeft: "auto", 
+                                  paddingRight: "16px",
+                                  flexShrink: 0
+                                }}>
+                                  {commit.author} • {new Date(commit.timestamp * 1000).toLocaleDateString()}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })}
 
-                  </div>
-                )}
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* --- DETAILS PANE RESIZE HANDLE --- */}
@@ -3116,8 +3195,13 @@ function App() {
                 {dialogType === "merge-rebase" && "Merge / Rebase Branch"}
                 {dialogType === "stash-inspector" && (
                   <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                    <Archive size={15} />
-                    {selectedStashIndex !== null ? stashes[selectedStashIndex]?.replace(/^stash@\{\d+\}:\s*(On [^:]+:\s*)?/, "").trim() || `stash@{${selectedStashIndex}}` : "Stash Inspector"}
+                    <Archive size={16} style={{ color: "var(--accent-purple-bright)" }} />
+                    <span>Stash Inspector</span>
+                    {selectedStashIndex !== null && stashes[selectedStashIndex] && (
+                      <span className="stash-badge" style={{ fontSize: "0.72rem", background: "rgba(168, 85, 247, 0.12)", color: "var(--accent-purple-bright)", padding: "2px 8px", borderRadius: "10px", border: "1px solid rgba(168, 85, 247, 0.25)", fontFamily: "var(--font-mono)" }}>
+                        {stashes[selectedStashIndex].split(":")[0]}
+                      </span>
+                    )}
                   </span>
                 )}
               </span>
@@ -3169,116 +3253,211 @@ function App() {
 
             {/* STASH INSPECTOR DIALOG */}
             {dialogType === "stash-inspector" && selectedStashIndex !== null && (
-              <div style={{ display: "flex", flexDirection: "column", gap: "0", minHeight: "340px", maxHeight: "70vh" }}>
+              <div className="stash-inspector-container">
                 {/* File list + diff split */}
-                <div style={{ display: "flex", flex: 1, gap: "0", overflow: "hidden", minHeight: 0 }}>
+                <div className="stash-inspector-split">
                   {/* Left: file list */}
-                  <div style={{
-                    width: "200px",
-                    flexShrink: 0,
-                    borderRight: "1px solid var(--border-color)",
-                    display: "flex",
-                    flexDirection: "column",
-                    overflow: "hidden"
-                  }}>
-                    <div style={{ padding: "8px 10px", fontSize: "0.65rem", textTransform: "uppercase", letterSpacing: "0.6px", color: "var(--color-text-muted)", fontWeight: 700, borderBottom: "1px solid var(--border-color)" }}>
-                      Changed Files
-                    </div>
-                    <div style={{ flex: 1, overflowY: "auto", padding: "6px" }}>
-                      {stashFiles.length === 0 && (
-                        <span style={{ fontSize: "0.73rem", color: "var(--color-text-muted)", padding: "8px" }}>Loading…</span>
-                      )}
-                      {stashFiles.map(f => (
-                        <div
-                          key={f.path}
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "6px",
-                            padding: "5px 6px",
-                            borderRadius: "4px",
-                            cursor: "pointer",
-                            background: selectedStashFile === f.path ? "var(--bg-active)" : "transparent",
-                            border: selectedStashFile === f.path ? "1px solid var(--border-active)" : "1px solid transparent",
-                            fontSize: "0.73rem",
-                            fontFamily: "var(--font-mono)"
+                  <div className="stash-file-sidebar">
+                    <div className="stash-sidebar-header">
+                      <span>Changed Files ({stashFiles.length})</span>
+                      {stashFiles.length > 0 && (
+                        <input
+                          type="checkbox"
+                          className="header-checkbox"
+                          checked={checkedStashFiles.size === stashFiles.length}
+                          onChange={e => {
+                            if (e.target.checked) {
+                              setCheckedStashFiles(new Set(stashFiles.map(f => f.path)));
+                            } else {
+                              setCheckedStashFiles(new Set());
+                            }
                           }}
-                          onClick={() => fetchStashFileDiff(selectedStashIndex, f.path)}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={checkedStashFiles.has(f.path)}
-                            onClick={e => e.stopPropagation()}
-                            onChange={e => {
-                              const next = new Set(checkedStashFiles);
-                              e.target.checked ? next.add(f.path) : next.delete(f.path);
-                              setCheckedStashFiles(next);
-                            }}
-                            style={{ accentColor: "var(--accent-purple)", flexShrink: 0 }}
-                          />
-                          <span style={{
-                            fontSize: "0.65rem",
-                            fontWeight: 700,
-                            color: f.status === "A" ? "var(--color-staged)" : f.status === "D" ? "var(--color-deleted)" : "var(--color-modified)",
-                            flexShrink: 0
-                          }}>{f.status}</span>
-                          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--color-text-main)" }} title={f.path}>
-                            {f.path.split("/").pop()}
-                          </span>
-                          <Eye size={11} style={{ marginLeft: "auto", opacity: 0.5, flexShrink: 0 }} />
-                        </div>
-                      ))}
+                          title="Select all files"
+                        />
+                      )}
+                    </div>
+                    <div className="stash-file-list">
+                      {stashFiles.length === 0 && (
+                        <span style={{ fontSize: "0.73rem", color: "var(--color-text-muted)", padding: "12px", textAlign: "center" }}>Loading files…</span>
+                      )}
+                      {stashFiles.map(f => {
+                        const parts = f.path.split("/");
+                        const name = parts.pop();
+                        const dir = parts.join("/");
+                        return (
+                          <div
+                            key={f.path}
+                            className={`stash-file-item ${selectedStashFile === f.path ? "active" : ""}`}
+                            onClick={() => fetchStashFileDiff(selectedStashIndex, f.path)}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checkedStashFiles.has(f.path)}
+                              onClick={e => e.stopPropagation()}
+                              onChange={e => {
+                                const next = new Set(checkedStashFiles);
+                                e.target.checked ? next.add(f.path) : next.delete(f.path);
+                                setCheckedStashFiles(next);
+                              }}
+                              style={{ accentColor: "var(--accent-purple)", flexShrink: 0 }}
+                            />
+                            <span className={`stash-status-badge ${f.status === "A" ? "added" : f.status === "D" ? "deleted" : "modified"}`}>
+                              {f.status === "A" ? "ADD" : f.status === "D" ? "DEL" : "MOD"}
+                            </span>
+                            <div className="stash-file-details">
+                              <span className="stash-file-name" title={f.path}>{name}</span>
+                              {dir && <span className="stash-file-path" title={dir}>{dir}</span>}
+                            </div>
+                            <Eye size={12} style={{ opacity: selectedStashFile === f.path ? 1 : 0.4, color: selectedStashFile === f.path ? "var(--accent-purple-bright)" : "currentColor", flexShrink: 0 }} />
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
 
                   {/* Right: diff view */}
-                  <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-                    {stashFileDiff ? (
-                      <pre style={{
-                        flex: 1,
-                        overflowY: "auto",
-                        margin: 0,
-                        padding: "10px 12px",
-                        fontSize: "0.7rem",
-                        fontFamily: "var(--font-mono)",
-                        lineHeight: 1.6,
-                        background: "var(--bg-app)",
-                        color: "var(--color-text-main)",
-                        whiteSpace: "pre"
-                      }}>
-                        {stashFileDiff.split("\n").map((line, i) => (
-                          <div key={i} style={{
-                            color: line.startsWith("+") && !line.startsWith("++") ? "var(--color-staged)"
-                              : line.startsWith("-") && !line.startsWith("--") ? "var(--color-deleted)"
-                              : line.startsWith("@@") ? "var(--color-modified)"
-                              : "inherit"
-                          }}>{line}</div>
-                        ))}
-                      </pre>
+                  <div className="stash-diff-pane">
+                    {/* Diff header */}
+                    <div className="stash-diff-header">
+                      {selectedStashFile ? (
+                        <>
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: 0, overflow: "hidden" }}>
+                            <FileCode size={13} style={{ color: "var(--accent-purple-bright)", flexShrink: 0 }} />
+                            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: "0.75rem", fontFamily: "var(--font-mono)" }}>{selectedStashFile}</span>
+                            <span className={`stash-status-badge ${stashFiles.find(f => f.path === selectedStashFile)?.status === "A" ? "added" : stashFiles.find(f => f.path === selectedStashFile)?.status === "D" ? "deleted" : "modified"}`} style={{ flexShrink: 0 }}>
+                              {stashFiles.find(f => f.path === selectedStashFile)?.status === "A" ? "ADDED" : stashFiles.find(f => f.path === selectedStashFile)?.status === "D" ? "DELETED" : "MODIFIED"}
+                            </span>
+                          </div>
+                          {stashFileDiff && (() => {
+                            const lines = stashFileDiff.split("\n");
+                            const additions = lines.filter(l => l.startsWith("+") && !l.startsWith("+++")).length;
+                            const deletions = lines.filter(l => l.startsWith("-") && !l.startsWith("---")).length;
+                            return (
+                              <div style={{ display: "flex", gap: "8px", alignItems: "center", flexShrink: 0, fontSize: "0.71rem" }}>
+                                <span style={{ color: "var(--color-staged)", fontWeight: 700 }}>+{additions}</span>
+                                <span style={{ color: "var(--color-deleted)", fontWeight: 700 }}>-{deletions}</span>
+                              </div>
+                            );
+                          })()}
+                        </>
+                      ) : (
+                        <span style={{ color: "var(--color-text-muted)", fontSize: "0.74rem" }}>No file selected</span>
+                      )}
+                    </div>
+
+                    {/* Diff content */}
+                    {stashDiffLoading ? (
+                      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "10px", color: "var(--color-text-muted)", fontSize: "0.78rem" }}>
+                        <RefreshCw size={22} style={{ opacity: 0.5, color: "var(--accent-purple)", animation: "spin 1s linear infinite" }} />
+                        <span>Loading diff…</span>
+                      </div>
+                    ) : stashFileDiff ? (
+                      <div className="stash-diff-viewer">
+                        {(() => {
+                          const lines = stashFileDiff.split("\n");
+                          let oldLine = 0;
+                          let newLine = 0;
+                          const hunkHeaderPattern = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/;
+                          return lines.map((line, i) => {
+                            const isAddition = line.startsWith("+") && !line.startsWith("+++");
+                            const isDeletion = line.startsWith("-") && !line.startsWith("---");
+                            const isHunk = line.startsWith("@@");
+                            const isFileHeader = line.startsWith("diff ") || line.startsWith("index ") || line.startsWith("---") || line.startsWith("+++");
+
+                            if (isHunk) {
+                              const m = line.match(hunkHeaderPattern);
+                              if (m) {
+                                oldLine = parseInt(m[1], 10) - 1;
+                                newLine = parseInt(m[2], 10) - 1;
+                              }
+                            } else if (isAddition) {
+                              newLine++;
+                            } else if (isDeletion) {
+                              oldLine++;
+                            } else if (!isFileHeader) {
+                              oldLine++;
+                              newLine++;
+                            }
+
+                            const lineClass = isAddition ? "addition" : isDeletion ? "deletion" : isHunk ? "hunk" : isFileHeader ? "file-header" : "";
+
+                            return (
+                              <div key={i} className={`stash-diff-line ${lineClass}`}>
+                                <span className="stash-diff-gutter old-ln">
+                                  {!isHunk && !isFileHeader && (isDeletion || (!isAddition)) && !isAddition ? (oldLine > 0 ? oldLine : "") : ""}
+                                </span>
+                                <span className="stash-diff-gutter new-ln">
+                                  {!isHunk && !isFileHeader && (isAddition || (!isDeletion)) && !isDeletion ? (newLine > 0 ? newLine : "") : ""}
+                                </span>
+                                <span className="stash-diff-marker">
+                                  {isAddition ? "+" : isDeletion ? "−" : isHunk ? "" : " "}
+                                </span>
+                                <span className="stash-diff-content">{line.substring(isAddition || isDeletion ? 1 : 0)}</span>
+                              </div>
+                            );
+                          });
+                        })()}
+                      </div>
+                    ) : selectedStashFile ? (
+                      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "10px", color: "var(--color-text-muted)", fontSize: "0.78rem" }}>
+                        <FileCode size={28} style={{ opacity: 0.3, color: "var(--accent-purple)" }} />
+                        <span>No diff available for this file</span>
+                      </div>
                     ) : (
-                      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "8px", color: "var(--color-text-muted)", fontSize: "0.78rem" }}>
-                        <Eye size={24} style={{ opacity: 0.3 }} />
-                        <span>Click a file to preview its diff</span>
+                      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "10px", color: "var(--color-text-muted)", fontSize: "0.78rem" }}>
+                        <Eye size={28} style={{ opacity: 0.3, color: "var(--accent-purple)" }} />
+                        <span>Select a file on the left to view its changes</span>
                       </div>
                     )}
                   </div>
                 </div>
 
                 {/* Actions footer */}
-                <div style={{ borderTop: "1px solid var(--border-color)", padding: "10px 12px", display: "flex", gap: "8px", flexShrink: 0, flexWrap: "wrap" }}>
-                  <button
-                    className="dialog-button"
-                    style={{ flex: 1 }}
-                    onClick={restoreSelectedStashFiles}
-                    disabled={checkedStashFiles.size === 0}
-                    title={checkedStashFiles.size === 0 ? "Check at least one file" : `Restore ${checkedStashFiles.size} file(s)`}
-                  >
-                    Restore Selected ({checkedStashFiles.size})
-                  </button>
-                  <button className="dialog-button" style={{ flex: 1 }} onClick={() => applyStash(selectedStashIndex)}>Apply All</button>
-                  <button className="dialog-button" style={{ flex: 1, background: "var(--color-staged)" }} onClick={() => popStash(selectedStashIndex)}>Pop</button>
-                  <button className="dialog-button secondary" onClick={() => { setDialogType(null); setSelectedStashIndex(null); }}>Close</button>
-                  <button className="dialog-button" style={{ background: "var(--color-deleted)" }} onClick={() => dropStash(selectedStashIndex)} title="Discard stash permanently">Discard</button>
+                <div className="stash-footer-actions">
+                  <div className="stash-footer-group">
+                    <button 
+                      className="stash-action-btn primary" 
+                      onClick={() => applyStash(selectedStashIndex)}
+                      title="Apply all stashed changes to working tree"
+                    >
+                      <Archive size={14} />
+                      Apply Stash
+                    </button>
+                    <button 
+                      className="stash-action-btn secondary" 
+                      onClick={() => popStash(selectedStashIndex)}
+                      title="Apply stashed changes and remove stash entry"
+                    >
+                      <FolderSync size={14} />
+                      Pop Stash
+                    </button>
+                    <button
+                      className="stash-action-btn outline"
+                      onClick={restoreSelectedStashFiles}
+                      disabled={checkedStashFiles.size === 0}
+                      title={checkedStashFiles.size === 0 ? "Check at least one file to restore" : `Restore ${checkedStashFiles.size} selected file(s)`}
+                    >
+                      <RefreshCcw size={14} />
+                      Restore Selected ({checkedStashFiles.size})
+                    </button>
+                  </div>
+
+                  <div className="stash-footer-group">
+                    <button 
+                      className="stash-action-btn danger" 
+                      onClick={() => dropStash(selectedStashIndex)} 
+                      title="Discard stash entry permanently"
+                    >
+                      <Trash2 size={14} />
+                      Discard Stash
+                    </button>
+                    <button 
+                      className="stash-action-btn ghost" 
+                      onClick={() => { setDialogType(null); setSelectedStashIndex(null); }}
+                    >
+                      Close
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
