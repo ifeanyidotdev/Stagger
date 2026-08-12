@@ -68,6 +68,10 @@ pub fn parse_file_status(status: git2::Status) -> (Option<String>, Option<String
     let mut staged = None;
     let mut unstaged = None;
 
+    if status.is_conflicted() {
+        return (Some("Conflict".to_string()), Some("Conflict".to_string()));
+    }
+
     if status.is_index_new() {
         staged = Some("Added".to_string());
     } else if status.is_index_modified() {
@@ -380,7 +384,9 @@ pub fn get_branches_impl(repo_path: &str) -> Result<Vec<String>, String> {
     for branch_res in branches {
         if let Ok((branch, _)) = branch_res {
             if let Ok(Some(name)) = branch.name() {
-                branch_names.push(name.to_string());
+                if name != "HEAD" && !name.starts_with("HEAD ") && !name.contains("detached") {
+                    branch_names.push(name.to_string());
+                }
             }
         }
     }
@@ -397,14 +403,16 @@ pub fn get_all_branches_impl(repo_path: &str) -> Result<Vec<BranchInfo>, String>
         for branch_res in branches {
             if let Ok((branch, _)) = branch_res {
                 if let Ok(Some(name)) = branch.name() {
-                    let upstream_name = branch.upstream().ok()
-                        .and_then(|u| u.name().ok().flatten().map(|s| s.to_string()));
-                    
-                    result.push(BranchInfo {
-                        name: name.to_string(),
-                        is_remote: false,
-                        upstream: upstream_name,
-                    });
+                    if name != "HEAD" && !name.starts_with("HEAD ") && !name.contains("detached") {
+                        let upstream_name = branch.upstream().ok()
+                            .and_then(|u| u.name().ok().flatten().map(|s| s.to_string()));
+                        
+                        result.push(BranchInfo {
+                            name: name.to_string(),
+                            is_remote: false,
+                            upstream: upstream_name,
+                        });
+                    }
                 }
             }
         }

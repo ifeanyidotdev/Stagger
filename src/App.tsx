@@ -31,7 +31,8 @@ import {
   RefreshCcw,
   DownloadCloud,
   X,
-  MoreVertical
+  MoreVertical,
+  CheckCircle2
 } from "lucide-react";
 import "./App.css";
 
@@ -124,6 +125,13 @@ interface GitHubPR {
   base: { ref: string };
 }
 
+const isRealBranch = (name: string): boolean => {
+  if (!name || typeof name !== "string") return false;
+  const trimmed = name.trim();
+  if (trimmed === "HEAD" || trimmed.startsWith("HEAD ") || trimmed.includes("detached")) return false;
+  return true;
+};
+
 function App() {
   // --- REPOSITORY & WORKSPACE STATE ---
   const [repoPath, setRepoPath] = useState(() => {
@@ -151,6 +159,10 @@ function App() {
 
   // --- MERGE CONFLICTS ---
   const [conflictedFiles, setConflictedFiles] = useState<string[]>([]);
+  const [conflictOursContent, setConflictOursContent] = useState<string | null>(null);
+  const [conflictTheirsContent, setConflictTheirsContent] = useState<string | null>(null);
+  const [conflictDiffInfo, setConflictDiffInfo] = useState<DiffInfo | null>(null);
+  const [isLoadingConflict, setIsLoadingConflict] = useState<boolean>(false);
 
   // --- BULK SELECTION AND COLLAPSIBLE GROUPS ---
   const [checkedUnstaged, setCheckedUnstaged] = useState<string[]>([]);
@@ -296,6 +308,69 @@ function App() {
     setCheckedStaged(prev => prev.filter(p => currentStagedPaths.includes(p)));
   }, [files]);
 
+  // --- CONFLICT INSPECTION HELPER ---
+  const isConflictFile = (filePath: string | null): boolean => {
+    if (!filePath) return false;
+    if (conflictedFiles.includes(filePath)) return true;
+    const status = files.find(f => f.path === filePath);
+    if (status && (status.staged_status === "Conflict" || status.unstaged_status === "Conflict")) return true;
+    return false;
+  };
+
+  const selectConflictFile = async (filePath: string) => {
+    setSelectedFile(filePath);
+    setIsLoadingConflict(true);
+    setConflictOursContent(null);
+    setConflictTheirsContent(null);
+    setConflictDiffInfo(null);
+
+    try {
+      // Fetch Ours stage (:2:)
+      const oursRes = await invoke<GitCliResult>("run_git_cli_cmd", {
+        repoPath,
+        args: ["show", `:2:${filePath}`]
+      });
+      if (oursRes.exit_code === 0) {
+        setConflictOursContent(oursRes.stdout);
+      }
+
+      // Fetch Theirs stage (:3:)
+      const theirsRes = await invoke<GitCliResult>("run_git_cli_cmd", {
+        repoPath,
+        args: ["show", `:3:${filePath}`]
+      });
+      if (theirsRes.exit_code === 0) {
+        setConflictTheirsContent(theirsRes.stdout);
+      }
+
+      // Fetch diff
+      try {
+        const diffRes = await invoke<DiffInfo>("get_file_diff", {
+          repoPath,
+          filePath,
+          staged: false
+        });
+        setConflictDiffInfo(diffRes);
+      } catch (_) {
+        setConflictDiffInfo(null);
+      }
+    } catch (err: any) {
+      console.error("Error loading conflict details:", err);
+    } finally {
+      setIsLoadingConflict(false);
+    }
+  };
+
+  useEffect(() => {
+    if (conflictedFiles.length > 0 && (!selectedFile || !isConflictFile(selectedFile))) {
+      selectConflictFile(conflictedFiles[0]);
+    } else if (selectedFile && isConflictFile(selectedFile)) {
+      if (conflictOursContent === null && conflictTheirsContent === null && !isLoadingConflict) {
+        selectConflictFile(selectedFile);
+      }
+    }
+  }, [selectedFile, conflictedFiles, files]);
+
   // --- WORKSPACE PROJECTS SWAP & ADD FLOW ---
   const selectWorkspace = (path: string) => {
     setRepoPath(path);
@@ -381,8 +456,9 @@ function App() {
       setHasRepo(true);
       setErrorMessage(null);
 
-      let branchesList = await invoke<string[]>("get_branches", { repoPath: path });
-      if (statusRes.current_branch && !branchesList.includes(statusRes.current_branch)) {
+      let rawBranches = await invoke<string[]>("get_branches", { repoPath: path });
+      let branchesList = rawBranches.filter(isRealBranch);
+      if (statusRes.current_branch && isRealBranch(statusRes.current_branch) && !branchesList.includes(statusRes.current_branch)) {
         branchesList = [statusRes.current_branch, ...branchesList];
       }
 
@@ -391,14 +467,20 @@ function App() {
       let knownBranches: string[] = [];
       try {
         const saved = localStorage.getItem(storageKey);
-        if (saved) knownBranches = JSON.parse(saved);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed)) {
+            knownBranches = parsed.filter(isRealBranch);
+          }
+        }
       } catch (_) {}
 
       knownBranches.forEach(b => {
-        if (!branchesList.includes(b)) {
+        if (isRealBranch(b) && !branchesList.includes(b)) {
           branchesList.push(b);
         }
       });
+      branchesList = branchesList.filter(isRealBranch);
       localStorage.setItem(storageKey, JSON.stringify(branchesList));
 
       setBranchList(branchesList);
@@ -458,15 +540,35 @@ function App() {
         setRemoteUrl(null);
       }
 
+      const cPaths = new Set<string>();
       const conflictRes = await invoke<GitCliResult>("run_git_cli_cmd", {
         repoPath: path,
         args: ["diff", "--name-only", "--diff-filter=U"]
       });
-      if (conflictRes.exit_code === 0) {
-        setConflictedFiles(conflictRes.stdout.split("\n").filter(Boolean));
-      } else {
-        setConflictedFiles([]);
+      if (conflictRes.exit_code === 0 && conflictRes.stdout.trim()) {
+        conflictRes.stdout.split("\n").forEach(p => p.trim() && cPaths.add(p.trim()));
       }
+
+      const porcelainRes = await invoke<GitCliResult>("run_git_cli_cmd", {
+        repoPath: path,
+        args: ["status", "--porcelain"]
+      });
+      if (porcelainRes.exit_code === 0 && porcelainRes.stdout.trim()) {
+        porcelainRes.stdout.split("\n").forEach(line => {
+          if (line.length >= 3 && (line.startsWith("UU") || line.startsWith("AA") || line.startsWith("DD") || line.startsWith("UD") || line.startsWith("DU") || line.startsWith("AU") || line.startsWith("UA") || line.startsWith("U "))) {
+            const p = line.substring(3).trim();
+            if (p) cPaths.add(p);
+          }
+        });
+      }
+
+      statusRes.files.forEach(f => {
+        if (f.staged_status === "Conflict" || f.unstaged_status === "Conflict") {
+          cPaths.add(f.path);
+        }
+      });
+
+      setConflictedFiles(Array.from(cPaths));
 
       const logRes = await invoke<CommitInfo[]>("get_git_log", { repoPath: path, limit: 100 });
       setCommits(logRes);
@@ -2444,119 +2546,110 @@ function App() {
                 onMouseDown={() => setActiveResizer('filepane')}
               />
 
-              {/* The Mesh (Staging Canvas) */}
+              {/* The Mesh (Staging Canvas) or Conflict Inspector */}
               <div className="staging-mesh-pane">
-                {(() => {
-                  const canvasMinHeight = Math.max(
-                    ...canvasNodes.map(n => n.y + 260),
-                    600
-                  );
-                  const canvasMinWidth = Math.max(
-                    ...canvasNodes.map(n => n.x + 400),
-                    750
-                  );
+                {selectedFile && isConflictFile(selectedFile) ? (
+                  <div className="conflict-resolver-view">
+                    <div className="conflict-resolver-header">
+                      <div className="conflict-header-title">
+                        <AlertTriangle size={20} style={{ color: "var(--color-conflict)", flexShrink: 0 }} />
+                        <div style={{ overflow: "hidden" }}>
+                          <div className="conflict-filename">{selectedFile}</div>
+                          <div className="conflict-subtext">Conflicting changes detected. Compare Ours vs Theirs and choose which version to keep.</div>
+                        </div>
+                      </div>
 
-                  return (
-                    <div 
-                      className="canvas-container" 
-                      ref={canvasRef}
-                      onMouseMove={handleCanvasMouseMove}
-                      onMouseUp={handleCanvasMouseUp}
-                    >
-                      <div
-                        className="canvas-content-wrapper"
-                        style={{
-                          minWidth: `${canvasMinWidth}px`,
-                          minHeight: `${canvasMinHeight}px`,
-                          position: "relative",
-                          width: "100%",
-                          height: "100%"
-                        }}
-                      >
-                        {/* Collaboration Peer Visual Cursor */}
-                        {collabPeers.map((peer, i) => (
-                          <div 
-                            key={i}
-                            className="peer-avatar-cursor"
-                            style={{
-                              transform: `translate(${peer.x}px, ${peer.y}px)`
-                            }}
-                          >
-                            <UserCheck size={16} style={{ color: "var(--color-conflict)" }} />
-                            <span className="peer-cursor-label">{peer.name}</span>
+                      <div className="conflict-header-actions">
+                        <button 
+                          className="conflict-btn ours" 
+                          onClick={() => resolveConflict(selectedFile, "ours")}
+                          title="Keep version from current branch"
+                        >
+                          <UserCheck size={14} />
+                          Keep Ours ({currentBranch})
+                        </button>
+
+                        <button 
+                          className="conflict-btn theirs" 
+                          onClick={() => resolveConflict(selectedFile, "theirs")}
+                          title="Keep version from incoming branch"
+                        >
+                          <GitPullRequest size={14} />
+                          Keep Theirs (Incoming)
+                        </button>
+
+                        <button 
+                          className="conflict-btn resolve" 
+                          onClick={() => resolveConflict(selectedFile, "resolved")}
+                          title="Mark file as resolved"
+                        >
+                          <CheckCircle2 size={14} />
+                          Mark Resolved
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="conflict-comparison-body">
+                      {isLoadingConflict ? (
+                        <div className="conflict-loading">
+                          <RefreshCw size={24} className="spin-icon" style={{ color: "var(--accent-purple)" }} />
+                          <span>Loading file conflict versions…</span>
+                        </div>
+                      ) : (
+                        <div className="conflict-split-pane">
+                          {/* Ours (Current Branch) Column */}
+                          <div className="conflict-column ours">
+                            <div className="conflict-column-header">
+                              <span className="badge-title">Ours (HEAD / {currentBranch})</span>
+                              <span className="badge-sub">Current branch state</span>
+                            </div>
+                            <div className="conflict-code-viewer">
+                              {conflictOursContent !== null ? (
+                                conflictOursContent.split("\n").map((line, i) => (
+                                  <div key={i} className="conflict-code-line">
+                                    <span className="line-num">{i + 1}</span>
+                                    <span className="line-text">{line}</span>
+                                  </div>
+                                ))
+                              ) : (
+                                <div style={{ color: "var(--color-text-muted)", padding: "16px", textAlign: "center" }}>No content in Ours version (or file created/deleted)</div>
+                              )}
+                            </div>
                           </div>
-                        ))}
 
-                        <div className="canvas-header">
-                          <div className="canvas-instruction">
-                            {selectedFile ? `Staging Mesh for ${selectedFile} (${canvasNodes.length} hunk${canvasNodes.length === 1 ? '' : 's'})` : "Select a modified file on the left to see its hunks"}
+                          {/* Theirs (Incoming Branch) Column */}
+                          <div className="conflict-column theirs">
+                            <div className="conflict-column-header">
+                              <span className="badge-title">Theirs (Incoming)</span>
+                              <span className="badge-sub">Incoming branch state</span>
+                            </div>
+                            <div className="conflict-code-viewer">
+                              {conflictTheirsContent !== null ? (
+                                conflictTheirsContent.split("\n").map((line, i) => (
+                                  <div key={i} className="conflict-code-line">
+                                    <span className="line-num">{i + 1}</span>
+                                    <span className="line-text">{line}</span>
+                                  </div>
+                                ))
+                              ) : (
+                                <div style={{ color: "var(--color-text-muted)", padding: "16px", textAlign: "center" }}>No content in Theirs version (or file created/deleted)</div>
+                              )}
+                            </div>
                           </div>
                         </div>
+                      )}
 
-                        {/* Connections Overlay */}
-                        <svg 
-                          className="mesh-overlay-svg"
-                          style={{
-                            width: `${canvasMinWidth}px`,
-                            height: `${canvasMinHeight}px`
-                          }}
-                        >
-                          {canvasNodes.map((node) => {
-                            const targetX = canvasMinWidth - 180;
-                            const targetY = 100;
-                            const startX = node.x + 310;
-                            const startY = node.y + 55;
-
-                            return (
-                              <path
-                                key={`link-${node.id}`}
-                                className="connector-line"
-                                d={`M ${startX} ${startY} C ${(startX + targetX) / 2} ${startY}, ${(startX + targetX) / 2} ${targetY}, ${targetX} ${targetY}`}
-                                style={{
-                                  stroke: node.isStaged ? "var(--color-staged)" : "var(--border-active)"
-                                }}
-                              />
-                            );
-                          })}
-                        </svg>
-
-                        {/* Floating Hunk Nodes */}
-                        {canvasNodes.map((node) => (
-                          <div
-                            key={node.id}
-                            className="mesh-node"
-                            style={{
-                              left: `${node.x}px`,
-                              top: `${node.y}px`,
-                              cursor: draggingNodeId === node.id ? "grabbing" : "grab"
-                            }}
-                            onMouseDown={(e) => handleNodeMouseDown(e, node.id)}
-                          >
-                            <div className="node-header">
-                              <span className="node-title">{node.hunk.header}</span>
-                              <button 
-                                className="node-action"
-                                onMouseDown={(e) => e.stopPropagation()} 
-                                onClick={() => stageSingleHunk(node)}
-                              >
-                                Stage Hunk
-                              </button>
-                            </div>
-
-                            <div 
-                              className="node-diff-preview"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setActiveDetailHunk(node.hunk);
-                              }}
-                              style={{ cursor: "pointer" }}
-                              title="Click to view detailed changes"
-                            >
-                              <div className="diff-hunk-header">{node.hunk.header}</div>
-                              <div style={{ maxHeight: "110px", overflowY: "auto" }}>
-                                {node.hunk.lines.slice(0, 10).map((line, idx) => (
+                      {/* Conflict Patch Diff Preview Hunks */}
+                      {conflictDiffInfo && conflictDiffInfo.hunks && conflictDiffInfo.hunks.length > 0 && (
+                        <div className="conflict-diff-preview-section">
+                          <div className="conflict-diff-label">Conflict Patch Diff Preview ({conflictDiffInfo.hunks.length} hunk{conflictDiffInfo.hunks.length === 1 ? '' : 's'})</div>
+                          <div className="node-diff-preview" style={{ maxHeight: "160px", overflowY: "auto" }}>
+                            {conflictDiffInfo.hunks.map((hunk, hIdx) => (
+                              <div key={hIdx}>
+                                <div className="diff-hunk-header">{hunk.header}</div>
+                                {hunk.lines.map((line, lIdx) => (
                                   <div 
-                                    key={idx} 
+                                    key={lIdx} 
                                     className={`diff-line ${
                                       line.origin === "+" ? "addition" : 
                                       line.origin === "-" ? "deletion" : "context"
@@ -2567,40 +2660,176 @@ function App() {
                                   </div>
                                 ))}
                               </div>
-                            </div>
+                            ))}
                           </div>
-                        ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  (() => {
+                    const canvasMinHeight = Math.max(
+                      ...canvasNodes.map(n => n.y + 260),
+                      600
+                    );
+                    const canvasMinWidth = Math.max(
+                      ...canvasNodes.map(n => n.x + 400),
+                      750
+                    );
 
-                        {/* Staged Target Zone Node */}
-                        {selectedFile && (
-                          <div 
-                            className="mesh-node staged-zone"
+                    return (
+                      <div 
+                        className="canvas-container" 
+                        ref={canvasRef}
+                        onMouseMove={handleCanvasMouseMove}
+                        onMouseUp={handleCanvasMouseUp}
+                      >
+                        <div
+                          className="canvas-content-wrapper"
+                          style={{
+                            minWidth: `${canvasMinWidth}px`,
+                            minHeight: `${canvasMinHeight}px`,
+                            position: "relative",
+                            width: "100%",
+                            height: "100%"
+                          }}
+                        >
+                          {/* Collaboration Peer Visual Cursor */}
+                          {collabPeers.map((peer, i) => (
+                            <div 
+                              key={i}
+                              className="peer-avatar-cursor"
+                              style={{
+                                transform: `translate(${peer.x}px, ${peer.y}px)`
+                              }}
+                            >
+                              <UserCheck size={16} style={{ color: "var(--color-conflict)" }} />
+                              <span className="peer-cursor-label">{peer.name}</span>
+                            </div>
+                          ))}
+
+                          <div className="canvas-header">
+                            {conflictedFiles.length > 0 ? (
+                              <div className="canvas-instruction" style={{ background: "rgba(244, 63, 94, 0.12)", color: "var(--color-conflict)", borderColor: "rgba(244, 63, 94, 0.3)" }}>
+                                <AlertTriangle size={14} style={{ display: "inline-block", verticalAlign: "middle", marginRight: "6px" }} />
+                                {selectedFile ? `Merge Conflict Inspection: ${selectedFile}` : `Merge Conflict Active (${conflictedFiles.length} file${conflictedFiles.length === 1 ? '' : 's'}) — Select a file under 'Merge Conflicts' to compare Ours vs Theirs`}
+                              </div>
+                            ) : (
+                              <div className="canvas-instruction">
+                                {selectedFile ? `Staging Mesh for ${selectedFile} (${canvasNodes.length} hunk${canvasNodes.length === 1 ? '' : 's'})` : "Select a modified file on the left to see its hunks"}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Connections Overlay */}
+                          <svg 
+                            className="mesh-overlay-svg"
                             style={{
-                              left: `${canvasMinWidth - 200}px`,
-                              top: "50px",
-                              position: "absolute",
-                              width: "160px",
-                              pointerEvents: "none"
+                              width: `${canvasMinWidth}px`,
+                              height: `${canvasMinHeight}px`
                             }}
                           >
-                            <div style={{ textAlign: "center", display: "flex", flexDirection: "column", gap: "6px", alignItems: "center", justifyContent: "center", height: "90px" }}>
-                              <GitPullRequest size={22} style={{ color: "var(--color-staged)" }} />
-                              <span style={{ fontWeight: 550, fontSize: "0.8rem", color: "var(--color-text-bright)" }}>Staging Area</span>
-                              <span style={{ fontSize: "0.7rem", color: "var(--color-text-muted)" }}>Drop hunks connection</span>
-                            </div>
-                          </div>
-                        )}
+                            {canvasNodes.map((node) => {
+                              const targetX = canvasMinWidth - 180;
+                              const targetY = 100;
+                              const startX = node.x + 310;
+                              const startY = node.y + 55;
 
-                        {canvasNodes.length === 0 && (
-                          <div className="empty-canvas">
-                            <Layers size={36} className="empty-canvas-icon" />
-                            <span className="empty-canvas-text">Select modified file to stage individual hunks</span>
-                          </div>
-                        )}
+                              return (
+                                <path
+                                  key={`link-${node.id}`}
+                                  className="connector-line"
+                                  d={`M ${startX} ${startY} C ${(startX + targetX) / 2} ${startY}, ${(startX + targetX) / 2} ${targetY}, ${targetX} ${targetY}`}
+                                  style={{
+                                    stroke: node.isStaged ? "var(--color-staged)" : "var(--border-active)"
+                                  }}
+                                />
+                              );
+                            })}
+                          </svg>
+
+                          {/* Floating Hunk Nodes */}
+                          {canvasNodes.map((node) => (
+                            <div
+                              key={node.id}
+                              className="mesh-node"
+                              style={{
+                                left: `${node.x}px`,
+                                top: `${node.y}px`,
+                                cursor: draggingNodeId === node.id ? "grabbing" : "grab"
+                              }}
+                              onMouseDown={(e) => handleNodeMouseDown(e, node.id)}
+                            >
+                              <div className="node-header">
+                                <span className="node-title">{node.hunk.header}</span>
+                                <button 
+                                  className="node-action"
+                                  onMouseDown={(e) => e.stopPropagation()} 
+                                  onClick={() => stageSingleHunk(node)}
+                                >
+                                  Stage Hunk
+                                </button>
+                              </div>
+
+                              <div 
+                                className="node-diff-preview"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActiveDetailHunk(node.hunk);
+                                }}
+                                style={{ cursor: "pointer" }}
+                                title="Click to view detailed changes"
+                              >
+                                <div className="diff-hunk-header">{node.hunk.header}</div>
+                                <div style={{ maxHeight: "110px", overflowY: "auto" }}>
+                                  {node.hunk.lines.slice(0, 10).map((line, idx) => (
+                                    <div 
+                                      key={idx} 
+                                      className={`diff-line ${
+                                        line.origin === "+" ? "addition" : 
+                                        line.origin === "-" ? "deletion" : "context"
+                                      }`}
+                                    >
+                                      <span>{line.origin}</span>
+                                      <span>{line.content.trim()}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+
+                          {/* Staged Target Zone Node */}
+                          {selectedFile && (
+                            <div 
+                              className="mesh-node staged-zone"
+                              style={{
+                                left: `${canvasMinWidth - 200}px`,
+                                top: "50px",
+                                position: "absolute",
+                                width: "160px",
+                                pointerEvents: "none"
+                              }}
+                            >
+                              <div style={{ textAlign: "center", display: "flex", flexDirection: "column", gap: "6px", alignItems: "center", justifyContent: "center", height: "90px" }}>
+                                <GitPullRequest size={22} style={{ color: "var(--color-staged)" }} />
+                                <span style={{ fontWeight: 550, fontSize: "0.8rem", color: "var(--color-text-bright)" }}>Staging Area</span>
+                                <span style={{ fontSize: "0.7rem", color: "var(--color-text-muted)" }}>Drop hunks connection</span>
+                              </div>
+                            </div>
+                          )}
+
+                          {canvasNodes.length === 0 && (
+                            <div className="empty-canvas">
+                              <Layers size={36} className="empty-canvas-icon" />
+                              <span className="empty-canvas-text">Select modified file to stage individual hunks</span>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  );
-                })()}
+                    );
+                  })()
+                )}
 
                 {/* Commit Builder Panel */}
                 <div className="commit-builder">
