@@ -19,7 +19,8 @@ pub fn run() {
             commands::login_with_github,
             commands::request_github_token,
             commands::run_github_api_request,
-            commands::get_branches
+            commands::get_branches,
+            commands::get_all_branches
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

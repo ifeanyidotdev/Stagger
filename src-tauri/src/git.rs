@@ -57,6 +57,13 @@ pub struct GitCliResult {
     pub exit_code: i32,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct BranchInfo {
+    pub name: String,
+    pub is_remote: bool,
+    pub upstream: Option<String>,
+}
+
 pub fn parse_file_status(status: git2::Status) -> (Option<String>, Option<String>) {
     let mut staged = None;
     let mut unstaged = None;
@@ -378,6 +385,48 @@ pub fn get_branches_impl(repo_path: &str) -> Result<Vec<String>, String> {
         }
     }
     Ok(branch_names)
+}
+
+pub fn get_all_branches_impl(repo_path: &str) -> Result<Vec<BranchInfo>, String> {
+    let repo = git2::Repository::open(repo_path)
+        .map_err(|e| format!("Failed to open repository: {}", e))?;
+
+    let mut result = Vec::new();
+
+    if let Ok(branches) = repo.branches(Some(git2::BranchType::Local)) {
+        for branch_res in branches {
+            if let Ok((branch, _)) = branch_res {
+                if let Ok(Some(name)) = branch.name() {
+                    let upstream_name = branch.upstream().ok()
+                        .and_then(|u| u.name().ok().flatten().map(|s| s.to_string()));
+                    
+                    result.push(BranchInfo {
+                        name: name.to_string(),
+                        is_remote: false,
+                        upstream: upstream_name,
+                    });
+                }
+            }
+        }
+    }
+
+    if let Ok(branches) = repo.branches(Some(git2::BranchType::Remote)) {
+        for branch_res in branches {
+            if let Ok((branch, _)) = branch_res {
+                if let Ok(Some(name)) = branch.name() {
+                    if !name.ends_with("/HEAD") {
+                        result.push(BranchInfo {
+                            name: name.to_string(),
+                            is_remote: true,
+                            upstream: None,
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(result)
 }
 
 pub fn stage_files_impl(repo_path: &str, file_paths: Vec<String>) -> Result<(), String> {

@@ -21,7 +21,9 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronDown,
-  FolderPlus
+  FolderPlus,
+  Archive,
+  Eye
 } from "lucide-react";
 import "./App.css";
 
@@ -160,6 +162,13 @@ function App() {
 
   // --- STASHES STATE ---
   const [stashes, setStashes] = useState<string[]>([]);
+  const [isStashListExpanded, setIsStashListExpanded] = useState(true);
+  const [selectedStashIndex, setSelectedStashIndex] = useState<number | null>(null);
+  const [stashFiles, setStashFiles] = useState<{ path: string; status: string }[]>([]);
+  const [stashFileDiff, setStashFileDiff] = useState<string | null>(null);
+  const [selectedStashFile, setSelectedStashFile] = useState<string | null>(null);
+  const [checkedStashFiles, setCheckedStashFiles] = useState<Set<string>>(new Set());
+  const [stashNameInput, setStashNameInput] = useState("");
   
   // --- GITHUB INTEGRATION STATE ---
   const [githubToken, setGithubToken] = useState<string | null>(localStorage.getItem("gh_token"));
@@ -182,7 +191,7 @@ function App() {
   // --- POPUPS & INTERACTIVE INPUT STATES ---
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [cliOutput, setCliOutput] = useState<GitCliResult | null>(null);
-  const [dialogType, setDialogType] = useState<"branch" | "checkout" | "clone" | "publish" | "pr-create" | "login" | "workspace-add" | "git-init-confirm" | null>(null);
+  const [dialogType, setDialogType] = useState<"branch" | "checkout" | "clone" | "publish" | "pr-create" | "login" | "workspace-add" | "git-init-confirm" | "delete-branch-confirm" | "git-delete-force-confirm" | "checkout-conflict" | "stash-name" | "stash-inspector" | null>(null);
   const [dialogInput, setDialogInput] = useState("");
   const [dialogInput2, setDialogInput2] = useState(""); 
 
@@ -565,14 +574,82 @@ function App() {
   };
 
   // --- STASH MANAGEMENT ---
-  const pushStash = async () => {
-    const stashMsg = prompt("Enter stash message (optional):") || "Stashed from StageNode";
+  const startPushStash = () => {
+    setStashNameInput("");
+    setDialogType("stash-name");
+  };
+
+  const pushStash = async (msg?: string) => {
+    const stashMsg = msg || "Stashed from StageNode";
     try {
       const res = await invoke<GitCliResult>("run_git_cli_cmd", {
         repoPath,
         args: ["stash", "push", "-m", stashMsg]
       });
       setCliOutput(res);
+      await refreshRepository();
+    } catch (err: any) {
+      setErrorMessage(err.toString());
+    }
+  };
+
+  const openStashInspector = async (index: number) => {
+    setSelectedStashIndex(index);
+    setStashFiles([]);
+    setStashFileDiff(null);
+    setSelectedStashFile(null);
+    setCheckedStashFiles(new Set());
+    try {
+      const res = await invoke<GitCliResult>("run_git_cli_cmd", {
+        repoPath,
+        args: ["stash", "show", "--name-status", `stash@{${index}}`]
+      });
+      if (res.exit_code === 0) {
+        const parsed = res.stdout
+          .split("\n")
+          .filter(Boolean)
+          .map(line => {
+            const parts = line.split(/\t/);
+            return { status: parts[0]?.trim() || "M", path: parts[1]?.trim() || line.trim() };
+          });
+        setStashFiles(parsed);
+        setCheckedStashFiles(new Set(parsed.map(f => f.path)));
+      }
+    } catch (err: any) {
+      setErrorMessage(err.toString());
+    }
+    setDialogType("stash-inspector");
+  };
+
+  const fetchStashFileDiff = async (index: number, filePath: string) => {
+    setSelectedStashFile(filePath);
+    setStashFileDiff(null);
+    try {
+      const res = await invoke<GitCliResult>("run_git_cli_cmd", {
+        repoPath,
+        args: ["stash", "show", "-p", `stash@{${index}}`, "--", filePath]
+      });
+      if (res.exit_code === 0) {
+        setStashFileDiff(res.stdout);
+      }
+    } catch (err: any) {
+      setErrorMessage(err.toString());
+    }
+  };
+
+  const restoreSelectedStashFiles = async () => {
+    if (selectedStashIndex === null) return;
+    const filesToRestore = Array.from(checkedStashFiles);
+    if (filesToRestore.length === 0) return;
+    try {
+      for (const file of filesToRestore) {
+        await invoke<GitCliResult>("run_git_cli_cmd", {
+          repoPath,
+          args: ["checkout", `stash@{${selectedStashIndex}}`, "--", file]
+        });
+      }
+      setDialogType(null);
+      setSelectedStashIndex(null);
       await refreshRepository();
     } catch (err: any) {
       setErrorMessage(err.toString());
@@ -586,6 +663,8 @@ function App() {
         args: ["stash", "apply", `stash@{${index}}`]
       });
       setCliOutput(res);
+      setDialogType(null);
+      setSelectedStashIndex(null);
       await refreshRepository();
     } catch (err: any) {
       setErrorMessage(err.toString());
@@ -599,6 +678,8 @@ function App() {
         args: ["stash", "pop", `stash@{${index}}`]
       });
       setCliOutput(res);
+      setDialogType(null);
+      setSelectedStashIndex(null);
       await refreshRepository();
     } catch (err: any) {
       setErrorMessage(err.toString());
@@ -612,6 +693,8 @@ function App() {
         args: ["stash", "drop", `stash@{${index}}`]
       });
       setCliOutput(res);
+      setDialogType(null);
+      setSelectedStashIndex(null);
       await refreshRepository();
     } catch (err: any) {
       setErrorMessage(err.toString());
@@ -1364,40 +1447,54 @@ function App() {
             </div>
           )}
 
-          {/* Stash safety net */}
+          {/* Stash section */}
           {hasRepo && (
             <div className="sidebar-section">
-              <div className="section-title">
-                <span>Stash safety net</span>
-                <Plus size={14} style={{ cursor: "pointer" }} onClick={pushStash} />
+              <div
+                className="section-title"
+                style={{ cursor: "pointer" }}
+                onClick={() => setIsStashListExpanded(v => !v)}
+              >
+                <span>Stashes</span>
+                <div style={{ display: "flex", gap: "6px", alignItems: "center", marginLeft: "auto" }}>
+                  <Plus
+                    size={14}
+                    style={{ cursor: "pointer" }}
+                    onClick={e => { e.stopPropagation(); startPushStash(); }}
+                  />
+                  <ChevronDown
+                    size={14}
+                    style={{ transition: "transform 0.2s", transform: isStashListExpanded ? "rotate(0deg)" : "rotate(-90deg)" }}
+                  />
+                </div>
               </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: "4px", maxHeight: "120px", overflowY: "auto" }}>
-                {stashes.map((stash, index) => (
-                  <div key={index} style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    padding: "4px 8px",
-                    background: "var(--bg-app)",
-                    border: "1px solid var(--border-color)",
-                    borderRadius: "4px",
-                    fontSize: "0.75rem",
-                    color: "var(--color-text-main)"
-                  }}>
-                    <span style={{ textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap", maxWidth: "120px" }}>
-                      {stash.replace(/stash@\{\d+\}: /, "")}
-                    </span>
-                    <div style={{ display: "flex", gap: "4px" }}>
-                      <button style={{ background: "none", border: "none", color: "var(--color-modified)", cursor: "pointer", fontSize: "0.7rem" }} onClick={() => applyStash(index)}>Apply</button>
-                      <button style={{ background: "none", border: "none", color: "var(--color-staged)", cursor: "pointer", fontSize: "0.7rem" }} onClick={() => popStash(index)}>Pop</button>
-                      <Trash2 size={12} style={{ color: "var(--color-deleted)", cursor: "pointer" }} onClick={() => dropStash(index)} />
-                    </div>
-                  </div>
-                ))}
-                {stashes.length === 0 && (
-                  <span style={{ fontSize: "0.75rem", color: "var(--color-text-dark)" }}>No stashes found</span>
-                )}
-              </div>
+              {isStashListExpanded && (
+                <div className="branch-list">
+                  {stashes.length === 0 && (
+                    <span style={{ fontSize: "0.73rem", color: "var(--color-text-dark)", padding: "4px 8px" }}>No stashes</span>
+                  )}
+                  {stashes.map((stash, index) => {
+                    const label = stash.replace(/^stash@\{\d+\}:\s*(On [^:]+:\s*)?/, "").trim();
+                    return (
+                      <div
+                        key={index}
+                        className={`branch-item ${selectedStashIndex === index && dialogType === "stash-inspector" ? "active" : ""}`}
+                        onClick={() => openStashInspector(index)}
+                      >
+                        <Archive size={13} style={{ flexShrink: 0 }} />
+                        <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label || `stash@{${index}}`}</span>
+                        <button
+                          style={{ background: "none", border: "none", cursor: "pointer", padding: "2px", display: "flex", alignItems: "center", marginLeft: "auto" }}
+                          title="Drop stash"
+                          onClick={e => { e.stopPropagation(); dropStash(index); }}
+                        >
+                          <Trash2 size={12} style={{ color: "var(--color-deleted)", opacity: 0.7 }} />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 
@@ -2285,7 +2382,7 @@ function App() {
       {/* --- POPUPS & MODALS --- */}
       {dialogType && (
         <div className="dialog-overlay">
-          <div className="dialog-content">
+          <div className={`dialog-content${dialogType === "stash-inspector" ? " dialog-content--wide" : ""}`}>
             <div className="dialog-title">
               {dialogType === "branch" && "Create Branch"}
               {dialogType === "checkout" && "Checkout Branch"}
@@ -2298,7 +2395,162 @@ function App() {
               {dialogType === "delete-branch-confirm" && "Delete Branch?"}
               {dialogType === "git-delete-force-confirm" && "Force Delete Branch?"}
               {dialogType === "checkout-conflict" && "Uncommitted Changes"}
+              {dialogType === "stash-name" && "Save Stash"}
+              {dialogType === "stash-inspector" && (
+                <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <Archive size={15} />
+                  {selectedStashIndex !== null ? stashes[selectedStashIndex]?.replace(/^stash@\{\d+\}:\s*(On [^:]+:\s*)?/, "").trim() || `stash@{${selectedStashIndex}}` : "Stash Inspector"}
+                </span>
+              )}
             </div>
+
+            {/* STASH NAME DIALOG */}
+            {dialogType === "stash-name" && (
+              <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                <span style={{ fontSize: "0.8rem", color: "var(--color-text-muted)" }}>Give this stash a memorable name so you can find it later.</span>
+                <input
+                  className="dialog-input"
+                  value={stashNameInput}
+                  onChange={e => setStashNameInput(e.target.value)}
+                  placeholder="e.g. WIP: header redesign"
+                  autoFocus
+                  onKeyDown={e => {
+                    if (e.key === "Enter") {
+                      pushStash(stashNameInput || undefined);
+                      setDialogType(null);
+                    }
+                  }}
+                />
+                <div className="dialog-actions">
+                  <button className="dialog-button secondary" onClick={() => setDialogType(null)}>Cancel</button>
+                  <button
+                    className="dialog-button"
+                    onClick={() => {
+                      pushStash(stashNameInput || undefined);
+                      setDialogType(null);
+                    }}
+                  >
+                    Save Stash
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* STASH INSPECTOR DIALOG */}
+            {dialogType === "stash-inspector" && selectedStashIndex !== null && (
+              <div style={{ display: "flex", flexDirection: "column", gap: "0", minHeight: "340px", maxHeight: "70vh" }}>
+                {/* File list + diff split */}
+                <div style={{ display: "flex", flex: 1, gap: "0", overflow: "hidden", minHeight: 0 }}>
+                  {/* Left: file list */}
+                  <div style={{
+                    width: "200px",
+                    flexShrink: 0,
+                    borderRight: "1px solid var(--border-color)",
+                    display: "flex",
+                    flexDirection: "column",
+                    overflow: "hidden"
+                  }}>
+                    <div style={{ padding: "8px 10px", fontSize: "0.65rem", textTransform: "uppercase", letterSpacing: "0.6px", color: "var(--color-text-muted)", fontWeight: 700, borderBottom: "1px solid var(--border-color)" }}>
+                      Changed Files
+                    </div>
+                    <div style={{ flex: 1, overflowY: "auto", padding: "6px" }}>
+                      {stashFiles.length === 0 && (
+                        <span style={{ fontSize: "0.73rem", color: "var(--color-text-muted)", padding: "8px" }}>Loading…</span>
+                      )}
+                      {stashFiles.map(f => (
+                        <div
+                          key={f.path}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "6px",
+                            padding: "5px 6px",
+                            borderRadius: "4px",
+                            cursor: "pointer",
+                            background: selectedStashFile === f.path ? "var(--bg-active)" : "transparent",
+                            border: selectedStashFile === f.path ? "1px solid var(--border-active)" : "1px solid transparent",
+                            fontSize: "0.73rem",
+                            fontFamily: "var(--font-mono)"
+                          }}
+                          onClick={() => fetchStashFileDiff(selectedStashIndex, f.path)}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checkedStashFiles.has(f.path)}
+                            onClick={e => e.stopPropagation()}
+                            onChange={e => {
+                              const next = new Set(checkedStashFiles);
+                              e.target.checked ? next.add(f.path) : next.delete(f.path);
+                              setCheckedStashFiles(next);
+                            }}
+                            style={{ accentColor: "var(--accent-purple)", flexShrink: 0 }}
+                          />
+                          <span style={{
+                            fontSize: "0.65rem",
+                            fontWeight: 700,
+                            color: f.status === "A" ? "var(--color-staged)" : f.status === "D" ? "var(--color-deleted)" : "var(--color-modified)",
+                            flexShrink: 0
+                          }}>{f.status}</span>
+                          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--color-text-main)" }} title={f.path}>
+                            {f.path.split("/").pop()}
+                          </span>
+                          <Eye size={11} style={{ marginLeft: "auto", opacity: 0.5, flexShrink: 0 }} />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Right: diff view */}
+                  <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+                    {stashFileDiff ? (
+                      <pre style={{
+                        flex: 1,
+                        overflowY: "auto",
+                        margin: 0,
+                        padding: "10px 12px",
+                        fontSize: "0.7rem",
+                        fontFamily: "var(--font-mono)",
+                        lineHeight: 1.6,
+                        background: "var(--bg-app)",
+                        color: "var(--color-text-main)",
+                        whiteSpace: "pre"
+                      }}>
+                        {stashFileDiff.split("\n").map((line, i) => (
+                          <div key={i} style={{
+                            color: line.startsWith("+") && !line.startsWith("++") ? "var(--color-staged)"
+                              : line.startsWith("-") && !line.startsWith("--") ? "var(--color-deleted)"
+                              : line.startsWith("@@") ? "var(--color-modified)"
+                              : "inherit"
+                          }}>{line}</div>
+                        ))}
+                      </pre>
+                    ) : (
+                      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "8px", color: "var(--color-text-muted)", fontSize: "0.78rem" }}>
+                        <Eye size={24} style={{ opacity: 0.3 }} />
+                        <span>Click a file to preview its diff</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Actions footer */}
+                <div style={{ borderTop: "1px solid var(--border-color)", padding: "10px 12px", display: "flex", gap: "8px", flexShrink: 0, flexWrap: "wrap" }}>
+                  <button
+                    className="dialog-button"
+                    style={{ flex: 1 }}
+                    onClick={restoreSelectedStashFiles}
+                    disabled={checkedStashFiles.size === 0}
+                    title={checkedStashFiles.size === 0 ? "Check at least one file" : `Restore ${checkedStashFiles.size} file(s)`}
+                  >
+                    Restore Selected ({checkedStashFiles.size})
+                  </button>
+                  <button className="dialog-button" style={{ flex: 1 }} onClick={() => applyStash(selectedStashIndex)}>Apply All</button>
+                  <button className="dialog-button" style={{ flex: 1, background: "var(--color-staged)" }} onClick={() => popStash(selectedStashIndex)}>Pop</button>
+                  <button className="dialog-button secondary" onClick={() => { setDialogType(null); setSelectedStashIndex(null); }}>Close</button>
+                  <button className="dialog-button" style={{ background: "var(--color-deleted)" }} onClick={() => dropStash(selectedStashIndex)} title="Discard stash permanently">Discard</button>
+                </div>
+              </div>
+            )}
 
             {/* DELETE BRANCH CONFIRM DIALOG */}
             {dialogType === "delete-branch-confirm" && (
@@ -2582,7 +2834,7 @@ function App() {
               </>
             )}
 
-            {dialogType !== "branch" && dialogType !== "checkout" && dialogType !== "workspace-add" && dialogType !== "git-init-confirm" && (
+            {dialogType !== "branch" && dialogType !== "checkout" && dialogType !== "workspace-add" && dialogType !== "git-init-confirm" && dialogType !== "checkout-conflict" && dialogType !== "delete-branch-confirm" && dialogType !== "git-delete-force-confirm" && dialogType !== "stash-name" && dialogType !== "stash-inspector" && (
               <div className="dialog-actions" style={{ marginTop: "6px" }}>
                 <button className="dialog-button secondary" style={{ width: "100%" }} onClick={() => setDialogType(null)}>Cancel</button>
               </div>

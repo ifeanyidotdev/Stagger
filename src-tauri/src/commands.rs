@@ -1,5 +1,5 @@
 use crate::git::{
-    self, GitStatusResult, CommitInfo, DiffInfo, GitCliResult
+    self, GitStatusResult, CommitInfo, DiffInfo, GitCliResult, BranchInfo
 };
 use crate::github;
 
@@ -65,6 +65,11 @@ pub fn run_github_api_request(
 #[tauri::command]
 pub fn get_branches(repo_path: String) -> Result<Vec<String>, String> {
     git::get_branches_impl(&repo_path)
+}
+
+#[tauri::command]
+pub fn get_all_branches(repo_path: String) -> Result<Vec<BranchInfo>, String> {
+    git::get_all_branches_impl(&repo_path)
 }
 
 #[tauri::command]
