@@ -606,21 +606,23 @@ function App() {
   // --- GIT REMOTE & MERGE/REBASE ACTIONS ---
   const handleGitFetch = async (allRemotes: boolean = false) => {
     setIsFetchingRemote(true);
+    addToast("info", "Fetching Remote", "Checking origin for updates...");
+    await new Promise(resolve => setTimeout(resolve, 10));
     try {
       const args = allRemotes ? ["fetch", "--all", "--prune"] : ["fetch", "origin"];
       const res = await invoke<GitCliResult>("run_git_cli_cmd", {
         repoPath,
         args
       });
-      setCliOutput(res);
       if (res.exit_code === 0) {
-        setErrorMessage(null);
+        addToast("success", "Fetch Complete", "Remote origin up to date.");
         await refreshRepository();
       } else {
-        setErrorMessage(`Fetch failed:\n${res.stderr || res.stdout}`);
+        const alert = formatGitAlertMessage(res.stderr || res.stdout, "error");
+        addToast("error", alert.title, alert.message);
       }
     } catch (err: any) {
-      setErrorMessage(err.toString());
+      addToast("error", "Fetch Failed", err.toString());
     } finally {
       setIsFetchingRemote(false);
     }
@@ -633,6 +635,9 @@ function App() {
       return;
     }
     setIsPushingRemote(true);
+    addToast("info", publish || !hasUpstream ? "Publishing Branch" : "Pushing to Origin", `Pushing ${currentBranch} to origin...`);
+    await new Promise(resolve => setTimeout(resolve, 10));
+
     try {
       let args = ["push", "origin", currentBranch];
       if (publish || !hasUpstream) {
@@ -642,20 +647,20 @@ function App() {
         repoPath,
         args
       });
-      setCliOutput(res);
       if (res.exit_code === 0) {
-        setErrorMessage(null);
+        addToast("success", "Push Succeeded", `Successfully pushed ${currentBranch} to origin.`);
         await refreshRepository();
       } else {
         if (res.stderr.includes("does not appear to be a git repository") || res.stderr.includes("No such remote") || res.stderr.includes("destination specifier")) {
           setDialogInput("");
           setDialogType("set-remote");
         } else {
-          setErrorMessage(`Push failed:\n${res.stderr || res.stdout}`);
+          const alert = formatGitAlertMessage(res.stderr || res.stdout, "error");
+          addToast("error", alert.title, alert.message);
         }
       }
     } catch (err: any) {
-      setErrorMessage(err.toString());
+      addToast("error", "Push Failed", err.toString());
     } finally {
       setIsPushingRemote(false);
     }

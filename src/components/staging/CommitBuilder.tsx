@@ -47,12 +47,20 @@ const CommitBuilder: React.FC<CommitBuilderProps> = ({
           value={commitTitle}
           onChange={(e) => setCommitTitle(e.target.value)}
           placeholder="Commit summary (e.g. feat: add branch switcher)"
+          autoCorrect="off"
+          autoCapitalize="off"
+          spellCheck={false}
+          autoComplete="off"
         />
         <textarea 
           className="commit-desc-input"
           value={commitDesc}
           onChange={(e) => setCommitDesc(e.target.value)}
           placeholder="Add optional commit description..."
+          autoCorrect="off"
+          autoCapitalize="off"
+          spellCheck={false}
+          autoComplete="off"
         />
         
         {(showCoAuthorInput || coAuthors.length > 0) && (
@@ -87,6 +95,10 @@ const CommitBuilder: React.FC<CommitBuilderProps> = ({
                 }}
                 placeholder="Name <email> or @username..."
                 autoFocus={showCoAuthorInput && coAuthors.length === 0}
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck={false}
+                autoComplete="off"
               />
             </div>
           </div>
