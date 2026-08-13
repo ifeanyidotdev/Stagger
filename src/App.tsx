@@ -1,136 +1,24 @@
 import React, { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { 
-  GitBranch, 
-  RefreshCw, 
-  Layers, 
-  FileCode, 
-  GitCommit, 
-  History, 
-  FileText, 
-  Plus, 
-  Minus,
-  Sparkles,
-  GitPullRequest,
-  LogOut,
-  FolderSync,
-  Trash2,
-  Users,
-  AlertTriangle,
-  UserCheck,
-  ChevronLeft,
-  ChevronRight,
-  ChevronDown,
-  FolderPlus,
-  Archive,
-  Eye,
-  GitMerge,
-  Globe,
-  ArrowUp,
-  ArrowDown,
-  RefreshCcw,
-  DownloadCloud,
-  X,
-  MoreVertical,
-  CheckCircle2
-} from "lucide-react";
 import "./App.css";
 
-// --- TYPES & INTERFACES ---
-interface GitFileStatus {
-  path: string;
-  staged_status: string | null;
-  unstaged_status: string | null;
-}
+// --- Types & Interfaces ---
+import type { 
+  GitFileStatus, GitStatusResult, BranchInfo, CommitInfo, 
+  DiffHunk, DiffInfo, GitCliResult, HunkNode, 
+  GitHubUser, GitHubRepo, GitHubPR 
+} from "./types/git";
+import { isRealBranch } from "./utils/graphUtils";
 
-interface GitStatusResult {
-  files: GitFileStatus[];
-  current_branch: string;
-}
-
-interface BranchInfo {
-  name: string;
-  is_remote: boolean;
-  upstream?: string | null;
-}
-
-interface CommitInfo {
-  id: string;
-  short_id: string;
-  author: string;
-  email: string;
-  timestamp: number;
-  message: string;
-  parents: string[];
-  branches: string[];
-}
-
-interface DiffLine {
-  origin: string;
-  content: string;
-  old_line_no: number | null;
-  new_line_no: number | null;
-}
-
-interface DiffHunk {
-  old_start: number;
-  old_lines: number;
-  new_start: number;
-  new_lines: number;
-  header: string;
-  lines: DiffLine[];
-}
-
-interface DiffInfo {
-  hunks: DiffHunk[];
-}
-
-interface GitCliResult {
-  stdout: string;
-  stderr: string;
-  exit_code: number;
-}
-
-interface HunkNode {
-  id: string;
-  filePath: string;
-  hunkIndex: number;
-  hunk: DiffHunk;
-  x: number;
-  y: number;
-  isStaged: boolean;
-}
-
-interface GitHubUser {
-  login: string;
-  avatar_url: string;
-  name: string;
-  html_url: string;
-}
-
-interface GitHubRepo {
-  name: string;
-  full_name: string;
-  clone_url: string;
-  private: boolean;
-}
-
-interface GitHubPR {
-  number: number;
-  title: string;
-  state: string;
-  html_url: string;
-  user: { login: string; avatar_url: string };
-  head: { ref: string };
-  base: { ref: string };
-}
-
-const isRealBranch = (name: string): boolean => {
-  if (!name || typeof name !== "string") return false;
-  const trimmed = name.trim();
-  if (trimmed === "HEAD" || trimmed.startsWith("HEAD ") || trimmed.includes("detached")) return false;
-  return true;
-};
+// --- Extracted Components ---
+import Sidebar from "./components/layout/Sidebar";
+import Topbar from "./components/layout/Topbar";
+import FilePane from "./components/staging/FilePane";
+import ConflictResolver from "./components/staging/ConflictResolver";
+import StagingCanvas from "./components/staging/StagingCanvas";
+import CommitBuilder from "./components/staging/CommitBuilder";
+import HistoryView from "./components/history/HistoryView";
+import Dialogs from "./components/modals/Dialogs";
 
 function App() {
   // --- REPOSITORY & WORKSPACE STATE ---
@@ -1651,503 +1539,60 @@ function App() {
 
   return (
     <div className="app-container">
-      {/* --- SIDEBAR --- */}
-      <div 
-        className={`sidebar ${sidebarCollapsed ? "collapsed" : ""}`}
-        style={{ width: sidebarCollapsed ? 0 : `${sidebarWidth}px` }}
-      >
-        {/* Sidebar Header: Relocated Workspace Switcher Dropdown (Replacing static logo) */}
-        <div className="sidebar-header" style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-          <div className="sidebar-workspace-switcher" style={{ flex: 1 }}>
-            <button 
-              className="workspace-trigger-btn"
-              onClick={() => setIsWorkspaceDropdownOpen(!isWorkspaceDropdownOpen)}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: "6px", overflow: "hidden" }}>
-                <Layers className="logo-icon" size={16} style={{ flexShrink: 0 }} />
-                <span className="logo-text" style={{ textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap", maxWidth: "120px" }}>
-                  {activeWorkspaceName}
-                </span>
-              </div>
-              <ChevronRight size={14} style={{ transform: isWorkspaceDropdownOpen ? "rotate(90deg)" : "none", transition: "transform 0.15s ease", flexShrink: 0 }} />
-            </button>
-            
-            {isWorkspaceDropdownOpen && (
-              <div className="workspace-menu-dropdown">
-                <div style={{ padding: "4px 12px 6px 12px", fontSize: "0.7rem", fontWeight: "bold", color: "var(--color-text-muted)" }}>
-                  SWITCH WORKSPACE
-                </div>
-                {workspaces.map(wPath => (
-                  <div 
-                    key={wPath}
-                    className={`workspace-menu-item ${repoPath === wPath ? "active" : ""}`}
-                    onClick={() => selectWorkspace(wPath)}
-                  >
-                    <span className="workspace-menu-item-text" title={wPath}>
-                      {wPath.split("/").pop() || wPath}
-                    </span>
-                    <Minus 
-                      size={12} 
-                      style={{ color: "var(--color-deleted)", marginLeft: "8px", cursor: "pointer", opacity: 0.7 }}
-                      onClick={(e) => removeWorkspace(e, wPath)} 
-                    />
-                  </div>
-                ))}
-                
-                <div className="workspace-menu-divider" />
-                
-                <button 
-                  className="workspace-menu-add-btn"
-                  onClick={() => {
-                    setIsWorkspaceDropdownOpen(false);
-                    setDialogType("workspace-add");
-                    setDialogInput("");
-                  }}
-                >
-                  <FolderPlus size={14} />
-                  Add Workspace Folder
-                </button>
-              </div>
-            )}
-          </div>
+      <Sidebar 
+        sidebarCollapsed={sidebarCollapsed}
+        sidebarWidth={sidebarWidth}
+        isWorkspaceDropdownOpen={isWorkspaceDropdownOpen}
+        setIsWorkspaceDropdownOpen={setIsWorkspaceDropdownOpen}
+        activeWorkspaceName={activeWorkspaceName}
+        workspaces={workspaces}
+        selectWorkspace={selectWorkspace}
+        repoPath={repoPath}
+        removeWorkspace={removeWorkspace}
+        setDialogType={setDialogType}
+        setDialogInput={setDialogInput}
+        setSidebarCollapsed={setSidebarCollapsed}
+        isBranchListExpanded={isBranchListExpanded}
+        setIsBranchListExpanded={setIsBranchListExpanded}
+        isBranchOpsDropdownOpen={isBranchOpsDropdownOpen}
+        setIsBranchOpsDropdownOpen={setIsBranchOpsDropdownOpen}
+        handleGitFetch={handleGitFetch}
+        isPullingRemote={isPullingRemote}
+        handleGitPull={handleGitPull}
+        hasUpstream={hasUpstream}
+        handleGitPush={handleGitPush}
+        isPushingRemote={isPushingRemote}
+        upstreamBranchName={upstreamBranchName}
+        openMergeRebaseModal={openMergeRebaseModal}
+        branchList={branchList}
+        currentBranch={currentBranch}
+        handleDragOverBranch={handleDragOverBranch}
+        handleDropOnBranch={handleDropOnBranch}
+        startCheckoutBranch={startCheckoutBranch}
+        draggedCommitSha={draggedCommitSha}
+        startDeleteBranch={startDeleteBranch}
+        hasRepo={hasRepo}
+        isRemoteBranchListExpanded={isRemoteBranchListExpanded}
+        setIsRemoteBranchListExpanded={setIsRemoteBranchListExpanded}
+        remoteBranches={remoteBranches}
+        isFetchingRemote={isFetchingRemote}
+        handleCheckoutRemoteBranch={handleCheckoutRemoteBranch}
+        githubToken={githubToken}
+        remoteUrl={remoteUrl}
+        githubPRs={githubPRs}
+        isStashListExpanded={isStashListExpanded}
+        setIsStashListExpanded={setIsStashListExpanded}
+        startPushStash={startPushStash}
+        stashes={stashes}
+        selectedStashIndex={selectedStashIndex}
+        dialogType={dialogType}
+        openStashInspector={openStashInspector}
+        dropStash={dropStash}
+        isCollabActive={isCollabActive}
+        setIsCollabActive={setIsCollabActive}
+        unpushedCount={unpushedCount}
+      />
 
-          <button 
-            className="sidebar-toggle-btn"
-            onClick={() => setSidebarCollapsed(true)}
-            title="Minimize Sidebar"
-            style={{ flexShrink: 0 }}
-          >
-            <ChevronLeft size={16} />
-          </button>
-        </div>
-
-        {/* Sidebar Content */}
-        <div className="sidebar-content">
-          
-          {/* Local Branches Section */}
-          <div className="sidebar-section">
-            <div 
-              className="section-title" 
-              onClick={() => setIsBranchListExpanded(!isBranchListExpanded)} 
-              style={{ cursor: "pointer", userSelect: "none", position: "relative" }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                <span style={{ 
-                  transform: isBranchListExpanded ? "rotate(90deg)" : "none", 
-                  transition: "transform 0.15s ease", 
-                  display: "inline-block",
-                  fontSize: "0.6rem"
-                }}>
-                  ▶
-                </span>
-                <span>Local Branches</span>
-              </div>
-              <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
-                <span
-                  title="Git Operations & Sync Menu"
-                  style={{ display: "inline-flex", alignItems: "center", cursor: "pointer", padding: "2px" }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setIsBranchOpsDropdownOpen(!isBranchOpsDropdownOpen);
-                  }}
-                >
-                  <MoreVertical size={14} />
-                </span>
-                <span
-                  title="New Branch"
-                  style={{ display: "inline-flex", alignItems: "center", cursor: "pointer", padding: "2px" }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setDialogType("branch");
-                    setDialogInput("");
-                  }}
-                >
-                  <Plus size={14} />
-                </span>
-              </div>
-
-              {/* SIDEBAR BRANCH & REMOTE OPERATIONS DROPDOWN MENU */}
-              {isBranchOpsDropdownOpen && (
-                <div 
-                  className="branch-ops-dropdown"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <div className="dropdown-section-header">GIT SYNC & REMOTE</div>
-                  
-                  <div 
-                    className="dropdown-menu-item"
-                    onClick={() => {
-                      setIsBranchOpsDropdownOpen(false);
-                      handleGitFetch(false);
-                    }}
-                  >
-                    <DownloadCloud size={13} style={{ color: "var(--accent-blue)" }} />
-                    <span>Fetch Origin</span>
-                  </div>
-
-                  <div 
-                    className="dropdown-menu-item"
-                    onClick={() => {
-                      setIsBranchOpsDropdownOpen(false);
-                      handleGitFetch(true);
-                    }}
-                  >
-                    <RefreshCcw size={13} style={{ color: "var(--accent-purple)" }} />
-                    <span>Refetch All Remote Branches</span>
-                  </div>
-
-                  <div 
-                    className="dropdown-menu-item"
-                    onClick={() => {
-                      setIsBranchOpsDropdownOpen(false);
-                      handleGitPull();
-                    }}
-                  >
-                    <ArrowDown size={13} className={isPullingRemote ? "spin-icon" : ""} style={{ color: "var(--color-staged)" }} />
-                    <span>Pull from Origin</span>
-                  </div>
-
-                  {!hasUpstream ? (
-                    <div 
-                      className="dropdown-menu-item highlight"
-                      onClick={() => {
-                        setIsBranchOpsDropdownOpen(false);
-                        handleGitPush(true);
-                      }}
-                    >
-                      <Globe size={13} className={isPushingRemote ? "spin-icon" : ""} style={{ color: "#61afef" }} />
-                      <span>Publish Branch to Origin</span>
-                    </div>
-                  ) : (
-                    <div 
-                      className="dropdown-menu-item"
-                      onClick={() => {
-                        setIsBranchOpsDropdownOpen(false);
-                        handleGitPush(false);
-                      }}
-                    >
-                      <ArrowUp size={13} className={isPushingRemote ? "spin-icon" : ""} style={{ color: "var(--color-staged)" }} />
-                      <span>Push to {upstreamBranchName || "Origin"}</span>
-                    </div>
-                  )}
-
-                  <div className="dropdown-divider" />
-                  <div className="dropdown-section-header">BRANCH MANAGEMENT</div>
-
-                  <div 
-                    className="dropdown-menu-item"
-                    onClick={() => {
-                      setIsBranchOpsDropdownOpen(false);
-                      openMergeRebaseModal();
-                    }}
-                  >
-                    <GitMerge size={13} style={{ color: "var(--color-modified)" }} />
-                    <span>Merge / Rebase Branch...</span>
-                  </div>
-
-                  <div 
-                    className="dropdown-menu-item"
-                    onClick={() => {
-                      setIsBranchOpsDropdownOpen(false);
-                      setDialogType("branch");
-                      setDialogInput("");
-                    }}
-                  >
-                    <Plus size={13} style={{ color: "var(--color-text-main)" }} />
-                    <span>Create New Branch...</span>
-                  </div>
-                </div>
-              )}
-            </div>
-            {isBranchListExpanded && (
-              <div className="branch-list">
-                {branchList.map(bName => (
-                  <div 
-                    key={bName} 
-                    className={`branch-item ${currentBranch === bName ? "active" : ""}`}
-                    onDragOver={handleDragOverBranch}
-                    onDrop={handleDropOnBranch}
-                    onClick={() => startCheckoutBranch(bName)}
-                    style={{
-                      border: draggedCommitSha ? "1px dashed var(--color-conflict)" : "1px solid transparent"
-                    }}
-                  >
-                    <GitBranch size={14} />
-                    <span style={{ flex: 1, textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>{bName}</span>
-                    {currentBranch === bName ? (
-                      <span className="branch-tick" title="Focused Branch">✓</span>
-                    ) : draggedCommitSha ? (
-                      <span style={{ marginLeft: "auto", fontSize: "0.65rem", color: "var(--color-conflict)" }}>Merge Drop</span>
-                    ) : (
-                      <div className="branch-item-actions" style={{ display: "flex", gap: "4px", alignItems: "center", marginLeft: "auto" }}>
-                        <button
-                          className="branch-action-icon-btn"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openMergeRebaseModal(bName, "merge");
-                          }}
-                          title={`Merge '${bName}' into '${currentBranch}'`}
-                        >
-                          <GitMerge size={12} style={{ color: "var(--color-modified)" }} />
-                        </button>
-                        <button 
-                          className="branch-action-icon-btn"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            startDeleteBranch(bName);
-                          }}
-                          title="Delete Branch"
-                        >
-                          <Trash2 size={12} style={{ color: "var(--color-deleted)", opacity: 0.7 }} />
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Remote Branches Section */}
-          {hasRepo && (
-            <div className="sidebar-section">
-              <div 
-                className="section-title" 
-                onClick={() => setIsRemoteBranchListExpanded(!isRemoteBranchListExpanded)} 
-                style={{ cursor: "pointer", userSelect: "none" }}
-              >
-                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                  <span style={{ 
-                    transform: isRemoteBranchListExpanded ? "rotate(90deg)" : "none", 
-                    transition: "transform 0.15s ease", 
-                    display: "inline-block",
-                    fontSize: "0.6rem"
-                  }}>
-                    ▶
-                  </span>
-                  <span>Remote Branches ({remoteBranches.length})</span>
-                </div>
-                <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
-                  <span
-                    title="Refetch All Remote Branches (git fetch --all --prune)"
-                    style={{ display: "inline-flex", alignItems: "center", cursor: "pointer" }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleGitFetch(true);
-                    }}
-                  >
-                    <RefreshCcw 
-                      size={13} 
-                      className={isFetchingRemote ? "spin-icon" : ""}
-                    />
-                  </span>
-                </div>
-              </div>
-              {isRemoteBranchListExpanded && (
-                <div className="branch-list">
-                  {remoteBranches.length === 0 ? (
-                    <span style={{ fontSize: "0.73rem", color: "var(--color-text-dark)", padding: "4px 8px" }}>No remote branches fetched</span>
-                  ) : (
-                    remoteBranches.map(rName => (
-                      <div 
-                        key={rName} 
-                        className="branch-item remote-branch-item"
-                        onClick={() => handleCheckoutRemoteBranch(rName)}
-                        title={`Click to checkout local branch tracking ${rName}`}
-                      >
-                        <Globe size={13} style={{ color: "var(--accent-blue)", flexShrink: 0 }} />
-                        <span style={{ flex: 1, textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>{rName}</span>
-                        <div className="branch-item-actions" style={{ display: "flex", gap: "4px", alignItems: "center", marginLeft: "auto" }}>
-                          <button
-                            className="branch-action-icon-btn"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openMergeRebaseModal(rName, "merge");
-                            }}
-                            title={`Merge '${rName}' into '${currentBranch}'`}
-                          >
-                            <GitMerge size={12} style={{ color: "var(--color-modified)" }} />
-                          </button>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Pull Requests Section */}
-          {githubToken && remoteUrl && (
-            <div className="sidebar-section">
-              <div className="section-title">
-                <span>Pull Requests</span>
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: "2px", maxHeight: "120px", overflowY: "auto" }}>
-                {githubPRs.map(pr => (
-                  <a 
-                    key={pr.number} 
-                    href={pr.html_url} 
-                    target="_blank" 
-                    rel="noreferrer"
-                    style={{ textDecoration: "none" }}
-                  >
-                    <div className="branch-item" style={{ fontSize: "0.75rem", padding: "4px 8px" }}>
-                      <GitPullRequest size={12} style={{ color: "var(--accent-blue)", marginRight: "6px" }} />
-                      <span style={{ textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap", maxWidth: "150px" }}>
-                        #{pr.number} {pr.title}
-                      </span>
-                    </div>
-                  </a>
-                ))}
-                {githubPRs.length === 0 && (
-                  <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>No active pull requests</span>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Stash section */}
-          {hasRepo && (
-            <div className="sidebar-section">
-              <div 
-                className="section-title" 
-                onClick={() => setIsStashListExpanded(!isStashListExpanded)} 
-                style={{ cursor: "pointer", userSelect: "none" }}
-              >
-                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                  <span style={{ 
-                    transform: isStashListExpanded ? "rotate(90deg)" : "none", 
-                    transition: "transform 0.15s ease", 
-                    display: "inline-block",
-                    fontSize: "0.6rem"
-                  }}>
-                    ▶
-                  </span>
-                  <span>Stashes</span>
-                </div>
-                <Plus 
-                  size={14} 
-                  style={{ cursor: "pointer" }} 
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    startPushStash();
-                  }} 
-                />
-              </div>
-              {isStashListExpanded && (
-                <div className="branch-list">
-                  {stashes.map((stash, index) => {
-                    const label = stash.replace(/^stash@\{\d+\}:\s*(On [^:]+:\s*)?/, "").trim();
-                    return (
-                      <div 
-                        key={index} 
-                        className={`branch-item ${selectedStashIndex === index && dialogType === "stash-inspector" ? "active" : ""}`}
-                        onClick={() => openStashInspector(index)}
-                      >
-                        <Archive size={14} />
-                        <span>{label || `stash@{${index}}`}</span>
-                        <button 
-                          style={{ 
-                            background: "none", 
-                            border: "none", 
-                            cursor: "pointer", 
-                            padding: "2px",
-                            color: "var(--color-text-muted)",
-                            marginLeft: "auto",
-                            display: "flex",
-                            alignItems: "center"
-                          }}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            dropStash(index);
-                          }}
-                          title="Delete Stash"
-                        >
-                          <Trash2 size={12} style={{ color: "var(--color-deleted)", opacity: 0.7 }} />
-                        </button>
-                      </div>
-                    );
-                  })}
-                  {stashes.length === 0 && (
-                    <div className="branch-item" style={{ color: "var(--color-text-muted)", cursor: "default" }}>
-                      <span style={{ fontSize: "0.75rem" }}>No stashes</span>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Live Collaboration Control */}
-          <div className="sidebar-section">
-            <div className="section-title">
-              <span>Collaboration</span>
-            </div>
-            <button 
-              className="sync-button" 
-              style={{ 
-                width: "100%", 
-                gap: "8px", 
-                background: isCollabActive ? "var(--bg-hover)" : "var(--bg-app)", 
-                border: "1px solid var(--border-color)" 
-              }}
-              onClick={() => setIsCollabActive(!isCollabActive)}
-            >
-              <Users size={14} style={{ color: isCollabActive ? "var(--color-conflict)" : "inherit" }} />
-              {isCollabActive ? "Session Room Active" : "Go Multiplayer"}
-            </button>
-          </div>
-
-        </div>
-
-        {/* Sidebar Footer */}
-        <div className="sidebar-footer">
-          <div style={{ display: "flex", gap: "8px", marginBottom: "4px" }}>
-            {!hasUpstream ? (
-              <button 
-                className="sync-button" 
-                style={{ flex: 1, background: "var(--accent-purple)" }}
-                onClick={() => handleGitPush(true)}
-                disabled={isPushingRemote}
-                title="Publish branch to remote origin"
-              >
-                <Globe size={14} className={isPushingRemote ? "spin-icon" : ""} />
-                {isPushingRemote ? "Publishing..." : "Publish Branch"}
-              </button>
-            ) : unpushedCount > 0 ? (
-              <button 
-                className="sync-button" 
-                style={{ flex: 1, background: "var(--accent-purple)" }}
-                onClick={() => handleGitPush(false)}
-                disabled={isPushingRemote}
-                title={`Push ${unpushedCount} local commit(s) to origin`}
-              >
-                <ArrowUp size={14} className={isPushingRemote ? "spin-icon" : ""} />
-                {isPushingRemote ? "Pushing..." : `Push Origin (${unpushedCount})`}
-              </button>
-            ) : (
-              <button 
-                className="sync-button" 
-                style={{ flex: 1 }}
-                onClick={() => handleGitFetch(false)}
-                disabled={isFetchingRemote}
-                title="Fetch updates from origin"
-              >
-                <RefreshCw size={14} className={isFetchingRemote ? "spin-icon" : ""} />
-                {isFetchingRemote ? "Fetching..." : "Fetch Origin"}
-              </button>
-            )}
-          </div>
-          {remoteUrl && (
-            <div style={{ fontSize: "0.65rem", color: "var(--color-text-muted)", marginTop: "6px", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
-              Origin: {remoteUrl}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* --- SIDEBAR RESIZE HANDLE --- */}
       {!sidebarCollapsed && (
         <div 
           className={`resize-handle ${activeResizer === 'sidebar' ? 'active' : ''}`}
@@ -2155,10 +1600,7 @@ function App() {
         />
       )}
 
-      {/* --- MAIN PANEL --- */}
       <div className="main-panel">
-        
-        {/* Collaborative multiplayer indicator banner */}
         {isCollabActive && (
           <div className="collab-overlay-banner">
             <div className="collab-user-badge">
@@ -2169,114 +1611,20 @@ function App() {
           </div>
         )}
 
-        {/* Topbar navigation */}
-        <div className="topbar">
-          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-            {sidebarCollapsed && (
-              <button 
-                className="sidebar-toggle-btn"
-                style={{ marginRight: "8px" }}
-                onClick={() => setSidebarCollapsed(false)}
-                title="Expand Sidebar"
-              >
-                <ChevronRight size={16} />
-              </button>
-            )}
-            <div className="view-tabs">
-              <button 
-                className={`tab-button ${activeTab === "workspace" ? "active" : ""}`}
-                onClick={() => setActiveTab("workspace")}
-              >
-                <Layers size={14} />
-                <span>Workspace Staging</span>
-              </button>
-              <button 
-                className={`tab-button ${activeTab === "history" ? "active" : ""}`}
-                onClick={() => setActiveTab("history")}
-              >
-                <History size={14} />
-                <span>History Graph</span>
-              </button>
-            </div>
-          </div>
+        <Topbar 
+          sidebarCollapsed={sidebarCollapsed}
+          setSidebarCollapsed={setSidebarCollapsed}
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          githubToken={githubToken}
+          remoteUrl={remoteUrl}
+          setDialogType={setDialogType}
+          setDialogInput={setDialogInput}
+          setDialogInput2={setDialogInput2}
+          githubUser={githubUser}
+          handleGitHubSignout={handleGitHubSignout}
+        />
 
-          {/* Restored GitHub Auth Badge (Topbar Right-Side) */}
-          <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-            
-            {githubToken && remoteUrl && (
-              <button 
-                style={{
-                  background: "var(--bg-app)",
-                  border: "1px solid var(--border-color)",
-                  borderRadius: "4px",
-                  color: "var(--color-text-bright)",
-                  fontSize: "0.8rem",
-                  padding: "4px 8px",
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "4px",
-                  marginRight: "4px"
-                }}
-                onClick={() => {
-                  setDialogType("pr-create");
-                  setDialogInput("");
-                  setDialogInput2("");
-                }}
-              >
-                <GitPullRequest size={12} />
-                Create PR
-              </button>
-            )}
-
-            {/* GitHub circular avatar connection badge restored */}
-            <div className="topbar-auth-section">
-              {!githubToken ? (
-                <button 
-                  className="topbar-link-btn"
-                  onClick={() => setDialogType("login")}
-                >
-                  <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path></svg>
-                  Connect GitHub
-                </button>
-              ) : (
-                <div className="topbar-auth-badge">
-                  {githubUser?.avatar_url ? (
-                    <img src={githubUser.avatar_url} className="topbar-avatar" alt="Avatar" />
-                  ) : (
-                    <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--color-text-main)" }}><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path></svg>
-                  )}
-                  <span className="topbar-username">{githubUser?.name || githubUser?.login || "Syncing..."}</span>
-                  
-                  <button 
-                    className="topbar-link-btn" 
-                    style={{ background: "rgba(255,255,255,0.06)", border: "1px solid var(--border-color)", padding: "2px 8px" }}
-                    onClick={() => {
-                      setDialogType("clone");
-                      setDialogInput("");
-                      setDialogInput2("/Users/melodyfidel/Code/projects");
-                    }}
-                    title="Clone Remote Repo"
-                  >
-                    <FolderSync size={12} />
-                  </button>
-
-                  <button 
-                    className="topbar-signout-btn" 
-                    onClick={handleGitHubSignout}
-                    title="Sign Out GitHub"
-                  >
-                    <LogOut size={12} />
-                  </button>
-                </div>
-              )}
-            </div>
-
-            <Sparkles size={14} style={{ color: "var(--color-modified)", marginLeft: "4px" }} />
-          </div>
-        </div>
-
-        {/* View switching */}
         <div className="view-content">
           {errorMessage && (
             <div style={{
@@ -2325,1675 +1673,166 @@ function App() {
           )}
 
           {activeTab === "workspace" ? (
-            /* --- WORKSPACE VIEW --- */
             <div className="workspace-view">
-              
-              {/* File Tree Panel */}
-              <div 
-                className="file-pane"
-                style={{ width: `${filePaneWidth}px` }}
-              >
-                <div className="pane-header">
-                  <span className="pane-title">Working Tree</span>
-                  <RefreshCw size={12} className="refresh-icon" onClick={() => refreshRepository()} />
-                </div>
-                <div className="file-list-container">
-                  
-                  {/* Conflict File Panel */}
-                  {conflictedFiles.length > 0 && (
-                    <div className="file-group">
-                      <div className="file-group-header" style={{ color: "var(--color-conflict)" }}>
-                        <span>Merge Conflicts</span>
-                        <AlertTriangle size={12} />
-                      </div>
-                      {conflictedFiles.map(file => (
-                        <div key={file} className="conflict-container">
-                          <span className="conflict-file-header">{file}</span>
-                          <div className="conflict-choices">
-                            <div className="conflict-card" onClick={() => resolveConflict(file, "ours")}>
-                              <div className="conflict-card-title">Keep Ours</div>
-                              <div className="conflict-card-desc">Accept Current</div>
-                            </div>
-                            <div className="conflict-card" onClick={() => resolveConflict(file, "theirs")}>
-                              <div className="conflict-card-title">Keep Theirs</div>
-                              <div className="conflict-card-desc">Accept Incoming</div>
-                            </div>
-                          </div>
-                          <button 
-                            style={{ width: "100%", padding: "4px", background: "var(--bg-app)", border: "1px solid var(--border-color)", borderRadius: "4px", color: "white", fontSize: "0.75rem", cursor: "pointer" }}
-                            onClick={() => resolveConflict(file, "resolved")}
-                          >
-                            Mark Resolved
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+              <FilePane 
+                filePaneWidth={filePaneWidth}
+                refreshRepository={refreshRepository}
+                conflictedFiles={conflictedFiles}
+                resolveConflict={resolveConflict}
+                unstagedCollapsed={unstagedCollapsed}
+                setUnstagedCollapsed={setUnstagedCollapsed}
+                unstagedFiles={unstagedFiles}
+                checkedUnstaged={checkedUnstaged}
+                setCheckedUnstaged={setCheckedUnstaged}
+                stageSelectedUnstaged={stageSelectedUnstaged}
+                stageAllUnstaged={stageAllUnstaged}
+                selectedFile={selectedFile}
+                selectFileForStaging={selectFileForStaging}
+                stageWholeFile={stageWholeFile}
+                stagedCollapsed={stagedCollapsed}
+                setStagedCollapsed={setStagedCollapsed}
+                stagedFiles={stagedFiles}
+                checkedStaged={checkedStaged}
+                setCheckedStaged={setCheckedStaged}
+                unstageSelectedStaged={unstageSelectedStaged}
+                unstageAllStaged={unstageAllStaged}
+                unstageWholeFile={unstageWholeFile}
+                hasRepo={hasRepo}
+                initializeGitRepo={initializeGitRepo}
+              />
 
-                  {/* Unstaged Files */}
-                  <div className="file-group">
-                    <div 
-                      className="file-group-header"
-                      onClick={() => setUnstagedCollapsed(!unstagedCollapsed)}
-                      style={{ cursor: "pointer", userSelect: "none" }}
-                    >
-                      <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                        {unstagedCollapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
-                        <span>Unstaged Changes</span>
-                        <span className="badge">{unstagedFiles.length}</span>
-                      </div>
-                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }} onClick={(e) => e.stopPropagation()}>
-                        {unstagedFiles.length > 0 && (
-                          <input 
-                            type="checkbox"
-                            className="header-checkbox"
-                            checked={unstagedFiles.length > 0 && checkedUnstaged.length === unstagedFiles.length}
-                            ref={el => {
-                              if (el) {
-                                el.indeterminate = checkedUnstaged.length > 0 && checkedUnstaged.length < unstagedFiles.length;
-                              }
-                            }}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setCheckedUnstaged(unstagedFiles.map(f => f.path));
-                              } else {
-                                setCheckedUnstaged([]);
-                              }
-                            }}
-                            title="Select all unstaged changes"
-                          />
-                        )}
-                        {checkedUnstaged.length > 0 ? (
-                          <button 
-                            className="stage-action-btn"
-                            onClick={stageSelectedUnstaged}
-                            title={`Stage ${checkedUnstaged.length} selected file(s)`}
-                          >
-                            Stage ({checkedUnstaged.length})
-                          </button>
-                        ) : (
-                          unstagedFiles.length > 0 && (
-                            <button 
-                              className="stage-action-btn"
-                              onClick={stageAllUnstaged}
-                              title="Stage all changes"
-                            >
-                              Stage All
-                            </button>
-                          )
-                        )}
-                      </div>
-                    </div>
-                    
-                    {!unstagedCollapsed && (
-                      <div className="file-list-items" style={{ display: "flex", flexDirection: "column", gap: "2px", marginTop: "4px" }}>
-                        {unstagedFiles.length === 0 ? (
-                          <div className="empty-section-text">No unstaged changes</div>
-                        ) : (
-                          unstagedFiles.map((file) => (
-                            <div 
-                              key={file.path} 
-                              className={`file-item ${selectedFile === file.path ? "selected" : ""}`}
-                              onClick={() => {
-                                selectFileForStaging(file);
-                                setCheckedUnstaged(prev => 
-                                  prev.includes(file.path) ? prev.filter(p => p !== file.path) : [...prev, file.path]
-                                );
-                              }}
-                              onDoubleClick={() => stageWholeFile(file.path)}
-                              title="Click to select & view diff, double-click to stage"
-                            >
-                              <div className="file-item-left" style={{ flex: 1, display: "flex", alignItems: "center", gap: "6px" }}>
-                                <input 
-                                  type="checkbox"
-                                  className="item-checkbox"
-                                  checked={checkedUnstaged.includes(file.path)}
-                                  readOnly
-                                />
-                                <div className="file-item-clickable-area">
-                                  <FileCode size={12} className="file-icon" style={{ color: "var(--color-modified)" }} />
-                                  <span className="file-name" title={file.path}>{file.path}</span>
-                                </div>
-                              </div>
-                              <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
-                                <span className={`status-badge ${file.unstaged_status === "Untracked" ? "untracked" : "modified"}`}>
-                                  {file.unstaged_status === "Untracked" ? "Untr" : "Mod"}
-                                </span>
-                              </div>
-                            </div>
-                          ))
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Staged Files */}
-                  <div className="file-group">
-                    <div 
-                      className="file-group-header"
-                      onClick={() => setStagedCollapsed(!stagedCollapsed)}
-                      style={{ cursor: "pointer", userSelect: "none" }}
-                    >
-                      <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                        {stagedCollapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
-                        <span>Staged Changes</span>
-                        <span className="badge">{stagedFiles.length}</span>
-                      </div>
-                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }} onClick={(e) => e.stopPropagation()}>
-                        {stagedFiles.length > 0 && (
-                          <input 
-                            type="checkbox"
-                            className="header-checkbox"
-                            checked={stagedFiles.length > 0 && checkedStaged.length === stagedFiles.length}
-                            ref={el => {
-                              if (el) {
-                                el.indeterminate = checkedStaged.length > 0 && checkedStaged.length < stagedFiles.length;
-                              }
-                            }}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setCheckedStaged(stagedFiles.map(f => f.path));
-                              } else {
-                                setCheckedStaged([]);
-                              }
-                            }}
-                            title="Select all staged changes"
-                          />
-                        )}
-                        {checkedStaged.length > 0 ? (
-                          <button 
-                            className="stage-action-btn unstage-btn"
-                            onClick={unstageSelectedStaged}
-                            title={`Unstage ${checkedStaged.length} selected file(s)`}
-                          >
-                            Unstage ({checkedStaged.length})
-                          </button>
-                        ) : (
-                          stagedFiles.length > 0 && (
-                            <button 
-                              className="stage-action-btn unstage-btn"
-                              onClick={unstageAllStaged}
-                              title="Unstage all changes"
-                            >
-                              Unstage All
-                            </button>
-                          )
-                        )}
-                      </div>
-                    </div>
-                    
-                    {!stagedCollapsed && (
-                      <div className="file-list-items" style={{ display: "flex", flexDirection: "column", gap: "2px", marginTop: "4px" }}>
-                        {stagedFiles.length === 0 ? (
-                          <div className="empty-section-text">No staged changes</div>
-                        ) : (
-                          stagedFiles.map((file) => (
-                            <div 
-                              key={file.path} 
-                              className={`file-item ${selectedFile === file.path ? "selected" : ""}`}
-                              onClick={() => {
-                                selectFileForStaging(file);
-                                setCheckedStaged(prev => 
-                                  prev.includes(file.path) ? prev.filter(p => p !== file.path) : [...prev, file.path]
-                                );
-                              }}
-                              onDoubleClick={() => unstageWholeFile(file.path)}
-                              title="Click to select & view diff, double-click to unstage"
-                            >
-                              <div className="file-item-left" style={{ flex: 1, display: "flex", alignItems: "center", gap: "6px" }}>
-                                <input 
-                                  type="checkbox"
-                                  className="item-checkbox"
-                                  checked={checkedStaged.includes(file.path)}
-                                  readOnly
-                                />
-                                <div className="file-item-clickable-area">
-                                  <FileCode size={12} className="file-icon" style={{ color: "var(--color-staged)" }} />
-                                  <span className="file-name" title={file.path}>{file.path}</span>
-                                </div>
-                              </div>
-                              <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
-                                <span className="status-badge staged">Staged</span>
-                              </div>
-                            </div>
-                          ))
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {!hasRepo && (
-                  <div style={{ padding: "16px", display: "flex", flexDirection: "column", gap: "10px", alignItems: "center", justifyContent: "center", height: "100%" }}>
-                    <AlertTriangle size={20} style={{ color: "var(--color-untracked)" }} />
-                    <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", textAlign: "center" }}>Not a Git repository</span>
-                    <button className="sync-button" onClick={initializeGitRepo}>Initialize Git</button>
-                  </div>
-                )}
-              </div>
-              {/* --- FILE PANE RESIZE HANDLE --- */}
               <div 
                 className={`resize-handle ${activeResizer === 'filepane' ? 'active' : ''}`}
                 onMouseDown={() => setActiveResizer('filepane')}
               />
 
-              {/* The Mesh (Staging Canvas) or Conflict Inspector */}
               <div className="staging-mesh-pane">
                 {selectedFile && isConflictFile(selectedFile) ? (
-                  <div className="conflict-resolver-view">
-                    <div className="conflict-resolver-header">
-                      <div className="conflict-header-title">
-                        <AlertTriangle size={20} style={{ color: "var(--color-conflict)", flexShrink: 0 }} />
-                        <div style={{ overflow: "hidden" }}>
-                          <div className="conflict-filename">{selectedFile}</div>
-                          <div className="conflict-subtext">Conflicting changes detected. Compare Ours vs Theirs and choose which version to keep.</div>
-                        </div>
-                      </div>
-
-                      <div className="conflict-header-actions">
-                        <button 
-                          className="conflict-btn ours" 
-                          onClick={() => resolveConflict(selectedFile, "ours")}
-                          title="Keep version from current branch"
-                        >
-                          <UserCheck size={14} />
-                          Keep Ours ({currentBranch})
-                        </button>
-
-                        <button 
-                          className="conflict-btn theirs" 
-                          onClick={() => resolveConflict(selectedFile, "theirs")}
-                          title="Keep version from incoming branch"
-                        >
-                          <GitPullRequest size={14} />
-                          Keep Theirs (Incoming)
-                        </button>
-
-                        <button 
-                          className="conflict-btn resolve" 
-                          onClick={() => resolveConflict(selectedFile, "resolved")}
-                          title="Mark file as resolved"
-                        >
-                          <CheckCircle2 size={14} />
-                          Mark Resolved
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="conflict-comparison-body">
-                      {isLoadingConflict ? (
-                        <div className="conflict-loading">
-                          <RefreshCw size={24} className="spin-icon" style={{ color: "var(--accent-purple)" }} />
-                          <span>Loading file conflict versions…</span>
-                        </div>
-                      ) : (
-                        <div className="conflict-split-pane">
-                          {/* Ours (Current Branch) Column */}
-                          <div className="conflict-column ours">
-                            <div className="conflict-column-header">
-                              <span className="badge-title">Ours (HEAD / {currentBranch})</span>
-                              <span className="badge-sub">Current branch state</span>
-                            </div>
-                            <div className="conflict-code-viewer">
-                              {conflictOursContent !== null ? (
-                                conflictOursContent.split("\n").map((line, i) => (
-                                  <div key={i} className="conflict-code-line">
-                                    <span className="line-num">{i + 1}</span>
-                                    <span className="line-text">{line}</span>
-                                  </div>
-                                ))
-                              ) : (
-                                <div style={{ color: "var(--color-text-muted)", padding: "16px", textAlign: "center" }}>No content in Ours version (or file created/deleted)</div>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Theirs (Incoming Branch) Column */}
-                          <div className="conflict-column theirs">
-                            <div className="conflict-column-header">
-                              <span className="badge-title">Theirs (Incoming)</span>
-                              <span className="badge-sub">Incoming branch state</span>
-                            </div>
-                            <div className="conflict-code-viewer">
-                              {conflictTheirsContent !== null ? (
-                                conflictTheirsContent.split("\n").map((line, i) => (
-                                  <div key={i} className="conflict-code-line">
-                                    <span className="line-num">{i + 1}</span>
-                                    <span className="line-text">{line}</span>
-                                  </div>
-                                ))
-                              ) : (
-                                <div style={{ color: "var(--color-text-muted)", padding: "16px", textAlign: "center" }}>No content in Theirs version (or file created/deleted)</div>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Conflict Patch Diff Preview Hunks */}
-                      {conflictDiffInfo && conflictDiffInfo.hunks && conflictDiffInfo.hunks.length > 0 && (
-                        <div className="conflict-diff-preview-section">
-                          <div className="conflict-diff-label">Conflict Patch Diff Preview ({conflictDiffInfo.hunks.length} hunk{conflictDiffInfo.hunks.length === 1 ? '' : 's'})</div>
-                          <div className="node-diff-preview" style={{ maxHeight: "160px", overflowY: "auto" }}>
-                            {conflictDiffInfo.hunks.map((hunk, hIdx) => (
-                              <div key={hIdx}>
-                                <div className="diff-hunk-header">{hunk.header}</div>
-                                {hunk.lines.map((line, lIdx) => (
-                                  <div 
-                                    key={lIdx} 
-                                    className={`diff-line ${
-                                      line.origin === "+" ? "addition" : 
-                                      line.origin === "-" ? "deletion" : "context"
-                                    }`}
-                                  >
-                                    <span>{line.origin}</span>
-                                    <span>{line.content.trim()}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
+                  <ConflictResolver 
+                    selectedFile={selectedFile}
+                    resolveConflict={resolveConflict}
+                    currentBranch={currentBranch}
+                    isLoadingConflict={isLoadingConflict}
+                    conflictOursContent={conflictOursContent}
+                    conflictTheirsContent={conflictTheirsContent}
+                    conflictDiffInfo={conflictDiffInfo}
+                  />
                 ) : (
-                  (() => {
-                    const canvasMinHeight = Math.max(
-                      ...canvasNodes.map(n => n.y + 260),
-                      600
-                    );
-                    const canvasMinWidth = Math.max(
-                      ...canvasNodes.map(n => n.x + 400),
-                      750
-                    );
-
-                    return (
-                      <div 
-                        className="canvas-container" 
-                        ref={canvasRef}
-                        onMouseMove={handleCanvasMouseMove}
-                        onMouseUp={handleCanvasMouseUp}
-                      >
-                        <div
-                          className="canvas-content-wrapper"
-                          style={{
-                            minWidth: `${canvasMinWidth}px`,
-                            minHeight: `${canvasMinHeight}px`,
-                            position: "relative",
-                            width: "100%",
-                            height: "100%"
-                          }}
-                        >
-                          {/* Collaboration Peer Visual Cursor */}
-                          {collabPeers.map((peer, i) => (
-                            <div 
-                              key={i}
-                              className="peer-avatar-cursor"
-                              style={{
-                                transform: `translate(${peer.x}px, ${peer.y}px)`
-                              }}
-                            >
-                              <UserCheck size={16} style={{ color: "var(--color-conflict)" }} />
-                              <span className="peer-cursor-label">{peer.name}</span>
-                            </div>
-                          ))}
-
-                          <div className="canvas-header">
-                            {conflictedFiles.length > 0 ? (
-                              <div className="canvas-instruction" style={{ background: "rgba(244, 63, 94, 0.12)", color: "var(--color-conflict)", borderColor: "rgba(244, 63, 94, 0.3)" }}>
-                                <AlertTriangle size={14} style={{ display: "inline-block", verticalAlign: "middle", marginRight: "6px" }} />
-                                {selectedFile ? `Merge Conflict Inspection: ${selectedFile}` : `Merge Conflict Active (${conflictedFiles.length} file${conflictedFiles.length === 1 ? '' : 's'}) — Select a file under 'Merge Conflicts' to compare Ours vs Theirs`}
-                              </div>
-                            ) : (
-                              <div className="canvas-instruction">
-                                {selectedFile ? `Staging Mesh for ${selectedFile} (${canvasNodes.length} hunk${canvasNodes.length === 1 ? '' : 's'})` : "Select a modified file on the left to see its hunks"}
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Connections Overlay */}
-                          <svg 
-                            className="mesh-overlay-svg"
-                            style={{
-                              width: `${canvasMinWidth}px`,
-                              height: `${canvasMinHeight}px`
-                            }}
-                          >
-                            {canvasNodes.map((node) => {
-                              const targetX = canvasMinWidth - 180;
-                              const targetY = 100;
-                              const startX = node.x + 310;
-                              const startY = node.y + 55;
-
-                              return (
-                                <path
-                                  key={`link-${node.id}`}
-                                  className="connector-line"
-                                  d={`M ${startX} ${startY} C ${(startX + targetX) / 2} ${startY}, ${(startX + targetX) / 2} ${targetY}, ${targetX} ${targetY}`}
-                                  style={{
-                                    stroke: node.isStaged ? "var(--color-staged)" : "var(--border-active)"
-                                  }}
-                                />
-                              );
-                            })}
-                          </svg>
-
-                          {/* Floating Hunk Nodes */}
-                          {canvasNodes.map((node) => (
-                            <div
-                              key={node.id}
-                              className="mesh-node"
-                              style={{
-                                left: `${node.x}px`,
-                                top: `${node.y}px`,
-                                cursor: draggingNodeId === node.id ? "grabbing" : "grab"
-                              }}
-                              onMouseDown={(e) => handleNodeMouseDown(e, node.id)}
-                            >
-                              <div className="node-header">
-                                <span className="node-title">{node.hunk.header}</span>
-                                <button 
-                                  className="node-action"
-                                  onMouseDown={(e) => e.stopPropagation()} 
-                                  onClick={() => stageSingleHunk(node)}
-                                >
-                                  Stage Hunk
-                                </button>
-                              </div>
-
-                              <div 
-                                className="node-diff-preview"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setActiveDetailHunk(node.hunk);
-                                }}
-                                style={{ cursor: "pointer" }}
-                                title="Click to view detailed changes"
-                              >
-                                <div className="diff-hunk-header">{node.hunk.header}</div>
-                                <div style={{ maxHeight: "110px", overflowY: "auto" }}>
-                                  {node.hunk.lines.slice(0, 10).map((line, idx) => (
-                                    <div 
-                                      key={idx} 
-                                      className={`diff-line ${
-                                        line.origin === "+" ? "addition" : 
-                                        line.origin === "-" ? "deletion" : "context"
-                                      }`}
-                                    >
-                                      <span>{line.origin}</span>
-                                      <span>{line.content.trim()}</span>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-
-                          {/* Staged Target Zone Node */}
-                          {selectedFile && (
-                            <div 
-                              className="mesh-node staged-zone"
-                              style={{
-                                left: `${canvasMinWidth - 200}px`,
-                                top: "50px",
-                                position: "absolute",
-                                width: "160px",
-                                pointerEvents: "none"
-                              }}
-                            >
-                              <div style={{ textAlign: "center", display: "flex", flexDirection: "column", gap: "6px", alignItems: "center", justifyContent: "center", height: "90px" }}>
-                                <GitPullRequest size={22} style={{ color: "var(--color-staged)" }} />
-                                <span style={{ fontWeight: 550, fontSize: "0.8rem", color: "var(--color-text-bright)" }}>Staging Area</span>
-                                <span style={{ fontSize: "0.7rem", color: "var(--color-text-muted)" }}>Drop hunks connection</span>
-                              </div>
-                            </div>
-                          )}
-
-                          {canvasNodes.length === 0 && (
-                            <div className="empty-canvas">
-                              <Layers size={36} className="empty-canvas-icon" />
-                              <span className="empty-canvas-text">Select modified file to stage individual hunks</span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })()
+                  <StagingCanvas 
+                    canvasRef={canvasRef}
+                    handleCanvasMouseMove={handleCanvasMouseMove}
+                    handleCanvasMouseUp={handleCanvasMouseUp}
+                    canvasMinWidth={Math.max(...canvasNodes.map(n => n.x + 400), 750)}
+                    canvasMinHeight={Math.max(...canvasNodes.map(n => n.y + 260), 600)}
+                    collabPeers={collabPeers}
+                    conflictedFiles={conflictedFiles}
+                    selectedFile={selectedFile}
+                    canvasNodes={canvasNodes}
+                    draggingNodeId={draggingNodeId}
+                    handleNodeMouseDown={handleNodeMouseDown}
+                    stageSingleHunk={stageSingleHunk}
+                    setActiveDetailHunk={setActiveDetailHunk}
+                  />
                 )}
 
-                {/* Commit Builder Panel */}
-                <div className="commit-builder">
-                  <div className="commit-input-group">
-                    <input 
-                      className="commit-summary-input"
-                      value={commitTitle}
-                      onChange={(e) => setCommitTitle(e.target.value)}
-                      placeholder="Commit summary (e.g. refactor: split Rust modules)"
-                    />
-                    <textarea 
-                      className="commit-desc-input"
-                      value={commitDesc}
-                      onChange={(e) => setCommitDesc(e.target.value)}
-                      placeholder="Commit description (optional details...)"
-                    />
-                    
-                    <div className="commit-extras-row">
-                      <input 
-                        className="coauthor-input"
-                        value={coAuthor}
-                        onChange={(e) => setCoAuthor(e.target.value)}
-                        placeholder="Co-author (e.g. Name <email>)"
-                      />
-                      <label className="checkbox-label">
-                        <input 
-                          type="checkbox" 
-                          checked={amendCommit}
-                          onChange={(e) => setAmendCommit(e.target.checked)}
-                        />
-                        <span>Amend last</span>
-                      </label>
-                    </div>
-                  </div>
-
-                  <div className="commit-action-group">
-                    <div className="commit-stats">
-                      <div className="commit-stat-item">
-                        <span>Modified</span>
-                        <span>{unstagedFiles.length}</span>
-                      </div>
-                      <div className="commit-stat-item">
-                        <span>Staged</span>
-                        <span style={{ color: "var(--color-staged)" }}>{stagedFiles.length}</span>
-                      </div>
-                    </div>
-
-                    <button 
-                      className="commit-button" 
-                      onClick={handleCommit}
-                      disabled={!commitTitle || (stagedFiles.length === 0 && !amendCommit)}
-                    >
-                      <GitCommit size={14} />
-                      {amendCommit ? "Amend Commit" : `Commit (${stagedFiles.length})`}
-                    </button>
-                  </div>
-                </div>
+                <CommitBuilder 
+                  commitTitle={commitTitle}
+                  setCommitTitle={setCommitTitle}
+                  commitDesc={commitDesc}
+                  setCommitDesc={setCommitDesc}
+                  coAuthor={coAuthor}
+                  setCoAuthor={setCoAuthor}
+                  amendCommit={amendCommit}
+                  setAmendCommit={setAmendCommit}
+                  unstagedFiles={unstagedFiles}
+                  stagedFiles={stagedFiles}
+                  handleCommit={handleCommit}
+                />
               </div>
             </div>
           ) : (
-            /* --- HISTORY VIEW (COMMIT GRAPH & CHERRY PICK) --- */
-            <div className="history-view">
-              
-              {/* Commit Graph Pane */}
-              <div className="graph-pane" style={{ display: "flex", flexDirection: "column" }}>
-                {/* Search & Filter Toolbar */}
-                <div style={{
-                  padding: "8px 14px",
-                  background: "var(--bg-panel)",
-                  borderBottom: "1px solid var(--border-color)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: "12px",
-                  flexShrink: 0,
-                  zIndex: 10
-                }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px", flex: 1, maxWidth: "420px" }}>
-                    <input
-                      className="dialog-input"
-                      style={{ padding: "6px 12px", fontSize: "0.76rem", width: "100%" }}
-                      placeholder="Search commits by message, author, SHA, branch, or stash..."
-                      value={historySearchQuery}
-                      onChange={(e) => setHistorySearchQuery(e.target.value)}
-                    />
-                  </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "0.72rem", color: "var(--color-text-muted)" }}>
-                    <History size={14} style={{ color: "var(--accent-purple-bright)" }} />
-                    <span>Showing <strong>{filteredCommits.length}</strong> of <strong>{commits.length}</strong> commits</span>
-                  </div>
-                </div>
-
-                <div style={{ flex: 1, overflowY: "auto", position: "relative" }}>
-                  {filteredCommits.length === 0 ? (
-                    <div className="empty-canvas">
-                      <GitCommit size={36} className="empty-canvas-icon" />
-                      <span>No commits found matching filter</span>
-                    </div>
-                  ) : (
-                    <div style={{ position: "relative", minHeight: "100%" }}>
-                      
-                      {/* SVG Connector Lines */}
-                      <svg 
-                        style={{
-                          position: "absolute",
-                          top: 0,
-                          left: 0,
-                          width: "120px",
-                          height: `${filteredCommits.length * 48}px`,
-                          pointerEvents: "none",
-                          zIndex: 1
-                        }}
-                      >
-                        {graphPaths.map(path => (
-                          <path
-                            key={path.id}
-                            d={path.d}
-                            stroke={path.color}
-                            strokeWidth={1.5}
-                            fill="none"
-                            opacity={0.6}
-                          />
-                        ))}
-                      </svg>
-
-                      {/* Commit Rows list */}
-                      {filteredCommits.map((commit) => {
-                          const node = graphNodes.find(n => n.id === commit.id);
-                          return (
-                            <div 
-                              key={commit.id} 
-                              className={`commit-row ${selectedCommit?.id === commit.id ? "selected" : ""}`}
-                              onClick={() => selectCommitDetails(commit)}
-                              draggable={true}
-                              onDragStart={(e) => handleDragStartCommit(e, commit.id)}
-                              style={{
-                                paddingLeft: "110px", 
-                                position: "relative"
-                              }}
-                            >
-                              {/* Render node circles */}
-                              {node && (
-                                <div 
-                                  style={{
-                                    position: "absolute",
-                                    left: `${node.x - 5}px`,
-                                    top: `${node.y - 5}px`,
-                                    width: "10px",
-                                    height: "10px",
-                                    borderRadius: "50%",
-                                    backgroundColor: draggedCommitSha === commit.id ? "var(--color-conflict)" : "var(--border-active)",
-                                    border: "2px solid var(--bg-app)",
-                                    zIndex: 2
-                                  }}
-                                />
-                              )}
-
-                              <div style={{ display: "flex", gap: "10px", alignItems: "center", overflow: "hidden", width: "100%" }}>
-                                {commit.branches.map(b => {
-                                  const isRemote = b.includes("/");
-                                  const isStash = b.startsWith("stash");
-                                  const isTag = b.startsWith("tag:");
-                                  return (
-                                    <span 
-                                      key={b}
-                                      onClick={(e) => {
-                                        if (isStash) {
-                                          e.stopPropagation();
-                                          const match = b.match(/\d+/);
-                                          const idx = match ? parseInt(match[0], 10) : 0;
-                                          openStashInspector(idx);
-                                        }
-                                      }}
-                                      style={{
-                                        display: "inline-flex",
-                                        alignItems: "center",
-                                        gap: "4px",
-                                        background: isStash ? "rgba(244, 63, 94, 0.15)" : isTag ? "rgba(245, 158, 11, 0.15)" : isRemote ? "rgba(56, 189, 248, 0.15)" : "rgba(168, 85, 247, 0.15)",
-                                        border: isStash ? "1px solid rgba(244, 63, 94, 0.35)" : isTag ? "1px solid rgba(245, 158, 11, 0.35)" : isRemote ? "1px solid rgba(56, 189, 248, 0.35)" : "1px solid rgba(168, 85, 247, 0.35)",
-                                        color: isStash ? "var(--color-conflict)" : isTag ? "var(--color-untracked)" : isRemote ? "var(--color-modified)" : "var(--accent-purple-bright)",
-                                        borderRadius: "4px",
-                                        fontSize: "0.68rem",
-                                        padding: "1px 6px",
-                                        fontWeight: 600,
-                                        whiteSpace: "nowrap",
-                                        cursor: isStash ? "pointer" : "default"
-                                      }}
-                                      title={isStash ? "Click to open Stash Inspector" : b}
-                                    >
-                                      {isStash ? <Archive size={10} /> : isRemote ? <Globe size={10} /> : <GitBranch size={10} />}
-                                      {b}
-                                    </span>
-                                  );
-                                })}
-                                <span style={{ 
-                                  fontSize: "0.8rem", 
-                                  fontWeight: 500, 
-                                  whiteSpace: "nowrap", 
-                                  overflow: "hidden", 
-                                  textOverflow: "ellipsis",
-                                  color: selectedCommit?.id === commit.id ? "var(--color-text-bright)" : "var(--color-text-main)"
-                                }}>
-                                  {commit.message}
-                                </span>
-                                <span style={{ 
-                                  fontSize: "0.75rem", 
-                                  color: "var(--color-text-muted)", 
-                                  marginLeft: "auto", 
-                                  paddingRight: "16px",
-                                  flexShrink: 0
-                                }}>
-                                  {commit.author} • {new Date(commit.timestamp * 1000).toLocaleDateString()}
-                                </span>
-                              </div>
-                            </div>
-                          );
-                        })}
-
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* --- DETAILS PANE RESIZE HANDLE --- */}
-              <div 
-                className={`resize-handle ${activeResizer === 'details' ? 'active' : ''}`}
-                onMouseDown={() => setActiveResizer('details')}
-              />
-
-              {/* Commit Details Pane */}
-              <div 
-                className="commit-details-pane"
-                style={{ width: `${commitDetailsWidth}px` }}
-              >
-                {selectedCommit ? (
-                  <>
-                    <div className="details-header">
-                      <div className="commit-sha-badge">{selectedCommit.id.substring(0, 10)}...</div>
-                      <div className="commit-msg">{selectedCommit.message}</div>
-                      <div className="commit-meta">
-                        <span><strong>Author:</strong> {selectedCommit.author} ({selectedCommit.email})</span>
-                        <span><strong>Date:</strong> {new Date(selectedCommit.timestamp * 1000).toLocaleString()}</span>
-                      </div>
-                    </div>
-
-                    <div className="details-content">
-                      <div className="details-section-header">
-                        <span>Files Changed</span>
-                        <span className="details-count-badge">{selectedCommitDiffFiles.length}</span>
-                      </div>
-                      <div className="commit-files-list">
-                        {selectedCommitDiffFiles.map(file => {
-                          const lastSlash = file.lastIndexOf("/");
-                          const dir = lastSlash !== -1 ? file.substring(0, lastSlash + 1) : "";
-                          const name = lastSlash !== -1 ? file.substring(lastSlash + 1) : file;
-                          return (
-                            <div 
-                              key={file} 
-                              className={`commit-file-item ${selectedCommitDiffFile === file ? "active" : ""}`}
-                              onClick={() => showCommitFileDiff(selectedCommit.id, file)}
-                            >
-                              <FileCode size={14} className="commit-file-icon" />
-                              <div className="commit-file-path-container" title={file}>
-                                {dir && <span className="commit-file-dir">{dir}</span>}
-                                <span className="commit-file-name">{name}</span>
-                              </div>
-                              <ChevronRight size={13} className="commit-file-arrow" />
-                            </div>
-                          );
-                        })}
-                      </div>
-
-                      {selectedCommitFileDiff && (
-                        <div>
-                          <div className="details-section-header" style={{ marginTop: "12px" }}>
-                            <span>Diff Preview</span>
-                            {selectedCommitDiffFile && (
-                              <span className="commit-file-name" style={{ fontSize: "0.7rem", color: "var(--accent-purple-bright)" }}>
-                                {selectedCommitDiffFile.split("/").pop()}
-                              </span>
-                            )}
-                          </div>
-                          <div className="node-diff-preview" style={{ maxHeight: "280px", overflowY: "auto" }}>
-                            {selectedCommitFileDiff.hunks[0]?.lines.map((line, idx) => (
-                              <div 
-                                key={idx} 
-                                className={`diff-line ${
-                                  line.origin === "+" ? "addition" : 
-                                  line.origin === "-" ? "deletion" : "context"
-                                }`}
-                              >
-                                <span>{line.origin}</span>
-                                <span>{line.content.trim()}</span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </>
-                ) : (
-                  <div className="empty-canvas">
-                    <FileText size={36} className="empty-canvas-icon" />
-                    <span style={{ textAlign: "center", padding: "12px", fontSize: "0.8rem" }}>Select commit.<br/>Drag commit onto active branch badge to cherry-pick.</span>
-                  </div>
-                )}
-              </div>
-
-            </div>
+            <HistoryView 
+              filteredCommits={filteredCommits}
+              commits={commits}
+              historySearchQuery={historySearchQuery}
+              setHistorySearchQuery={setHistorySearchQuery}
+              graphPaths={graphPaths}
+              graphNodes={graphNodes}
+              selectedCommit={selectedCommit}
+              selectCommitDetails={selectCommitDetails}
+              handleDragStartCommit={handleDragStartCommit}
+              draggedCommitSha={draggedCommitSha}
+              openStashInspector={openStashInspector}
+              activeResizer={activeResizer}
+              setActiveResizer={setActiveResizer}
+              commitDetailsWidth={commitDetailsWidth}
+              selectedCommitDiffFiles={selectedCommitDiffFiles}
+              selectedCommitDiffFile={selectedCommitDiffFile}
+              showCommitFileDiff={showCommitFileDiff}
+              selectedCommitFileDiff={selectedCommitFileDiff}
+            />
           )}
         </div>
       </div>
 
-      {/* --- POPUPS & MODALS --- */}
-      {dialogType && (
-        <div className="dialog-overlay">
-          <div className={`dialog-content${dialogType === "stash-inspector" ? " dialog-content--wide" : ""}`}>
-            <div className="dialog-title">
-              <span>
-                {dialogType === "branch" && "Create Branch"}
-                {dialogType === "checkout" && "Checkout Branch"}
-                {dialogType === "clone" && "Clone Remote Repository"}
-                {(dialogType === "publish" || dialogType === "set-remote") && "Set Remote Repository URL"}
-                {dialogType === "pr-create" && "Create GitHub Pull Request"}
-                {dialogType === "login" && "Connect GitHub Account"}
-                {dialogType === "workspace-add" && "Add Workspace Project"}
-                {dialogType === "git-init-confirm" && "Initialize Git Repository?"}
-                {dialogType === "delete-branch-confirm" && "Delete Branch?"}
-                {dialogType === "git-delete-force-confirm" && "Force Delete Branch?"}
-                {dialogType === "checkout-conflict" && "Uncommitted Changes"}
-                {dialogType === "stash-name" && "Save Stash"}
-                {dialogType === "merge-rebase" && "Merge / Rebase Branch"}
-                {dialogType === "stash-inspector" && (
-                  <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                    <Archive size={16} style={{ color: "var(--accent-purple-bright)" }} />
-                    <span>Stash Inspector</span>
-                    {selectedStashIndex !== null && stashes[selectedStashIndex] && (
-                      <span className="stash-badge" style={{ fontSize: "0.72rem", background: "rgba(168, 85, 247, 0.12)", color: "var(--accent-purple-bright)", padding: "2px 8px", borderRadius: "10px", border: "1px solid rgba(168, 85, 247, 0.25)", fontFamily: "var(--font-mono)" }}>
-                        {stashes[selectedStashIndex].split(":")[0]}
-                      </span>
-                    )}
-                  </span>
-                )}
-              </span>
-              <button 
-                className="dialog-close-btn"
-                onClick={() => {
-                  setDialogType(null);
-                  setDialogInput("");
-                  setDialogInput2("");
-                }}
-                title="Close"
-                type="button"
-              >
-                <X size={16} />
-              </button>
-            </div>
+      <Dialogs 
+        dialogType={dialogType}
+        setDialogType={setDialogType}
+        selectedStashIndex={selectedStashIndex}
+        stashes={stashes}
+        stashFiles={stashFiles}
+        checkedStashFiles={checkedStashFiles}
+        setCheckedStashFiles={setCheckedStashFiles}
+        selectedStashFile={selectedStashFile}
+        fetchStashFileDiff={fetchStashFileDiff}
+        stashFileDiff={stashFileDiff}
+        stashDiffLoading={stashDiffLoading}
+        applyStash={applyStash}
+        popStash={popStash}
+        restoreSelectedStashFiles={restoreSelectedStashFiles}
+        dropStash={dropStash}
+        setSelectedStashIndex={setSelectedStashIndex}
+        pendingDeleteBranch={pendingDeleteBranch}
+        setPendingDeleteBranch={setPendingDeleteBranch}
+        executeDeleteBranch={executeDeleteBranch}
+        currentBranch={currentBranch}
+        pendingCheckoutBranch={pendingCheckoutBranch}
+        setPendingCheckoutBranch={setPendingCheckoutBranch}
+        handleCheckoutBringChanges={handleCheckoutBringChanges}
+        handleCheckoutStashChanges={handleCheckoutStashChanges}
+        pendingWorkspacePath={pendingWorkspacePath}
+        setPendingWorkspacePath={setPendingWorkspacePath}
+        handleInitializeGitWorkspace={handleInitializeGitWorkspace}
+        handleCloneOptionWorkspace={handleCloneOptionWorkspace}
+        workspaces={workspaces}
+        setWorkspaces={setWorkspaces}
+        setRepoPath={setRepoPath}
+        refreshRepository={refreshRepository}
+        dialogInput={dialogInput}
+        setDialogInput={setDialogInput}
+        dialogInput2={dialogInput2}
+        setDialogInput2={setDialogInput2}
+        handleWorkspaceAddSubmit={handleWorkspaceAddSubmit}
+        loginGitHubOAuth={loginGitHubOAuth}
+        handlePATLogin={handlePATLogin}
+        githubRepos={githubRepos}
+        handleCloneRepo={handleCloneRepo}
+        handleCreatePR={handleCreatePR}
+        handleDialogSubmit={handleDialogSubmit}
+        mergeRebaseMode={mergeRebaseMode}
+        setMergeRebaseMode={setMergeRebaseMode}
+        allBranches={allBranches}
+        targetMergeBranch={targetMergeBranch}
+        setTargetMergeBranch={setTargetMergeBranch}
+        branchList={branchList}
+        remoteBranches={remoteBranches}
+        handleExecuteMergeOrRebase={handleExecuteMergeOrRebase}
+        handleSetRemoteUrl={handleSetRemoteUrl}
+        stashNameInput={stashNameInput}
+        setStashNameInput={setStashNameInput}
+        pushStash={pushStash}
+      />
 
-            {/* STASH NAME DIALOG */}
-            {dialogType === "stash-name" && (
-              <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                <span style={{ fontSize: "0.8rem", color: "var(--color-text-muted)" }}>Give this stash a memorable name so you can find it later.</span>
-                <input
-                  className="dialog-input"
-                  value={stashNameInput}
-                  onChange={e => setStashNameInput(e.target.value)}
-                  placeholder="e.g. WIP: header redesign"
-                  autoFocus
-                  onKeyDown={e => {
-                    if (e.key === "Enter") {
-                      pushStash(stashNameInput || undefined);
-                      setDialogType(null);
-                    }
-                  }}
-                />
-                <div className="dialog-actions">
-                  <button className="dialog-button secondary" onClick={() => setDialogType(null)}>Cancel</button>
-                  <button
-                    className="dialog-button"
-                    onClick={() => {
-                      pushStash(stashNameInput || undefined);
-                      setDialogType(null);
-                    }}
-                  >
-                    Save Stash
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* STASH INSPECTOR DIALOG */}
-            {dialogType === "stash-inspector" && selectedStashIndex !== null && (
-              <div className="stash-inspector-container">
-                {/* File list + diff split */}
-                <div className="stash-inspector-split">
-                  {/* Left: file list */}
-                  <div className="stash-file-sidebar">
-                    <div className="stash-sidebar-header">
-                      <span>Changed Files ({stashFiles.length})</span>
-                      {stashFiles.length > 0 && (
-                        <input
-                          type="checkbox"
-                          className="header-checkbox"
-                          checked={checkedStashFiles.size === stashFiles.length}
-                          onChange={e => {
-                            if (e.target.checked) {
-                              setCheckedStashFiles(new Set(stashFiles.map(f => f.path)));
-                            } else {
-                              setCheckedStashFiles(new Set());
-                            }
-                          }}
-                          title="Select all files"
-                        />
-                      )}
-                    </div>
-                    <div className="stash-file-list">
-                      {stashFiles.length === 0 && (
-                        <span style={{ fontSize: "0.73rem", color: "var(--color-text-muted)", padding: "12px", textAlign: "center" }}>Loading files…</span>
-                      )}
-                      {stashFiles.map(f => {
-                        const parts = f.path.split("/");
-                        const name = parts.pop();
-                        const dir = parts.join("/");
-                        return (
-                          <div
-                            key={f.path}
-                            className={`stash-file-item ${selectedStashFile === f.path ? "active" : ""}`}
-                            onClick={() => fetchStashFileDiff(selectedStashIndex, f.path)}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={checkedStashFiles.has(f.path)}
-                              onClick={e => e.stopPropagation()}
-                              onChange={e => {
-                                const next = new Set(checkedStashFiles);
-                                e.target.checked ? next.add(f.path) : next.delete(f.path);
-                                setCheckedStashFiles(next);
-                              }}
-                              style={{ accentColor: "var(--accent-purple)", flexShrink: 0 }}
-                            />
-                            <span className={`stash-status-badge ${f.status === "A" ? "added" : f.status === "D" ? "deleted" : "modified"}`}>
-                              {f.status === "A" ? "ADD" : f.status === "D" ? "DEL" : "MOD"}
-                            </span>
-                            <div className="stash-file-details">
-                              <span className="stash-file-name" title={f.path}>{name}</span>
-                              {dir && <span className="stash-file-path" title={dir}>{dir}</span>}
-                            </div>
-                            <Eye size={12} style={{ opacity: selectedStashFile === f.path ? 1 : 0.4, color: selectedStashFile === f.path ? "var(--accent-purple-bright)" : "currentColor", flexShrink: 0 }} />
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Right: diff view */}
-                  <div className="stash-diff-pane">
-                    {/* Diff header */}
-                    <div className="stash-diff-header">
-                      {selectedStashFile ? (
-                        <>
-                          <div style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: 0, overflow: "hidden" }}>
-                            <FileCode size={13} style={{ color: "var(--accent-purple-bright)", flexShrink: 0 }} />
-                            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: "0.75rem", fontFamily: "var(--font-mono)" }}>{selectedStashFile}</span>
-                            <span className={`stash-status-badge ${stashFiles.find(f => f.path === selectedStashFile)?.status === "A" ? "added" : stashFiles.find(f => f.path === selectedStashFile)?.status === "D" ? "deleted" : "modified"}`} style={{ flexShrink: 0 }}>
-                              {stashFiles.find(f => f.path === selectedStashFile)?.status === "A" ? "ADDED" : stashFiles.find(f => f.path === selectedStashFile)?.status === "D" ? "DELETED" : "MODIFIED"}
-                            </span>
-                          </div>
-                          {stashFileDiff && (() => {
-                            const lines = stashFileDiff.split("\n");
-                            const additions = lines.filter(l => l.startsWith("+") && !l.startsWith("+++")).length;
-                            const deletions = lines.filter(l => l.startsWith("-") && !l.startsWith("---")).length;
-                            return (
-                              <div style={{ display: "flex", gap: "8px", alignItems: "center", flexShrink: 0, fontSize: "0.71rem" }}>
-                                <span style={{ color: "var(--color-staged)", fontWeight: 700 }}>+{additions}</span>
-                                <span style={{ color: "var(--color-deleted)", fontWeight: 700 }}>-{deletions}</span>
-                              </div>
-                            );
-                          })()}
-                        </>
-                      ) : (
-                        <span style={{ color: "var(--color-text-muted)", fontSize: "0.74rem" }}>No file selected</span>
-                      )}
-                    </div>
-
-                    {/* Diff content */}
-                    {stashDiffLoading ? (
-                      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "10px", color: "var(--color-text-muted)", fontSize: "0.78rem" }}>
-                        <RefreshCw size={22} style={{ opacity: 0.5, color: "var(--accent-purple)", animation: "spin 1s linear infinite" }} />
-                        <span>Loading diff…</span>
-                      </div>
-                    ) : stashFileDiff ? (
-                      <div className="stash-diff-viewer">
-                        {(() => {
-                          const lines = stashFileDiff.split("\n");
-                          let oldLine = 0;
-                          let newLine = 0;
-                          const hunkHeaderPattern = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/;
-                          return lines.map((line, i) => {
-                            const isAddition = line.startsWith("+") && !line.startsWith("+++");
-                            const isDeletion = line.startsWith("-") && !line.startsWith("---");
-                            const isHunk = line.startsWith("@@");
-                            const isFileHeader = line.startsWith("diff ") || line.startsWith("index ") || line.startsWith("---") || line.startsWith("+++");
-
-                            if (isHunk) {
-                              const m = line.match(hunkHeaderPattern);
-                              if (m) {
-                                oldLine = parseInt(m[1], 10) - 1;
-                                newLine = parseInt(m[2], 10) - 1;
-                              }
-                            } else if (isAddition) {
-                              newLine++;
-                            } else if (isDeletion) {
-                              oldLine++;
-                            } else if (!isFileHeader) {
-                              oldLine++;
-                              newLine++;
-                            }
-
-                            const lineClass = isAddition ? "addition" : isDeletion ? "deletion" : isHunk ? "hunk" : isFileHeader ? "file-header" : "";
-
-                            return (
-                              <div key={i} className={`stash-diff-line ${lineClass}`}>
-                                <span className="stash-diff-gutter old-ln">
-                                  {!isHunk && !isFileHeader && (isDeletion || (!isAddition)) && !isAddition ? (oldLine > 0 ? oldLine : "") : ""}
-                                </span>
-                                <span className="stash-diff-gutter new-ln">
-                                  {!isHunk && !isFileHeader && (isAddition || (!isDeletion)) && !isDeletion ? (newLine > 0 ? newLine : "") : ""}
-                                </span>
-                                <span className="stash-diff-marker">
-                                  {isAddition ? "+" : isDeletion ? "−" : isHunk ? "" : " "}
-                                </span>
-                                <span className="stash-diff-content">{line.substring(isAddition || isDeletion ? 1 : 0)}</span>
-                              </div>
-                            );
-                          });
-                        })()}
-                      </div>
-                    ) : selectedStashFile ? (
-                      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "10px", color: "var(--color-text-muted)", fontSize: "0.78rem" }}>
-                        <FileCode size={28} style={{ opacity: 0.3, color: "var(--accent-purple)" }} />
-                        <span>No diff available for this file</span>
-                      </div>
-                    ) : (
-                      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "10px", color: "var(--color-text-muted)", fontSize: "0.78rem" }}>
-                        <Eye size={28} style={{ opacity: 0.3, color: "var(--accent-purple)" }} />
-                        <span>Select a file on the left to view its changes</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Actions footer */}
-                <div className="stash-footer-actions">
-                  <div className="stash-footer-group">
-                    <button 
-                      className="stash-action-btn primary" 
-                      onClick={() => applyStash(selectedStashIndex)}
-                      title="Apply all stashed changes to working tree"
-                    >
-                      <Archive size={14} />
-                      Apply Stash
-                    </button>
-                    <button 
-                      className="stash-action-btn secondary" 
-                      onClick={() => popStash(selectedStashIndex)}
-                      title="Apply stashed changes and remove stash entry"
-                    >
-                      <FolderSync size={14} />
-                      Pop Stash
-                    </button>
-                    <button
-                      className="stash-action-btn outline"
-                      onClick={restoreSelectedStashFiles}
-                      disabled={checkedStashFiles.size === 0}
-                      title={checkedStashFiles.size === 0 ? "Check at least one file to restore" : `Restore ${checkedStashFiles.size} selected file(s)`}
-                    >
-                      <RefreshCcw size={14} />
-                      Restore Selected ({checkedStashFiles.size})
-                    </button>
-                  </div>
-
-                  <div className="stash-footer-group">
-                    <button 
-                      className="stash-action-btn danger" 
-                      onClick={() => dropStash(selectedStashIndex)} 
-                      title="Discard stash entry permanently"
-                    >
-                      <Trash2 size={14} />
-                      Discard Stash
-                    </button>
-                    <button 
-                      className="stash-action-btn ghost" 
-                      onClick={() => { setDialogType(null); setSelectedStashIndex(null); }}
-                    >
-                      Close
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* DELETE BRANCH CONFIRM DIALOG */}
-            {dialogType === "delete-branch-confirm" && (
-              <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                <span style={{ fontSize: "0.85rem", color: "var(--color-text-main)" }}>
-                  Are you sure you want to delete the branch <strong>{pendingDeleteBranch}</strong>? This action cannot be undone.
-                </span>
-                <div className="dialog-actions" style={{ marginTop: "8px" }}>
-                  <button 
-                    className="dialog-button secondary" 
-                    onClick={() => {
-                      setDialogType(null);
-                      setPendingDeleteBranch(null);
-                    }}
-                  >
-                    Cancel
-                  </button>
-                  <button 
-                    className="dialog-button" 
-                    style={{ background: "var(--color-deleted)", color: "white" }} 
-                    onClick={() => executeDeleteBranch(false)}
-                  >
-                    Delete Branch
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* FORCE DELETE BRANCH CONFIRM DIALOG */}
-            {dialogType === "git-delete-force-confirm" && (
-              <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                <span style={{ fontSize: "0.85rem", color: "var(--color-text-main)" }}>
-                  The branch <strong>{pendingDeleteBranch}</strong> is not fully merged. Force deleting it will discard any unmerged work.
-                </span>
-                <div className="dialog-actions" style={{ marginTop: "8px" }}>
-                  <button 
-                    className="dialog-button secondary" 
-                    onClick={() => {
-                      setDialogType(null);
-                      setPendingDeleteBranch(null);
-                    }}
-                  >
-                    Cancel
-                  </button>
-                  <button 
-                    className="dialog-button" 
-                    style={{ background: "var(--color-deleted)", color: "white" }} 
-                    onClick={() => executeDeleteBranch(true)}
-                  >
-                    Force Delete
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* CHECKOUT CONFLICT DIALOG */}
-            {dialogType === "checkout-conflict" && (
-              <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-                <p style={{ fontSize: "0.82rem", color: "var(--color-text-main)", lineHeight: 1.5, margin: 0 }}>
-                  You have uncommitted changes on branch <span className="branch-inline-badge">{currentBranch}</span>. What would you like to do with these changes when switching to <span className="branch-inline-badge">{pendingCheckoutBranch}</span>?
-                </p>
-                
-                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                  <div className="conflict-option-card" onClick={handleCheckoutBringChanges}>
-                    <div className="conflict-option-icon conflict-option-icon--carry">
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
-                    </div>
-                    <div className="conflict-option-text">
-                      <span className="conflict-option-title">Bring my changes to {pendingCheckoutBranch}</span>
-                      <span className="conflict-option-desc">Your uncommitted files will be carried over to {pendingCheckoutBranch}.</span>
-                    </div>
-                    <svg className="conflict-option-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>
-                  </div>
-
-                  <div className="conflict-option-card" onClick={handleCheckoutStashChanges}>
-                    <div className="conflict-option-icon conflict-option-icon--stash">
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg>
-                    </div>
-                    <div className="conflict-option-text">
-                      <span className="conflict-option-title">Leave my changes on {currentBranch} (Stash)</span>
-                      <span className="conflict-option-desc">Stash uncommitted changes on {currentBranch} before switching.</span>
-                    </div>
-                    <svg className="conflict-option-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>
-                  </div>
-                </div>
-
-                <div className="dialog-actions">
-                  <button 
-                    className="dialog-button secondary" 
-                    style={{ width: "100%" }}
-                    onClick={() => {
-                      setDialogType(null);
-                      setPendingCheckoutBranch(null);
-                    }}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* DIRECTORY NOT GIT CONFIRM DIALOG */}
-            {dialogType === "git-init-confirm" && (
-              <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                <span style={{ fontSize: "0.8rem", color: "var(--color-text-main)" }}>
-                  The folder <strong>{pendingWorkspacePath}</strong> is not an active Git repository. What would you like to do?
-                </span>
-                
-                <button 
-                  className="sync-button" 
-                  style={{ background: "var(--accent-button)" }}
-                  onClick={handleInitializeGitWorkspace}
-                >
-                  Initialize a new Git repository here
-                </button>
-                
-                <button 
-                  className="sync-button" 
-                  style={{ background: "rgba(255,255,255,0.06)", border: "1px solid var(--border-color)" }}
-                  onClick={handleCloneOptionWorkspace}
-                >
-                  Clone a remote Git repository into this folder
-                </button>
-
-                <div className="dialog-actions" style={{ marginTop: "6px" }}>
-                  <button 
-                    className="dialog-button secondary" 
-                    style={{ width: "100%" }}
-                    onClick={() => {
-                      setDialogType(null);
-                      setPendingWorkspacePath("");
-                    }}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* ADD WORKSPACE PROJECT */}
-            {dialogType === "workspace-add" && (
-              <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                <span style={{ fontSize: "0.8rem", color: "var(--color-text-muted)" }}>
-                  Select a local folder on your computer to add as a workspace project, or clone a remote repository:
-                </span>
-                
-                <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                  <input 
-                    className="dialog-input"
-                    style={{ flex: 1 }}
-                    value={dialogInput}
-                    onChange={(e) => setDialogInput(e.target.value)}
-                    placeholder="Selected folder path..."
-                  />
-                  <button 
-                    className="dialog-button secondary"
-                    style={{ display: "flex", alignItems: "center", gap: "6px", whiteSpace: "nowrap" }}
-                    type="button"
-                    onClick={async () => {
-                      try {
-                        const folder = await invoke<string | null>("select_folder");
-                        if (folder) {
-                          setDialogInput(folder);
-                        }
-                      } catch (err: any) {
-                        console.error(err);
-                      }
-                    }}
-                    title="Open native folder picker"
-                  >
-                    <FolderPlus size={15} />
-                    Browse...
-                  </button>
-                </div>
-                
-                <div style={{ display: "flex", gap: "8px", marginTop: "4px" }}>
-                  <button 
-                    className="sync-button" 
-                    style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
-                    onClick={async () => {
-                      if (!dialogInput) {
-                        try {
-                          const folder = await invoke<string | null>("select_folder");
-                          if (folder) {
-                            setDialogInput(folder);
-                            const targetPath = folder;
-                            try {
-                              await invoke("get_git_status", { repoPath: targetPath });
-                              const newList = [...workspaces];
-                              if (!newList.includes(targetPath)) {
-                                newList.push(targetPath);
-                              }
-                              setWorkspaces(newList);
-                              localStorage.setItem("sn_workspaces", JSON.stringify(newList));
-                              setRepoPath(targetPath);
-                              setDialogType(null);
-                              setDialogInput("");
-                              await refreshRepository(targetPath);
-                            } catch (err: any) {
-                              setPendingWorkspacePath(targetPath);
-                              setDialogType("git-init-confirm");
-                              setDialogInput("");
-                            }
-                          }
-                        } catch (err: any) {
-                          console.error(err);
-                        }
-                        return;
-                      }
-                      handleWorkspaceAddSubmit();
-                    }}
-                  >
-                    <FolderPlus size={14} />
-                    {dialogInput ? "Open Selected Folder" : "Choose Folder..."}
-                  </button>
-                  
-                  <button 
-                    className="sync-button" 
-                    style={{ flex: 1, background: "rgba(255,255,255,0.06)", border: "1px solid var(--border-color)", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
-                    onClick={() => {
-                      setDialogInput2(dialogInput); // Prefill path if typed or picked
-                      setDialogInput("");
-                      setDialogType("clone");
-                    }}
-                  >
-                    <FolderSync size={14} />
-                    Clone Remote Repo
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* CONNECT GITHUB ACCOUNT */}
-            {dialogType === "login" && (
-              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                <button className="sync-button" onClick={loginGitHubOAuth}>
-                  <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: "4px" }}><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path></svg>
-                  Authorize via browser (OAuth)
-                </button>
-                <div style={{ textAlign: "center", color: "var(--color-text-muted)", fontSize: "0.75rem" }}>— OR —</div>
-                <input 
-                  className="dialog-input"
-                  value={dialogInput}
-                  onChange={(e) => setDialogInput(e.target.value)}
-                  type="password"
-                  placeholder="Paste GitHub Personal Access Token (PAT)"
-                />
-                <button className="sync-button" style={{ background: "var(--accent-button)" }} onClick={handlePATLogin}>
-                  Connect via PAT
-                </button>
-              </div>
-            )}
-
-            {/* CLONE REMOTE REPOS */}
-            {dialogType === "clone" && (
-              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>Select a repository, or enter the Git clone HTTPS/SSH URL:</span>
-                {githubRepos.length > 0 && (
-                  <select 
-                    className="dialog-input"
-                    value={dialogInput}
-                    onChange={(e) => setDialogInput(e.target.value)}
-                  >
-                    <option value="">-- Choose from your GitHub repositories --</option>
-                    {githubRepos.map(repo => (
-                      <option key={repo.full_name} value={repo.clone_url}>{repo.full_name}</option>
-                    ))}
-                  </select>
-                )}
-                <input 
-                  className="dialog-input"
-                  value={dialogInput}
-                  onChange={(e) => setDialogInput(e.target.value)}
-                  placeholder="Or enter git URL (https://github.com/...)"
-                />
-                <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                  <input 
-                    className="dialog-input"
-                    style={{ flex: 1 }}
-                    value={dialogInput2}
-                    onChange={(e) => setDialogInput2(e.target.value)}
-                    placeholder="Local destination path..."
-                  />
-                  <button 
-                    className="dialog-button secondary"
-                    style={{ display: "flex", alignItems: "center", gap: "6px", whiteSpace: "nowrap" }}
-                    type="button"
-                    onClick={async () => {
-                      try {
-                        const folder = await invoke<string | null>("select_folder");
-                        if (folder) {
-                          setDialogInput2(folder);
-                        }
-                      } catch (err: any) {
-                        console.error(err);
-                      }
-                    }}
-                    title="Open native folder picker"
-                  >
-                    <FolderPlus size={15} />
-                    Browse...
-                  </button>
-                </div>
-                <button className="sync-button" onClick={handleCloneRepo}>
-                  Clone Repository
-                </button>
-              </div>
-            )}
-
-            {/* CREATE PULL REQUEST */}
-            {dialogType === "pr-create" && (
-              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
-                  Create PR to merge branch <strong>{currentBranch}</strong> into base branch <strong>main</strong>.
-                </span>
-                <input 
-                  className="dialog-input"
-                  value={dialogInput}
-                  onChange={(e) => setDialogInput(e.target.value)}
-                  placeholder="Pull request title..."
-                />
-                <input 
-                  className="dialog-input"
-                  value={dialogInput2}
-                  onChange={(e) => setDialogInput2(e.target.value)}
-                  placeholder="Pull request description..."
-                />
-                <button className="sync-button" onClick={handleCreatePR}>
-                  Publish Pull Request
-                </button>
-              </div>
-            )}
-
-            {/* BASE BRANCH / CHECKOUT */}
-            {(dialogType === "branch" || dialogType === "checkout") && (
-              <>
-                <input 
-                  className="dialog-input"
-                  value={dialogInput}
-                  onChange={(e) => setDialogInput(e.target.value)}
-                  placeholder={dialogType === "branch" ? "new-branch-name" : "branch-to-checkout"}
-                />
-                <div className="dialog-actions">
-                  <button className="dialog-button secondary" onClick={() => setDialogType(null)}>Cancel</button>
-                  <button className="dialog-button primary" onClick={handleDialogSubmit}>Submit</button>
-                </div>
-              </>
-            )}
-
-            {/* MERGE / REBASE BRANCH DIALOG */}
-            {dialogType === "merge-rebase" && (
-              <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-                {/* Mode Selector Tabs */}
-                <div style={{
-                  display: "flex",
-                  background: "var(--bg-app)",
-                  borderRadius: "6px",
-                  padding: "3px",
-                  border: "1px solid var(--border-color)"
-                }}>
-                  <button
-                    type="button"
-                    style={{
-                      flex: 1,
-                      padding: "6px 12px",
-                      border: "none",
-                      borderRadius: "4px",
-                      background: mergeRebaseMode === "merge" ? "var(--bg-panel-secondary)" : "transparent",
-                      color: mergeRebaseMode === "merge" ? "var(--color-text-bright)" : "var(--color-text-muted)",
-                      fontWeight: mergeRebaseMode === "merge" ? 600 : 400,
-                      cursor: "pointer",
-                      fontSize: "0.8rem",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      gap: "6px"
-                    }}
-                    onClick={() => setMergeRebaseMode("merge")}
-                  >
-                    <GitMerge size={14} style={{ color: "var(--color-modified)" }} />
-                    Merge Branch
-                  </button>
-                  <button
-                    type="button"
-                    style={{
-                      flex: 1,
-                      padding: "6px 12px",
-                      border: "none",
-                      borderRadius: "4px",
-                      background: mergeRebaseMode === "rebase" ? "var(--bg-panel-secondary)" : "transparent",
-                      color: mergeRebaseMode === "rebase" ? "var(--color-text-bright)" : "var(--color-text-muted)",
-                      fontWeight: mergeRebaseMode === "rebase" ? 600 : 400,
-                      cursor: "pointer",
-                      fontSize: "0.8rem",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      gap: "6px"
-                    }}
-                    onClick={() => setMergeRebaseMode("rebase")}
-                  >
-                    <GitCommit size={14} style={{ color: "var(--accent-purple)" }} />
-                    Rebase Branch
-                  </button>
-                </div>
-
-                <div style={{ fontSize: "0.78rem", color: "var(--color-text-muted)" }}>
-                  {mergeRebaseMode === "merge" ? (
-                    <span>Integrate changes from target branch into current branch (<strong>{currentBranch}</strong>). ({allBranches.length} branches registered)</span>
-                  ) : (
-                    <span>Reapply commits from current branch (<strong>{currentBranch}</strong>) onto top of target branch. ({allBranches.length} branches registered)</span>
-                  )}
-                </div>
-
-                {/* Target Branch Dropdown */}
-                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                  <label style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", fontWeight: 500 }}>
-                    Select Target Branch:
-                  </label>
-                  <select
-                    className="dialog-input"
-                    value={targetMergeBranch}
-                    onChange={(e) => setTargetMergeBranch(e.target.value)}
-                    style={{
-                      padding: "8px 10px",
-                      background: "var(--bg-app)",
-                      border: "1px solid var(--border-color)",
-                      color: "var(--color-text-bright)",
-                      borderRadius: "6px",
-                      fontSize: "0.82rem"
-                    }}
-                  >
-                    <optgroup label="Local Branches">
-                      {branchList.filter(b => b !== currentBranch).map(b => (
-                        <option key={b} value={b}>{b}</option>
-                      ))}
-                    </optgroup>
-                    {remoteBranches.length > 0 && (
-                      <optgroup label="Remote Branches">
-                        {remoteBranches.map(r => (
-                          <option key={r} value={r}>{r}</option>
-                        ))}
-                      </optgroup>
-                    )}
-                  </select>
-                </div>
-
-                <div className="dialog-actions" style={{ marginTop: "10px" }}>
-                  <button
-                    className="dialog-button secondary"
-                    onClick={() => setDialogType(null)}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    className="dialog-button"
-                    style={{
-                      background: mergeRebaseMode === "merge" ? "var(--accent-blue)" : "var(--accent-purple)",
-                      color: "white"
-                    }}
-                    disabled={!targetMergeBranch}
-                    onClick={handleExecuteMergeOrRebase}
-                  >
-                    {mergeRebaseMode === "merge"
-                      ? `Merge '${targetMergeBranch}' into '${currentBranch}'`
-                      : `Rebase '${currentBranch}' onto '${targetMergeBranch}'`}
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* SET REMOTE URL / PUBLISH DIALOG */}
-            {(dialogType === "set-remote" || dialogType === "publish") && (
-              <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                <span style={{ fontSize: "0.8rem", color: "var(--color-text-muted)" }}>
-                  No remote repository URL is configured for <strong>origin</strong>. Enter the HTTPS or SSH clone URL for your remote repository to publish this branch:
-                </span>
-                
-                <input 
-                  className="dialog-input"
-                  value={dialogInput}
-                  onChange={(e) => setDialogInput(e.target.value)}
-                  placeholder="e.g. https://github.com/username/repository.git"
-                  autoFocus
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      handleSetRemoteUrl();
-                    }
-                  }}
-                />
-
-                {githubRepos.length > 0 && (
-                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                    <span style={{ fontSize: "0.72rem", color: "var(--color-text-muted)" }}>Or choose from your GitHub repositories:</span>
-                    <select 
-                      className="dialog-input"
-                      value={dialogInput}
-                      onChange={(e) => setDialogInput(e.target.value)}
-                    >
-                      <option value="">-- Choose GitHub Repository --</option>
-                      {githubRepos.map(repo => (
-                        <option key={repo.full_name} value={repo.clone_url}>{repo.full_name}</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-
-                <div className="dialog-actions" style={{ marginTop: "6px" }}>
-                  <button className="dialog-button secondary" onClick={() => setDialogType(null)}>
-                    Cancel
-                  </button>
-                  <button 
-                    className="sync-button" 
-                    style={{ background: "var(--accent-button)", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
-                    onClick={handleSetRemoteUrl}
-                  >
-                    <Globe size={14} />
-                    Set Remote & Publish
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {dialogType !== "branch" && dialogType !== "checkout" && dialogType !== "workspace-add" && dialogType !== "git-init-confirm" && dialogType !== "checkout-conflict" && dialogType !== "delete-branch-confirm" && dialogType !== "git-delete-force-confirm" && dialogType !== "stash-name" && dialogType !== "stash-inspector" && dialogType !== "merge-rebase" && dialogType !== "set-remote" && dialogType !== "publish" && (
-              <div className="dialog-actions" style={{ marginTop: "6px" }}>
-                <button className="dialog-button secondary" style={{ width: "100%" }} onClick={() => setDialogType(null)}>Cancel</button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* --- HUNK DETAILS DIALOG OVERLAY MODAL --- */}
       {activeDetailHunk && (
         <div className="hunk-details-overlay" onClick={() => setActiveDetailHunk(null)}>
           <div className="hunk-details-modal" onClick={(e) => e.stopPropagation()}>
