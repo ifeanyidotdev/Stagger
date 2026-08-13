@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { CheckCircle2, AlertCircle, Info, AlertTriangle, X } from "lucide-react";
 import "./App.css";
 
 // --- Types & Interfaces ---
 import type { 
   GitFileStatus, GitStatusResult, BranchInfo, CommitInfo, 
-  DiffHunk, DiffInfo, GitCliResult, HunkNode, 
+  DiffHunk, DiffInfo, GitCliResult, HunkNode, StashEntry,
   GitHubUser, GitHubRepo, GitHubPR 
 } from "./types/git";
 import { isRealBranch } from "./utils/graphUtils";
@@ -76,7 +77,7 @@ function App() {
   const canvasRef = useRef<HTMLDivElement>(null);
 
   // --- STASHES STATE ---
-  const [stashes, setStashes] = useState<string[]>([]);
+  const [stashes, setStashes] = useState<StashEntry[]>([]);
   const [isStashListExpanded, setIsStashListExpanded] = useState(true);
   const [selectedStashIndex, setSelectedStashIndex] = useState<number | null>(null);
   const [stashFiles, setStashFiles] = useState<{ path: string; status: string }[]>([]);
@@ -102,6 +103,9 @@ function App() {
   const [commitTitle, setCommitTitle] = useState("");
   const [commitDesc, setCommitDesc] = useState("");
   const [amendCommit, setAmendCommit] = useState(false);
+  const [coAuthors, setCoAuthors] = useState<string[]>([]);
+  const [showCoAuthorInput, setShowCoAuthorInput] = useState<boolean>(false);
+  const [coAuthorInput, setCoAuthorInput] = useState<string>("");
 
   // --- REMOTE & BRANCH MANAGEMENT STATE ---
   const [allBranches, setAllBranches] = useState<BranchInfo[]>([]);
@@ -117,9 +121,96 @@ function App() {
   const [mergeRebaseMode, setMergeRebaseMode] = useState<"merge" | "rebase">("merge");
   const [targetMergeBranch, setTargetMergeBranch] = useState<string>("");
 
+  // --- TOAST ALERTS SYSTEM ---
+  const [toasts, setToasts] = useState<{ id: string; type: "success" | "error" | "info" | "warning"; title: string; message?: string }[]>([]);
+
+  const addToast = (type: "success" | "error" | "info" | "warning", title: string, message?: string) => {
+    const id = Date.now().toString() + Math.random().toString(36).substring(2, 5);
+    const newToast = { id, type, title, message };
+    setToasts(prev => [...prev.slice(-4), newToast]);
+
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, type === "error" ? 6000 : 4000);
+  };
+
+  const removeToast = (id: string) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  };
+
+  const formatGitAlertMessage = (raw: string, type: "success" | "error"): { title: string; message: string } => {
+    const clean = raw.trim();
+
+    if (type === "success") {
+      if (clean.includes("Changes to be committed:") || clean.includes("new file:") || clean.includes("modified:")) {
+        const lineCount = clean.split("\n").filter(l => l.includes(":")).length || 1;
+        return { title: "Files Staged", message: `${lineCount} file(s) staged successfully.` };
+      }
+      if (clean.includes("Switched to branch")) {
+        const match = clean.match(/Switched to branch ['"](.+?)['"]/);
+        const branch = match ? match[1] : "target branch";
+        return { title: "Branch Switched", message: `Now active on branch "${branch}".` };
+      }
+      if (clean.includes("Switched to a new branch")) {
+        const match = clean.match(/Switched to a new branch ['"](.+?)['"]/);
+        const branch = match ? match[1] : "new branch";
+        return { title: "Branch Created", message: `Created and checked out "${branch}".` };
+      }
+      if (clean.includes("Already on")) {
+        return { title: "Already Active", message: "You are already on this branch." };
+      }
+      if (clean.includes("Saved working directory")) {
+        return { title: "Stash Created", message: "Stashed working changes successfully." };
+      }
+      if (clean.includes("Applied stash") || clean.includes("Restored")) {
+        return { title: "Stash Restored", message: "Stashed changes restored to working directory." };
+      }
+      if (clean.includes("Dropped stash") || clean.includes("Deleted")) {
+        return { title: "Stash Deleted", message: "Stash entry removed." };
+      }
+      if (clean.includes("Deleted branch")) {
+        return { title: "Branch Deleted", message: "Branch deleted successfully." };
+      }
+      return { title: "Action Succeeded", message: clean.length > 80 ? clean.substring(0, 80) + "..." : clean };
+    } else {
+      if (clean.includes("Your local changes to the following files would be overwritten")) {
+        return { title: "Uncommitted Changes Conflict", message: "Please stash or commit your changes before switching branches." };
+      }
+      if (clean.includes("already exists")) {
+        return { title: "Already Exists", message: "A branch or reference with this name already exists." };
+      }
+      if (clean.includes("pathspec") && clean.includes("did not match")) {
+        return { title: "Target Not Found", message: "The specified target or file could not be found." };
+      }
+      if (clean.includes("Permission denied") || clean.includes("Authentication failed")) {
+        return { title: "Authentication Failed", message: "Check your SSH key or GitHub credentials." };
+      }
+      if (clean.includes("merge conflict") || clean.includes("CONFLICT")) {
+        return { title: "Merge Conflict", message: "Merge conflict detected. Resolve conflicts to proceed." };
+      }
+      return { title: "Action Failed", message: clean.length > 100 ? clean.substring(0, 100) + "..." : clean };
+    }
+  };
+
   // --- POPUPS & INTERACTIVE INPUT STATES ---
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [cliOutput, setCliOutput] = useState<GitCliResult | null>(null);
+  const setErrorMessage = (msg: string | null) => {
+    if (!msg) return;
+    const alert = formatGitAlertMessage(msg, "error");
+    addToast("error", alert.title, alert.message);
+  };
+
+  const setCliOutput = (res: GitCliResult | null) => {
+    if (!res) return;
+    if (res.exit_code === 0) {
+      if (res.stdout.trim()) {
+        const alert = formatGitAlertMessage(res.stdout, "success");
+        addToast("success", alert.title, alert.message);
+      }
+    } else {
+      const alert = formatGitAlertMessage(res.stderr || res.stdout || "Command failed", "error");
+      addToast("error", alert.title, alert.message);
+    }
+  };
   const [dialogType, setDialogType] = useState<"branch" | "checkout" | "clone" | "publish" | "set-remote" | "pr-create" | "login" | "workspace-add" | "git-init-confirm" | "delete-branch-confirm" | "git-delete-force-confirm" | "checkout-conflict" | "stash-name" | "stash-inspector" | "merge-rebase" | null>(null);
   const [dialogInput, setDialogInput] = useState("");
   const [dialogInput2, setDialogInput2] = useState(""); 
@@ -467,7 +558,39 @@ function App() {
         args: ["stash", "list"]
       });
       if (stashRes.exit_code === 0) {
-        setStashes(stashRes.stdout.split("\n").filter(Boolean));
+        const rawLines = stashRes.stdout.split("\n").filter(Boolean);
+        const parsed: StashEntry[] = rawLines.map((line, idx) => {
+          let displayTitle = line;
+          let branchName = "";
+
+          const tagMatch = line.match(/\[branch:(.+?)\]/);
+          if (tagMatch) {
+            branchName = tagMatch[1].trim();
+            displayTitle = line.replace(/\[branch:.+?\]\s*/, "").replace(/^stash@\{\d+\}:\s*/, "").trim();
+          } else {
+            const gitMatch = line.match(/stash@\{\d+\}:\s*(?:WIP on|On)\s+([^:]+):\s*(.*)/i);
+            if (gitMatch) {
+              branchName = gitMatch[1].trim();
+              displayTitle = gitMatch[2].trim() || gitMatch[1].trim();
+            } else {
+              const matchWip = line.match(/(?:WIP on|On)\s+([^\s:]+)/i);
+              if (matchWip) {
+                branchName = matchWip[1].trim();
+              }
+              displayTitle = line.replace(/^stash@\{\d+\}:\s*/, "").trim();
+            }
+          }
+
+          displayTitle = displayTitle.replace(/^(?:WIP on|On)\s+[^:]+:\s*/i, "").trim() || `stash@{${idx}}`;
+
+          return {
+            originalIndex: idx,
+            rawText: line,
+            displayTitle,
+            branchName
+          };
+        });
+        setStashes(parsed);
       }
 
       if (remoteRes.exit_code === 0 && githubToken) {
@@ -813,11 +936,12 @@ function App() {
   };
 
   const pushStash = async (msg?: string) => {
-    const stashMsg = msg || "Stashed from StageNode";
+    const customMsg = msg || "Stashed changes";
+    const fullStashMsg = `[branch:${currentBranch}] ${customMsg}`;
     try {
       const res = await invoke<GitCliResult>("run_git_cli_cmd", {
         repoPath,
-        args: ["stash", "push", "-m", stashMsg]
+        args: ["stash", "push", "-m", fullStashMsg]
       });
       setCliOutput(res);
       await refreshRepository();
@@ -863,20 +987,43 @@ function App() {
     setStashFileDiff(null);
     setStashDiffLoading(true);
     try {
-      const res = await invoke<GitCliResult>("run_git_cli_cmd", {
+      // 1. Try diff against stash parent
+      let res = await invoke<GitCliResult>("run_git_cli_cmd", {
         repoPath,
-        args: ["stash", "show", "-p", "--stat", `stash@{${index}}`, "--", filePath]
+        args: ["diff", `stash@{${index}}^1`, `stash@{${index}}`, "--", filePath]
       });
       if (res.exit_code === 0 && res.stdout.trim()) {
         setStashFileDiff(res.stdout);
       } else {
-        // Fallback: try without --stat for added files
-        const res2 = await invoke<GitCliResult>("run_git_cli_cmd", {
+        // 2. Try diff against untracked stash commit (stash@{index}^3)
+        let res2 = await invoke<GitCliResult>("run_git_cli_cmd", {
           repoPath,
-          args: ["stash", "show", "-p", `stash@{${index}}`, "--", filePath]
+          args: ["diff", `stash@{${index}}^1`, `stash@{${index}}^3`, "--", filePath]
         });
-        if (res2.exit_code === 0) {
-          setStashFileDiff(res2.stdout || "(no diff available for this file)");
+        if (res2.exit_code === 0 && res2.stdout.trim()) {
+          setStashFileDiff(res2.stdout);
+        } else {
+          // 3. Fallback: try git show stash@{index}:filePath to render as added file
+          let res3 = await invoke<GitCliResult>("run_git_cli_cmd", {
+            repoPath,
+            args: ["show", `stash@{${index}}:${filePath}`]
+          });
+          if (res3.exit_code === 0 && res3.stdout) {
+            const addedDiff = `--- /dev/null\n+++ b/${filePath}\n@@ -0,0 +1,${res3.stdout.split("\n").length} @@\n` + res3.stdout.split("\n").map(l => `+${l}`).join("\n");
+            setStashFileDiff(addedDiff);
+          } else {
+            // 4. Try untracked commit content stash@{index}^3:filePath
+            let res4 = await invoke<GitCliResult>("run_git_cli_cmd", {
+              repoPath,
+              args: ["show", `stash@{${index}}^3:${filePath}`]
+            });
+            if (res4.exit_code === 0 && res4.stdout) {
+              const addedDiff = `--- /dev/null\n+++ b/${filePath}\n@@ -0,0 +1,${res4.stdout.split("\n").length} @@\n` + res4.stdout.split("\n").map(l => `+${l}`).join("\n");
+              setStashFileDiff(addedDiff);
+            } else {
+              setStashFileDiff("(Empty file or binary content)");
+            }
+          }
         }
       }
     } catch (err: any) {
@@ -897,6 +1044,12 @@ function App() {
           args: ["checkout", `stash@{${selectedStashIndex}}`, "--", file]
         });
       }
+      if (checkedStashFiles.size >= stashFiles.length && stashFiles.length > 0) {
+        await invoke<GitCliResult>("run_git_cli_cmd", {
+          repoPath,
+          args: ["stash", "drop", `stash@{${selectedStashIndex}}`]
+        });
+      }
       setDialogType(null);
       setSelectedStashIndex(null);
       await refreshRepository();
@@ -909,8 +1062,18 @@ function App() {
     try {
       const res = await invoke<GitCliResult>("run_git_cli_cmd", {
         repoPath,
-        args: ["stash", "apply", `stash@{${index}}`]
+        args: ["stash", "pop", `stash@{${index}}`]
       });
+      if (res.exit_code !== 0) {
+        await invoke<GitCliResult>("run_git_cli_cmd", {
+          repoPath,
+          args: ["stash", "apply", `stash@{${index}}`]
+        });
+        await invoke<GitCliResult>("run_git_cli_cmd", {
+          repoPath,
+          args: ["stash", "drop", `stash@{${index}}`]
+        });
+      }
       setCliOutput(res);
       setDialogType(null);
       setSelectedStashIndex(null);
@@ -1310,6 +1473,9 @@ function App() {
     if (!commitTitle) return;
     let message = commitTitle;
     if (commitDesc) message += `\n\n${commitDesc}`;
+    if (coAuthors.length > 0) {
+      message += "\n\n" + coAuthors.map(ca => `Co-authored-by: ${ca}`).join("\n");
+    }
 
     try {
       let args = ["commit"];
@@ -1326,6 +1492,9 @@ function App() {
         setCommitTitle("");
         setCommitDesc("");
         setAmendCommit(false);
+        setCoAuthors([]);
+        setCoAuthorInput("");
+        setShowCoAuthorInput(false);
         setCanvasNodes([]);
         setSelectedFile(null);
         await refreshRepository();
@@ -1604,7 +1773,11 @@ function App() {
         isStashListExpanded={isStashListExpanded}
         setIsStashListExpanded={setIsStashListExpanded}
         startPushStash={startPushStash}
-        stashes={stashes}
+        stashes={stashes.filter(s => {
+          const normCurrent = currentBranch.replace(/^refs\/heads\//, "").toLowerCase().trim();
+          const normStashBranch = s.branchName.replace(/^refs\/heads\//, "").toLowerCase().trim();
+          return normStashBranch === normCurrent;
+        })}
         selectedStashIndex={selectedStashIndex}
         dialogType={dialogType}
         openStashInspector={openStashInspector}
@@ -1647,54 +1820,26 @@ function App() {
           />
 
           <div className="view-content">
-            {errorMessage && (
-              <div style={{
-                background: "rgba(224, 108, 117, 0.1)",
-                borderBottom: "1px solid var(--color-deleted)",
-                color: "#f87171",
-                padding: "8px 16px",
-                fontSize: "0.8rem",
-                fontFamily: "var(--font-mono)",
-                whiteSpace: "pre-wrap",
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                zIndex: 90
-              }}>
-                <span>{errorMessage}</span>
-                <button 
-                  style={{ background: "none", border: "none", color: "#f87171", cursor: "pointer", fontWeight: "bold" }}
-                  onClick={() => setErrorMessage(null)}
-                >
-                  ✕
-                </button>
-              </div>
-            )}
-
-            {cliOutput && (
-              <div style={{
-                background: cliOutput.exit_code === 0 ? "rgba(152, 195, 121, 0.1)" : "rgba(224, 108, 117, 0.1)",
-                borderBottom: `1px solid ${cliOutput.exit_code === 0 ? "var(--color-staged)" : "var(--color-deleted)"}`,
-                color: cliOutput.exit_code === 0 ? "var(--color-staged)" : "#f87171",
-                padding: "8px 16px",
-                fontSize: "0.75rem",
-                fontFamily: "var(--font-mono)",
-                whiteSpace: "pre-wrap",
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                maxHeight: "120px",
-                overflowY: "auto"
-              }}>
-                <span>{cliOutput.stdout || cliOutput.stderr || (cliOutput.exit_code === 0 ? "Command succeeded" : "Command failed")}</span>
-                <button 
-                  style={{ background: "none", border: "none", color: "inherit", cursor: "pointer", fontWeight: "bold" }}
-                  onClick={() => setCliOutput(null)}
-                >
-                  ✕
-                </button>
-              </div>
-            )}
+            {/* Sleek Floating Toast Notifications Alert System */}
+            <div className="toast-container">
+              {toasts.map(toast => (
+                <div key={toast.id} className={`toast-item ${toast.type}`}>
+                  <div className="toast-icon">
+                    {toast.type === "success" && <CheckCircle2 size={14} />}
+                    {toast.type === "error" && <AlertCircle size={14} />}
+                    {toast.type === "info" && <Info size={14} />}
+                    {toast.type === "warning" && <AlertTriangle size={14} />}
+                  </div>
+                  <div className="toast-content">
+                    <span className="toast-title">{toast.title}</span>
+                    {toast.message && <span className="toast-message">{toast.message}</span>}
+                  </div>
+                  <button className="toast-close-btn" onClick={() => removeToast(toast.id)} type="button">
+                    <X size={12} />
+                  </button>
+                </div>
+              ))}
+            </div>
 
             {activeTab === "workspace" ? (
               <div className="workspace-view">
@@ -1766,6 +1911,12 @@ function App() {
                     setCommitDesc={setCommitDesc}
                     amendCommit={amendCommit}
                     setAmendCommit={setAmendCommit}
+                    coAuthors={coAuthors}
+                    setCoAuthors={setCoAuthors}
+                    showCoAuthorInput={showCoAuthorInput}
+                    setShowCoAuthorInput={setShowCoAuthorInput}
+                    coAuthorInput={coAuthorInput}
+                    setCoAuthorInput={setCoAuthorInput}
                     unstagedFiles={unstagedFiles}
                     stagedFiles={stagedFiles}
                     handleCommit={handleCommit}

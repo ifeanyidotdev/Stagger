@@ -19,7 +19,7 @@ import {
   Archive,
   RefreshCw
 } from "lucide-react";
-import type { GitHubPR } from '../../types/git';
+import type { GitHubPR, StashEntry } from '../../types/git';
 
 interface SidebarProps {
   sidebarCollapsed: boolean;
@@ -65,7 +65,7 @@ interface SidebarProps {
   isStashListExpanded: boolean;
   setIsStashListExpanded: (val: boolean) => void;
   startPushStash: () => void;
-  stashes: string[];
+  stashes: StashEntry[];
   selectedStashIndex: number | null;
   dialogType: string | null;
   openStashInspector: (index: number) => void;
@@ -514,32 +514,23 @@ const Sidebar: React.FC<SidebarProps> = ({
             </div>
             {isStashListExpanded && (
               <div className="branch-list">
-                {stashes.map((stash, index) => {
-                  const label = stash.replace(/^stash@\{\d+\}:\s*(On [^:]+:\s*)?/, "").trim();
+                {stashes.map((stash) => {
                   return (
                     <div 
-                      key={index} 
-                      className={`branch-item ${selectedStashIndex === index && dialogType === "stash-inspector" ? "active" : ""}`}
-                      onClick={() => openStashInspector(index)}
+                      key={stash.originalIndex} 
+                      className={`branch-item ${selectedStashIndex === stash.originalIndex && dialogType === "stash-inspector" ? "active" : ""}`}
+                      onClick={() => openStashInspector(stash.originalIndex)}
                     >
                       <Archive size={14} />
-                      <span>{label || `stash@{${index}}`}</span>
+                      <span>{stash.displayTitle}</span>
                       <button 
-                        style={{ 
-                          background: "none", 
-                          border: "none", 
-                          cursor: "pointer", 
-                          padding: "2px",
-                          color: "var(--color-text-muted)",
-                          marginLeft: "auto",
-                          display: "flex",
-                          alignItems: "center"
-                        }}
+                        className="branch-action-icon-btn"
                         onClick={(e) => {
                           e.stopPropagation();
-                          dropStash(index);
+                          dropStash(stash.originalIndex);
                         }}
                         title="Delete Stash"
+                        type="button"
                       >
                         <Trash2 size={12} style={{ color: "var(--color-deleted)", opacity: 0.7 }} />
                       </button>

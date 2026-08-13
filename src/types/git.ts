@@ -52,6 +52,13 @@ export interface GitCliResult {
   exit_code: number;
 }
 
+export interface StashEntry {
+  originalIndex: number;
+  rawText: string;
+  displayTitle: string;
+  branchName: string;
+}
+
 export interface HunkNode {
   id: string;
   filePath: string;

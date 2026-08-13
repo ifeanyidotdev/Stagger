@@ -1,13 +1,13 @@
-import React from 'react';
-import { Archive, X, Eye, FileCode, RefreshCw, FolderSync, Trash2, RefreshCcw, FolderPlus, GitMerge, GitCommit, Globe } from 'lucide-react';
-import type { GitHubRepo, DialogType } from '../../types/git';
+import React, { useState } from 'react';
+import { Archive, X, Eye, FileCode, RefreshCw, FolderSync, Trash2, RefreshCcw, FolderPlus, GitMerge, GitCommit, Globe, ChevronDown } from 'lucide-react';
+import type { GitHubRepo, DialogType, StashEntry } from '../../types/git';
 import { invoke } from '@tauri-apps/api/core';
 
 interface DialogsProps {
   dialogType: DialogType;
   setDialogType: (type: DialogType) => void;
   selectedStashIndex: number | null;
-  stashes: string[];
+  stashes: StashEntry[];
   stashFiles: { path: string; status: string }[];
   checkedStashFiles: Set<string>;
   setCheckedStashFiles: (val: Set<string>) => void;
@@ -118,6 +118,8 @@ const Dialogs: React.FC<DialogsProps> = ({
   setStashNameInput,
   pushStash
 }) => {
+  const [isRestoreDropdownOpen, setIsRestoreDropdownOpen] = useState(false);
+
   if (!dialogType) return null;
 
   return (
@@ -142,9 +144,9 @@ const Dialogs: React.FC<DialogsProps> = ({
               <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                 <Archive size={16} style={{ color: "var(--accent-purple-bright)" }} />
                 <span>Stash Inspector</span>
-                {selectedStashIndex !== null && stashes[selectedStashIndex] && (
+                {selectedStashIndex !== null && (
                   <span className="stash-badge" style={{ fontSize: "0.72rem", background: "rgba(168, 85, 247, 0.12)", color: "var(--accent-purple-bright)", padding: "2px 8px", borderRadius: "10px", border: "1px solid rgba(168, 85, 247, 0.25)", fontFamily: "var(--font-mono)" }}>
-                    {stashes[selectedStashIndex].split(":")[0]}
+                    {stashes.find(s => s.originalIndex === selectedStashIndex)?.displayTitle || `stash@{${selectedStashIndex}}`}
                   </span>
                 )}
               </span>
@@ -203,56 +205,63 @@ const Dialogs: React.FC<DialogsProps> = ({
               {/* Left: file list */}
               <div className="stash-file-sidebar">
                 <div className="stash-sidebar-header">
-                  <span>Changed Files ({stashFiles.length})</span>
+                  <span className="stash-sidebar-title">Changed Files ({stashFiles.length})</span>
                   {stashFiles.length > 0 && (
-                    <input
-                      type="checkbox"
-                      className="header-checkbox"
-                      checked={checkedStashFiles.size === stashFiles.length}
-                      onChange={e => {
-                        if (e.target.checked) {
-                          setCheckedStashFiles(new Set(stashFiles.map(f => f.path)));
-                        } else {
+                    <button 
+                      type="button" 
+                      className="stash-select-all-btn"
+                      onClick={() => {
+                        if (checkedStashFiles.size === stashFiles.length) {
                           setCheckedStashFiles(new Set());
+                        } else {
+                          setCheckedStashFiles(new Set(stashFiles.map(f => f.path)));
                         }
                       }}
-                      title="Select all files"
-                    />
+                    >
+                      {checkedStashFiles.size === stashFiles.length ? "Deselect All" : "Select All"}
+                    </button>
                   )}
                 </div>
                 <div className="stash-file-list">
                   {stashFiles.length === 0 && (
-                    <span style={{ fontSize: "0.73rem", color: "var(--color-text-muted)", padding: "12px", textAlign: "center" }}>Loading files…</span>
+                    <div className="stash-empty-files">
+                      <RefreshCw size={16} className="spin-loader" />
+                      <span>Loading stashed files…</span>
+                    </div>
                   )}
                   {stashFiles.map(f => {
                     const parts = f.path.split("/");
                     const name = parts.pop();
                     const dir = parts.join("/");
+                    const isChecked = checkedStashFiles.has(f.path);
+                    const isSelected = selectedStashFile === f.path;
+
                     return (
                       <div
                         key={f.path}
-                        className={`stash-file-item ${selectedStashFile === f.path ? "active" : ""}`}
+                        className={`stash-file-item ${isSelected ? "active" : ""} ${isChecked ? "checked" : ""}`}
                         onClick={() => fetchStashFileDiff(selectedStashIndex, f.path)}
                       >
                         <input
                           type="checkbox"
-                          checked={checkedStashFiles.has(f.path)}
+                          className="stash-item-checkbox"
+                          checked={isChecked}
                           onClick={e => e.stopPropagation()}
                           onChange={e => {
                             const next = new Set(checkedStashFiles);
                             e.target.checked ? next.add(f.path) : next.delete(f.path);
                             setCheckedStashFiles(next);
                           }}
-                          style={{ accentColor: "var(--accent-purple)", flexShrink: 0 }}
                         />
-                        <span className={`stash-status-badge ${f.status === "A" ? "added" : f.status === "D" ? "deleted" : "modified"}`}>
-                          {f.status === "A" ? "ADD" : f.status === "D" ? "DEL" : "MOD"}
-                        </span>
+                        
                         <div className="stash-file-details">
                           <span className="stash-file-name" title={f.path}>{name}</span>
                           {dir && <span className="stash-file-path" title={dir}>{dir}</span>}
                         </div>
-                        <Eye size={12} style={{ opacity: selectedStashFile === f.path ? 1 : 0.4, color: selectedStashFile === f.path ? "var(--accent-purple-bright)" : "currentColor", flexShrink: 0 }} />
+
+                        <span className={`stash-status-pill ${f.status === "A" ? "added" : f.status === "D" ? "deleted" : "modified"}`}>
+                          {f.status === "A" ? "ADD" : f.status === "D" ? "DEL" : "MOD"}
+                        </span>
                       </div>
                     );
                   })}
@@ -264,10 +273,10 @@ const Dialogs: React.FC<DialogsProps> = ({
                 <div className="stash-diff-header">
                   {selectedStashFile ? (
                     <>
-                      <div style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: 0, overflow: "hidden" }}>
-                        <FileCode size={13} style={{ color: "var(--accent-purple-bright)", flexShrink: 0 }} />
-                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: "0.75rem", fontFamily: "var(--font-mono)" }}>{selectedStashFile}</span>
-                        <span className={`stash-status-badge ${stashFiles.find(f => f.path === selectedStashFile)?.status === "A" ? "added" : stashFiles.find(f => f.path === selectedStashFile)?.status === "D" ? "deleted" : "modified"}`} style={{ flexShrink: 0 }}>
+                      <div className="stash-diff-header-info">
+                        <FileCode size={14} className="stash-file-icon" />
+                        <span className="stash-diff-filepath" title={selectedStashFile}>{selectedStashFile}</span>
+                        <span className={`stash-status-pill ${stashFiles.find(f => f.path === selectedStashFile)?.status === "A" ? "added" : stashFiles.find(f => f.path === selectedStashFile)?.status === "D" ? "deleted" : "modified"}`}>
                           {stashFiles.find(f => f.path === selectedStashFile)?.status === "A" ? "ADDED" : stashFiles.find(f => f.path === selectedStashFile)?.status === "D" ? "DELETED" : "MODIFIED"}
                         </span>
                       </div>
@@ -276,22 +285,22 @@ const Dialogs: React.FC<DialogsProps> = ({
                         const additions = lines.filter(l => l.startsWith("+") && !l.startsWith("+++")).length;
                         const deletions = lines.filter(l => l.startsWith("-") && !l.startsWith("---")).length;
                         return (
-                          <div style={{ display: "flex", gap: "8px", alignItems: "center", flexShrink: 0, fontSize: "0.71rem" }}>
-                            <span style={{ color: "var(--color-staged)", fontWeight: 700 }}>+{additions}</span>
-                            <span style={{ color: "var(--color-deleted)", fontWeight: 700 }}>-{deletions}</span>
+                          <div className="stash-diff-stats">
+                            <span className="stat-add">+{additions}</span>
+                            <span className="stat-del">-{deletions}</span>
                           </div>
                         );
                       })()}
                     </>
                   ) : (
-                    <span style={{ color: "var(--color-text-muted)", fontSize: "0.74rem" }}>No file selected</span>
+                    <span className="stash-diff-placeholder">No file selected</span>
                   )}
                 </div>
 
                 {stashDiffLoading ? (
-                  <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "10px", color: "var(--color-text-muted)", fontSize: "0.78rem" }}>
-                    <RefreshCw size={22} style={{ opacity: 0.5, color: "var(--accent-purple)", animation: "spin 1s linear infinite" }} />
-                    <span>Loading diff…</span>
+                  <div className="stash-diff-state-container">
+                    <RefreshCw size={24} className="spin-loader" />
+                    <span>Fetching stash file diff…</span>
                   </div>
                 ) : stashFileDiff ? (
                   <div className="stash-diff-viewer">
@@ -341,62 +350,125 @@ const Dialogs: React.FC<DialogsProps> = ({
                     })()}
                   </div>
                 ) : selectedStashFile ? (
-                  <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "10px", color: "var(--color-text-muted)", fontSize: "0.78rem" }}>
-                    <FileCode size={28} style={{ opacity: 0.3, color: "var(--accent-purple)" }} />
+                  <div className="stash-diff-state-container">
+                    <FileCode size={32} />
                     <span>No diff available for this file</span>
                   </div>
                 ) : (
-                  <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "10px", color: "var(--color-text-muted)", fontSize: "0.78rem" }}>
-                    <Eye size={28} style={{ opacity: 0.3, color: "var(--accent-purple)" }} />
-                    <span>Select a file on the left to view its changes</span>
+                  <div className="stash-diff-state-container">
+                    <Eye size={32} />
+                    <span>Select a file from the list to view diff</span>
                   </div>
                 )}
               </div>
             </div>
 
             <div className="stash-footer-actions">
-              <div className="stash-footer-group">
-                <button 
-                  className="stash-action-btn primary" 
-                  onClick={() => applyStash(selectedStashIndex)}
-                  title="Apply all stashed changes to working tree"
-                >
-                  <Archive size={14} />
-                  Apply Stash
-                </button>
-                <button 
-                  className="stash-action-btn secondary" 
-                  onClick={() => popStash(selectedStashIndex)}
-                  title="Apply stashed changes and remove stash entry"
-                >
-                  <FolderSync size={14} />
-                  Pop Stash
-                </button>
-                <button
-                  className="stash-action-btn outline"
-                  onClick={restoreSelectedStashFiles}
-                  disabled={checkedStashFiles.size === 0}
-                  title={checkedStashFiles.size === 0 ? "Check at least one file to restore" : `Restore ${checkedStashFiles.size} selected file(s)`}
-                >
-                  <RefreshCcw size={14} />
-                  Restore Selected ({checkedStashFiles.size})
-                </button>
+              <div className="stash-footer-group left">
+                <div className="split-dropdown-container">
+                  <button 
+                    className="stash-action-btn primary split-main-btn"
+                    onClick={() => {
+                      if (checkedStashFiles.size > 0 && checkedStashFiles.size < stashFiles.length) {
+                        restoreSelectedStashFiles();
+                      } else {
+                        applyStash(selectedStashIndex);
+                      }
+                    }}
+                    title={checkedStashFiles.size > 0 && checkedStashFiles.size < stashFiles.length ? `Restore ${checkedStashFiles.size} selected file(s)` : "Restore stash changes into working directory"}
+                  >
+                    <Archive size={14} />
+                    <span>
+                      {checkedStashFiles.size > 0 && checkedStashFiles.size < stashFiles.length
+                        ? `Restore Selected (${checkedStashFiles.size})`
+                        : "Restore Stash"}
+                    </span>
+                  </button>
+
+                  <button 
+                    className="stash-action-btn primary split-caret-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsRestoreDropdownOpen(!isRestoreDropdownOpen);
+                    }}
+                    title="More restore options"
+                    type="button"
+                  >
+                    <ChevronDown size={13} />
+                  </button>
+
+                  {isRestoreDropdownOpen && (
+                    <div className="split-dropdown-menu">
+                      <div 
+                        className="split-dropdown-item"
+                        onClick={() => {
+                          if (selectedStashIndex !== null) {
+                            applyStash(selectedStashIndex);
+                          }
+                          setIsRestoreDropdownOpen(false);
+                        }}
+                      >
+                        <Archive size={14} style={{ color: "var(--accent-purple-bright)" }} />
+                        <div className="split-dropdown-item-text">
+                          <span className="title">Restore & Remove Stash</span>
+                          <span className="desc">Restores changes & deletes stash from list</span>
+                        </div>
+                      </div>
+
+                      <div 
+                        className="split-dropdown-item"
+                        onClick={() => {
+                          if (selectedStashIndex !== null) {
+                            popStash(selectedStashIndex);
+                          }
+                          setIsRestoreDropdownOpen(false);
+                        }}
+                      >
+                        <FolderSync size={14} style={{ color: "var(--accent-blue-bright, #38bdf8)" }} />
+                        <div className="split-dropdown-item-text">
+                          <span className="title">Pop & Remove Stash</span>
+                          <span className="desc">Restores changes & deletes stash from list</span>
+                        </div>
+                      </div>
+
+                      {checkedStashFiles.size > 0 && (
+                        <div 
+                          className="split-dropdown-item"
+                          onClick={() => {
+                            restoreSelectedStashFiles();
+                            setIsRestoreDropdownOpen(false);
+                          }}
+                        >
+                          <RefreshCcw size={14} style={{ color: "var(--color-staged)" }} />
+                          <div className="split-dropdown-item-text">
+                            <span className="title">Restore Selected ({checkedStashFiles.size})</span>
+                            <span className="desc">Restores only checked files to working tree</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
 
-              <div className="stash-footer-group">
+              <div className="stash-footer-group right">
                 <button 
                   className="stash-action-btn danger" 
                   onClick={() => dropStash(selectedStashIndex)} 
                   title="Discard stash entry permanently"
                 >
                   <Trash2 size={14} />
-                  Discard Stash
+                  <span>Discard</span>
                 </button>
                 <button 
-                  className="stash-action-btn ghost" 
-                  onClick={() => { setDialogType(null); setSelectedStashIndex(null); }}
+                  className="stash-action-btn close" 
+                  onClick={() => {
+                    setDialogType(null);
+                    setSelectedStashIndex(null);
+                    setIsRestoreDropdownOpen(false);
+                  }}
                 >
-                  Close
+                  <span>Close</span>
                 </button>
               </div>
             </div>
