@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import "./App.css";
 
 // --- Types & Interfaces ---
@@ -102,7 +101,6 @@ function App() {
   // --- COMMIT BUILDER STATE ---
   const [commitTitle, setCommitTitle] = useState("");
   const [commitDesc, setCommitDesc] = useState("");
-  const [coAuthor, setCoAuthor] = useState("");
   const [amendCommit, setAmendCommit] = useState(false);
 
   // --- REMOTE & BRANCH MANAGEMENT STATE ---
@@ -1312,7 +1310,6 @@ function App() {
     if (!commitTitle) return;
     let message = commitTitle;
     if (commitDesc) message += `\n\n${commitDesc}`;
-    if (coAuthor) message += `\n\nCo-authored-by: ${coAuthor}`;
 
     try {
       let args = ["commit"];
@@ -1328,7 +1325,6 @@ function App() {
       if (res.exit_code === 0) {
         setCommitTitle("");
         setCommitDesc("");
-        setCoAuthor("");
         setAmendCommit(false);
         setCanvasNodes([]);
         setSelectedFile(null);
@@ -1768,8 +1764,6 @@ function App() {
                     setCommitTitle={setCommitTitle}
                     commitDesc={commitDesc}
                     setCommitDesc={setCommitDesc}
-                    coAuthor={coAuthor}
-                    setCoAuthor={setCoAuthor}
                     amendCommit={amendCommit}
                     setAmendCommit={setAmendCommit}
                     unstagedFiles={unstagedFiles}

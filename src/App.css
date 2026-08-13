@@ -793,21 +793,7 @@ button, input, textarea, select, a, .workspace-trigger-btn, .tab-button, .branch
   margin-top: 2px;
 }
 
-.coauthor-input {
-  flex: 1;
-  background: var(--bg-app);
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  padding: 6px 10px;
-  color: var(--color-text-bright);
-  font-family: var(--font-sans);
-  font-size: 0.75rem;
-}
 
-.coauthor-input:focus {
-  outline: none;
-  border-color: var(--border-active);
-}
 
 .checkbox-label {
   display: flex;

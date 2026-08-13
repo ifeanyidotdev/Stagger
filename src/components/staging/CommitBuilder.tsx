@@ -7,8 +7,6 @@ interface CommitBuilderProps {
   setCommitTitle: (val: string) => void;
   commitDesc: string;
   setCommitDesc: (val: string) => void;
-  coAuthor: string;
-  setCoAuthor: (val: string) => void;
   amendCommit: boolean;
   setAmendCommit: (val: boolean) => void;
   unstagedFiles: GitFileStatus[];
@@ -21,8 +19,6 @@ const CommitBuilder: React.FC<CommitBuilderProps> = ({
   setCommitTitle,
   commitDesc,
   setCommitDesc,
-  coAuthor,
-  setCoAuthor,
   amendCommit,
   setAmendCommit,
   unstagedFiles,
@@ -46,12 +42,6 @@ const CommitBuilder: React.FC<CommitBuilderProps> = ({
         />
         
         <div className="commit-extras-row">
-          <input 
-            className="coauthor-input"
-            value={coAuthor}
-            onChange={(e) => setCoAuthor(e.target.value)}
-            placeholder="Co-author (e.g. Name <email>)"
-          />
           <label className="checkbox-label">
             <input 
               type="checkbox" 
