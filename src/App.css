@@ -89,6 +89,10 @@ body, html {
   position: relative;
 }
 
+button, input, textarea, select, a, .workspace-trigger-btn, .tab-button, .branch-item, .dialog-content {
+  -webkit-app-region: no-drag;
+}
+
 /* --- DETACHED RESIZE HANDLES --- */
 .resize-handle {
   width: 6px;
@@ -104,8 +108,8 @@ body, html {
 .resize-handle:hover::after, .resize-handle.active::after {
   content: '';
   position: absolute;
-  top: 12px;
-  bottom: 12px;
+  top: 8px;
+  bottom: 8px;
   left: 2px;
   width: 2px;
   background-color: var(--accent-purple);
@@ -119,17 +123,18 @@ body, html {
   border-radius: 12px;
   display: flex;
   flex-direction: column;
-  height: calc(100% - 24px);
+  height: calc(100% - 16px);
   flex-shrink: 0;
   overflow: hidden;
-  margin: 12px 0 12px 12px;
+  margin: 8px 0 8px 8px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
   transition: width 0.15s cubic-bezier(0.4, 0, 0.2, 1), margin 0.15s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .sidebar-header {
-  padding: 16px;
+  padding: 24px 14px 12px 14px;
   border-bottom: 1px solid var(--border-color);
+  -webkit-app-region: drag;
 }
 
 .logo-container {
@@ -337,8 +342,8 @@ body, html {
   flex: 1;
   overflow: hidden;
   background: transparent;
-  padding: 12px;
-  gap: 12px;
+  padding: 0 8px 8px 8px;
+  gap: 8px;
 }
 
 /* Floating Topbar Capsule */
@@ -353,6 +358,12 @@ body, html {
   background: var(--bg-panel);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   flex-shrink: 0;
+  -webkit-app-region: drag;
+  transition: padding-left 0.15s ease;
+}
+
+.topbar.sidebar-collapsed-topbar {
+  padding-left: 78px;
 }
 
 .view-tabs {

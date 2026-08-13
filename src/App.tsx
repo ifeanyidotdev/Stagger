@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import "./App.css";
 
 // --- Types & Interfaces ---
@@ -1509,13 +1510,37 @@ function App() {
     }
   };
 
-  // --- AUTO INITIALIZATION ---
+  // --- REAL-TIME AUTOMATIC REPOSITORY WATCHER & REFRESH ---
   useEffect(() => {
     refreshRepository();
     if (githubToken) {
       fetchGitHubUser(githubToken);
     }
   }, []);
+
+  // Auto-refresh when switching window focus or visibility back to StageNode
+  useEffect(() => {
+    const handleFocusOrVisible = () => {
+      if (repoPath && document.visibilityState === "visible") {
+        refreshRepository();
+      }
+    };
+    window.addEventListener("focus", handleFocusOrVisible);
+    document.addEventListener("visibilitychange", handleFocusOrVisible);
+    return () => {
+      window.removeEventListener("focus", handleFocusOrVisible);
+      document.removeEventListener("visibilitychange", handleFocusOrVisible);
+    };
+  }, [repoPath]);
+
+  // Periodic automatic status polling watcher (every 2 seconds)
+  useEffect(() => {
+    if (!repoPath) return;
+    const interval = setInterval(() => {
+      refreshRepository();
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [repoPath]);
 
   const stagedFiles = files.filter(f => f.staged_status !== null);
   const unstagedFiles = files.filter(f => f.unstaged_status !== null);
@@ -1593,187 +1618,190 @@ function App() {
         unpushedCount={unpushedCount}
       />
 
-      {!sidebarCollapsed && (
-        <div 
-          className={`resize-handle ${activeResizer === 'sidebar' ? 'active' : ''}`}
-          onMouseDown={() => setActiveResizer('sidebar')}
-        />
-      )}
-
-      <div className="main-panel">
-        {isCollabActive && (
-          <div className="collab-overlay-banner">
-            <div className="collab-user-badge">
-              <div className="collab-user-dot" />
-              <span>Multiplayer Session sharing active with: <strong>Alex (Lead Reviewer)</strong></span>
-            </div>
-            <span style={{ fontSize: "0.75rem", color: "var(--color-conflict)", cursor: "pointer" }} onClick={() => setIsCollabActive(false)}>Disconnect</span>
-          </div>
+        {!sidebarCollapsed && (
+          <div 
+            className={`resize-handle ${activeResizer === 'sidebar' ? 'active' : ''}`}
+            onMouseDown={() => setActiveResizer('sidebar')}
+          />
         )}
 
-        <Topbar 
-          sidebarCollapsed={sidebarCollapsed}
-          setSidebarCollapsed={setSidebarCollapsed}
-          activeTab={activeTab}
-          setActiveTab={setActiveTab}
-          githubToken={githubToken}
-          remoteUrl={remoteUrl}
-          setDialogType={setDialogType}
-          setDialogInput={setDialogInput}
-          setDialogInput2={setDialogInput2}
-          githubUser={githubUser}
-          handleGitHubSignout={handleGitHubSignout}
-        />
-
-        <div className="view-content">
-          {errorMessage && (
-            <div style={{
-              background: "rgba(224, 108, 117, 0.1)",
-              borderBottom: "1px solid var(--color-deleted)",
-              color: "#f87171",
-              padding: "8px 16px",
-              fontSize: "0.8rem",
-              fontFamily: "var(--font-mono)",
-              whiteSpace: "pre-wrap",
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              zIndex: 90
-            }}>
-              <span>{errorMessage}</span>
-              <button 
-                style={{ background: "none", border: "none", color: "#f87171", cursor: "pointer", fontWeight: "bold" }}
-                onClick={() => setErrorMessage(null)}
-              >
-                ✕
-              </button>
-            </div>
-          )}
-
-          {cliOutput && (
-            <div style={{
-              background: "var(--bg-panel-secondary)",
-              borderBottom: "1px solid var(--border-color)",
-              color: "var(--color-text-main)",
-              padding: "8px 16px",
-              fontSize: "0.75rem",
-              fontFamily: "var(--font-mono)",
-              whiteSpace: "pre-wrap",
-              maxHeight: "120px",
-              overflowY: "auto",
-              display: "flex",
-              flexDirection: "column"
-            }}>
-              <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid var(--border-color)", paddingBottom: "4px", marginBottom: "4px" }}>
-                <span style={{ fontWeight: "bold", color: "var(--color-modified)" }}>CLI Output (Exit Code: {cliOutput.exit_code})</span>
-                <button style={{ background: "none", border: "none", color: "var(--color-text-muted)", cursor: "pointer" }} onClick={() => setCliOutput(null)}>✕</button>
+        <div className="main-panel">
+          {isCollabActive && (
+            <div className="collab-overlay-banner">
+              <div className="collab-user-badge">
+                <div className="collab-user-dot" />
+                <span>Multiplayer Session sharing active with: <strong>Alex (Lead Reviewer)</strong></span>
               </div>
-              <span>{cliOutput.stdout || cliOutput.stderr || "Command executed with no output."}</span>
+              <span style={{ fontSize: "0.75rem", color: "var(--color-conflict)", cursor: "pointer" }} onClick={() => setIsCollabActive(false)}>Disconnect</span>
             </div>
           )}
 
-          {activeTab === "workspace" ? (
-            <div className="workspace-view">
-              <FilePane 
-                filePaneWidth={filePaneWidth}
-                refreshRepository={refreshRepository}
-                conflictedFiles={conflictedFiles}
-                resolveConflict={resolveConflict}
-                unstagedCollapsed={unstagedCollapsed}
-                setUnstagedCollapsed={setUnstagedCollapsed}
-                unstagedFiles={unstagedFiles}
-                checkedUnstaged={checkedUnstaged}
-                setCheckedUnstaged={setCheckedUnstaged}
-                stageSelectedUnstaged={stageSelectedUnstaged}
-                stageAllUnstaged={stageAllUnstaged}
-                selectedFile={selectedFile}
-                selectFileForStaging={selectFileForStaging}
-                stageWholeFile={stageWholeFile}
-                stagedCollapsed={stagedCollapsed}
-                setStagedCollapsed={setStagedCollapsed}
-                stagedFiles={stagedFiles}
-                checkedStaged={checkedStaged}
-                setCheckedStaged={setCheckedStaged}
-                unstageSelectedStaged={unstageSelectedStaged}
-                unstageAllStaged={unstageAllStaged}
-                unstageWholeFile={unstageWholeFile}
-                hasRepo={hasRepo}
-                initializeGitRepo={initializeGitRepo}
-              />
+          <Topbar 
+            sidebarCollapsed={sidebarCollapsed}
+            setSidebarCollapsed={setSidebarCollapsed}
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
+            githubToken={githubToken}
+            remoteUrl={remoteUrl}
+            setDialogType={setDialogType}
+            setDialogInput={setDialogInput}
+            setDialogInput2={setDialogInput2}
+            githubUser={githubUser}
+            handleGitHubSignout={handleGitHubSignout}
+          />
 
-              <div 
-                className={`resize-handle ${activeResizer === 'filepane' ? 'active' : ''}`}
-                onMouseDown={() => setActiveResizer('filepane')}
-              />
+          <div className="view-content">
+            {errorMessage && (
+              <div style={{
+                background: "rgba(224, 108, 117, 0.1)",
+                borderBottom: "1px solid var(--color-deleted)",
+                color: "#f87171",
+                padding: "8px 16px",
+                fontSize: "0.8rem",
+                fontFamily: "var(--font-mono)",
+                whiteSpace: "pre-wrap",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                zIndex: 90
+              }}>
+                <span>{errorMessage}</span>
+                <button 
+                  style={{ background: "none", border: "none", color: "#f87171", cursor: "pointer", fontWeight: "bold" }}
+                  onClick={() => setErrorMessage(null)}
+                >
+                  ✕
+                </button>
+              </div>
+            )}
 
-              <div className="staging-mesh-pane">
-                {selectedFile && isConflictFile(selectedFile) ? (
-                  <ConflictResolver 
-                    selectedFile={selectedFile}
-                    resolveConflict={resolveConflict}
-                    currentBranch={currentBranch}
-                    isLoadingConflict={isLoadingConflict}
-                    conflictOursContent={conflictOursContent}
-                    conflictTheirsContent={conflictTheirsContent}
-                    conflictDiffInfo={conflictDiffInfo}
-                  />
-                ) : (
-                  <StagingCanvas 
-                    canvasRef={canvasRef}
-                    handleCanvasMouseMove={handleCanvasMouseMove}
-                    handleCanvasMouseUp={handleCanvasMouseUp}
-                    canvasMinWidth={Math.max(...canvasNodes.map(n => n.x + 400), 750)}
-                    canvasMinHeight={Math.max(...canvasNodes.map(n => n.y + 260), 600)}
-                    collabPeers={collabPeers}
-                    conflictedFiles={conflictedFiles}
-                    selectedFile={selectedFile}
-                    canvasNodes={canvasNodes}
-                    draggingNodeId={draggingNodeId}
-                    handleNodeMouseDown={handleNodeMouseDown}
-                    stageSingleHunk={stageSingleHunk}
-                    setActiveDetailHunk={setActiveDetailHunk}
-                  />
-                )}
+            {cliOutput && (
+              <div style={{
+                background: cliOutput.exit_code === 0 ? "rgba(152, 195, 121, 0.1)" : "rgba(224, 108, 117, 0.1)",
+                borderBottom: `1px solid ${cliOutput.exit_code === 0 ? "var(--color-staged)" : "var(--color-deleted)"}`,
+                color: cliOutput.exit_code === 0 ? "var(--color-staged)" : "#f87171",
+                padding: "8px 16px",
+                fontSize: "0.75rem",
+                fontFamily: "var(--font-mono)",
+                whiteSpace: "pre-wrap",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                maxHeight: "120px",
+                overflowY: "auto"
+              }}>
+                <span>{cliOutput.stdout || cliOutput.stderr || (cliOutput.exit_code === 0 ? "Command succeeded" : "Command failed")}</span>
+                <button 
+                  style={{ background: "none", border: "none", color: "inherit", cursor: "pointer", fontWeight: "bold" }}
+                  onClick={() => setCliOutput(null)}
+                >
+                  ✕
+                </button>
+              </div>
+            )}
 
-                <CommitBuilder 
-                  commitTitle={commitTitle}
-                  setCommitTitle={setCommitTitle}
-                  commitDesc={commitDesc}
-                  setCommitDesc={setCommitDesc}
-                  coAuthor={coAuthor}
-                  setCoAuthor={setCoAuthor}
-                  amendCommit={amendCommit}
-                  setAmendCommit={setAmendCommit}
+            {activeTab === "workspace" ? (
+              <div className="workspace-view">
+                <FilePane 
+                  filePaneWidth={filePaneWidth}
+                  refreshRepository={refreshRepository}
+                  conflictedFiles={conflictedFiles}
+                  resolveConflict={resolveConflict}
+                  unstagedCollapsed={unstagedCollapsed}
+                  setUnstagedCollapsed={setUnstagedCollapsed}
                   unstagedFiles={unstagedFiles}
+                  checkedUnstaged={checkedUnstaged}
+                  setCheckedUnstaged={setCheckedUnstaged}
+                  stageSelectedUnstaged={stageSelectedUnstaged}
+                  stageAllUnstaged={stageAllUnstaged}
+                  selectedFile={selectedFile}
+                  selectFileForStaging={selectFileForStaging}
+                  stageWholeFile={stageWholeFile}
+                  stagedCollapsed={stagedCollapsed}
+                  setStagedCollapsed={setStagedCollapsed}
                   stagedFiles={stagedFiles}
-                  handleCommit={handleCommit}
+                  checkedStaged={checkedStaged}
+                  setCheckedStaged={setCheckedStaged}
+                  unstageSelectedStaged={unstageSelectedStaged}
+                  unstageAllStaged={unstageAllStaged}
+                  unstageWholeFile={unstageWholeFile}
+                  hasRepo={hasRepo}
+                  initializeGitRepo={initializeGitRepo}
                 />
+
+                <div 
+                  className={`resize-handle ${activeResizer === 'filepane' ? 'active' : ''}`}
+                  onMouseDown={() => setActiveResizer('filepane')}
+                />
+
+                <div className="staging-mesh-pane">
+                  {selectedFile && isConflictFile(selectedFile) ? (
+                    <ConflictResolver 
+                      selectedFile={selectedFile}
+                      resolveConflict={resolveConflict}
+                      currentBranch={currentBranch}
+                      isLoadingConflict={isLoadingConflict}
+                      conflictOursContent={conflictOursContent}
+                      conflictTheirsContent={conflictTheirsContent}
+                      conflictDiffInfo={conflictDiffInfo}
+                    />
+                  ) : (
+                    <StagingCanvas 
+                      canvasRef={canvasRef}
+                      handleCanvasMouseMove={handleCanvasMouseMove}
+                      handleCanvasMouseUp={handleCanvasMouseUp}
+                      canvasMinWidth={Math.max(...canvasNodes.map(n => n.x + 400), 750)}
+                      canvasMinHeight={Math.max(...canvasNodes.map(n => n.y + 260), 600)}
+                      collabPeers={collabPeers}
+                      conflictedFiles={conflictedFiles}
+                      selectedFile={selectedFile}
+                      canvasNodes={canvasNodes}
+                      draggingNodeId={draggingNodeId}
+                      handleNodeMouseDown={handleNodeMouseDown}
+                      stageSingleHunk={stageSingleHunk}
+                      setActiveDetailHunk={setActiveDetailHunk}
+                    />
+                  )}
+
+                  <CommitBuilder 
+                    commitTitle={commitTitle}
+                    setCommitTitle={setCommitTitle}
+                    commitDesc={commitDesc}
+                    setCommitDesc={setCommitDesc}
+                    coAuthor={coAuthor}
+                    setCoAuthor={setCoAuthor}
+                    amendCommit={amendCommit}
+                    setAmendCommit={setAmendCommit}
+                    unstagedFiles={unstagedFiles}
+                    stagedFiles={stagedFiles}
+                    handleCommit={handleCommit}
+                  />
+                </div>
               </div>
-            </div>
-          ) : (
-            <HistoryView 
-              filteredCommits={filteredCommits}
-              commits={commits}
-              historySearchQuery={historySearchQuery}
-              setHistorySearchQuery={setHistorySearchQuery}
-              graphPaths={graphPaths}
-              graphNodes={graphNodes}
-              selectedCommit={selectedCommit}
-              selectCommitDetails={selectCommitDetails}
-              handleDragStartCommit={handleDragStartCommit}
-              draggedCommitSha={draggedCommitSha}
-              openStashInspector={openStashInspector}
-              activeResizer={activeResizer}
-              setActiveResizer={setActiveResizer}
-              commitDetailsWidth={commitDetailsWidth}
-              selectedCommitDiffFiles={selectedCommitDiffFiles}
-              selectedCommitDiffFile={selectedCommitDiffFile}
-              showCommitFileDiff={showCommitFileDiff}
-              selectedCommitFileDiff={selectedCommitFileDiff}
-            />
-          )}
+            ) : (
+              <HistoryView 
+                filteredCommits={filteredCommits}
+                commits={commits}
+                historySearchQuery={historySearchQuery}
+                setHistorySearchQuery={setHistorySearchQuery}
+                graphPaths={graphPaths}
+                graphNodes={graphNodes}
+                selectedCommit={selectedCommit}
+                selectCommitDetails={selectCommitDetails}
+                handleDragStartCommit={handleDragStartCommit}
+                draggedCommitSha={draggedCommitSha}
+                openStashInspector={openStashInspector}
+                activeResizer={activeResizer}
+                setActiveResizer={setActiveResizer}
+                commitDetailsWidth={commitDetailsWidth}
+                selectedCommitDiffFiles={selectedCommitDiffFiles}
+                selectedCommitDiffFile={selectedCommitDiffFile}
+                showCommitFileDiff={showCommitFileDiff}
+                selectedCommitFileDiff={selectedCommitFileDiff}
+              />
+            )}
+          </div>
         </div>
-      </div>
 
       <Dialogs 
         dialogType={dialogType}

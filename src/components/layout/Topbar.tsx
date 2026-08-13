@@ -30,7 +30,7 @@ const Topbar: React.FC<TopbarProps> = ({
   handleGitHubSignout
 }) => {
   return (
-    <div className="topbar">
+    <div className={`topbar ${sidebarCollapsed ? "sidebar-collapsed-topbar" : ""}`} data-tauri-drag-region>
       <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
         {sidebarCollapsed && (
           <button 

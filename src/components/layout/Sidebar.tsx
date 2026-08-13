@@ -134,7 +134,7 @@ const Sidebar: React.FC<SidebarProps> = ({
       style={{ width: sidebarCollapsed ? 0 : `${sidebarWidth}px` }}
     >
       {/* Sidebar Header: Relocated Workspace Switcher Dropdown (Replacing static logo) */}
-      <div className="sidebar-header" style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+      <div className="sidebar-header" data-tauri-drag-region style={{ display: "flex", gap: "8px", alignItems: "center" }}>
         <div className="sidebar-workspace-switcher" style={{ flex: 1 }}>
           <button 
             className="workspace-trigger-btn"
