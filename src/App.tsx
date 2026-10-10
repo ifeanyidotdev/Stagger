@@ -1634,7 +1634,7 @@ function App() {
     try {
       const res = await invoke<GitCliResult>("run_git_cli_cmd", {
         repoPath,
-        args: ["diff-tree", "--no-commit-id", "--name-only", "-r", commit.id]
+        args: ["diff-tree", "--root", "--no-commit-id", "--name-only", "-r", commit.id]
       });
       if (res.exit_code === 0) {
         const filesList = res.stdout.split("\n").filter(Boolean);
@@ -1653,7 +1653,7 @@ function App() {
     try {
       const diffRes = await invoke<GitCliResult>("run_git_cli_cmd", {
         repoPath,
-        args: ["diff", `${commitId}~1..${commitId}`, "--", filePath]
+        args: ["show", "--format=", commitId, "--", filePath]
       });
       
       if (diffRes.exit_code === 0) {
@@ -1815,6 +1815,7 @@ function App() {
             setSidebarCollapsed={setSidebarCollapsed}
             activeTab={activeTab}
             setActiveTab={setActiveTab}
+            currentBranch={currentBranch}
             githubToken={githubToken}
             remoteUrl={remoteUrl}
             setDialogType={setDialogType}
@@ -2015,19 +2016,25 @@ function App() {
         <div className="hunk-details-overlay" onClick={() => setActiveDetailHunk(null)}>
           <div className="hunk-details-modal" onClick={(e) => e.stopPropagation()}>
             <div className="hunk-details-header">
-              <span className="hunk-details-title">Staging Hunk Inspector: Detailed Line Changes</span>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <span className="hunk-details-title">Staging Hunk Inspector</span>
+                <span className="commit-sha-badge" style={{ margin: 0, fontSize: "0.72rem" }}>{activeDetailHunk.header}</span>
+              </div>
               <button 
-                style={{ background: "none", border: "none", color: "var(--color-text-muted)", cursor: "pointer", fontSize: "1.1rem", fontWeight: "bold" }}
+                className="dialog-close-btn"
                 onClick={() => setActiveDetailHunk(null)}
+                title="Close Inspector"
               >
-                ✕
+                <X size={16} />
               </button>
             </div>
             
             <div className="hunk-details-content">
               <div className="hunk-details-code">
-                <div className="diff-hunk-header" style={{ padding: "6px 12px" }}>{activeDetailHunk.header}</div>
-                <div style={{ padding: "10px 0" }}>
+                <div className="diff-hunk-header" style={{ padding: "8px 14px", background: "rgba(139, 92, 246, 0.08)", borderBottom: "1px solid var(--border-color)", fontFamily: "var(--font-mono)", fontSize: "0.76rem", color: "var(--accent-purple-bright)" }}>
+                  {activeDetailHunk.header}
+                </div>
+                <div style={{ padding: "8px 0" }}>
                   {activeDetailHunk.lines.map((line, idx) => (
                     <div 
                       key={idx} 
@@ -2035,10 +2042,10 @@ function App() {
                         line.origin === "+" ? "addition" : 
                         line.origin === "-" ? "deletion" : "context"
                       }`}
-                      style={{ fontSize: "0.8rem", padding: "3px 14px" }}
+                      style={{ fontSize: "0.8rem", padding: "3px 14px", fontFamily: "var(--font-mono)", display: "flex", gap: "10px" }}
                     >
-                      <span style={{ width: "16px", display: "inline-block" }}>{line.origin}</span>
-                      <span>{line.content}</span>
+                      <span style={{ width: "16px", display: "inline-block", userSelect: "none", opacity: 0.6 }}>{line.origin}</span>
+                      <span style={{ flex: 1, whiteSpace: "pre-wrap", wordBreak: "break-all" }}>{line.content}</span>
                     </div>
                   ))}
                 </div>
@@ -2049,10 +2056,21 @@ function App() {
               <button 
                 className="dialog-button secondary" 
                 onClick={() => setActiveDetailHunk(null)}
-                style={{ padding: "8px 18px" }}
               >
                 Close Inspector
               </button>
+              {(() => {
+                const node = canvasNodes.find(n => n.hunk.header === activeDetailHunk.header);
+                if (!node) return null;
+                return (
+                  <button 
+                    className="dialog-button primary"
+                    onClick={() => stageSingleHunk(node)}
+                  >
+                    {node.isStaged ? "Unstage This Hunk" : "Stage This Hunk"}
+                  </button>
+                );
+              })()}
             </div>
           </div>
         </div>

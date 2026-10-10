@@ -1,9 +1,11 @@
 import React from 'react';
 import {
   Layers,
-  ChevronRight,
-  Minus,
+  ChevronDown,
   FolderPlus,
+  Folder,
+  Check,
+  X,
   ChevronLeft,
   MoreVertical,
   Plus,
@@ -139,37 +141,74 @@ const Sidebar: React.FC<SidebarProps> = ({
           <button 
             className="workspace-trigger-btn"
             onClick={() => setIsWorkspaceDropdownOpen(!isWorkspaceDropdownOpen)}
+            title="Switch Workspace Project"
           >
-            <div style={{ display: "flex", alignItems: "center", gap: "6px", overflow: "hidden" }}>
-              <Layers className="logo-icon" size={16} style={{ flexShrink: 0 }} />
-              <span className="logo-text" style={{ textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap", maxWidth: "120px" }}>
+            <div className="workspace-trigger-icon-wrap">
+              <Layers size={13} />
+            </div>
+            <div className="workspace-trigger-info">
+              <span className="workspace-trigger-name">
                 {activeWorkspaceName}
               </span>
             </div>
-            <ChevronRight size={14} style={{ transform: isWorkspaceDropdownOpen ? "rotate(90deg)" : "none", transition: "transform 0.15s ease", flexShrink: 0 }} />
+            <ChevronDown 
+              size={13} 
+              style={{ 
+                color: "var(--color-text-muted)",
+                transform: isWorkspaceDropdownOpen ? "rotate(180deg)" : "none", 
+                transition: "transform 0.2s cubic-bezier(0.16, 1, 0.3, 1)", 
+                flexShrink: 0 
+              }} 
+            />
           </button>
           
           {isWorkspaceDropdownOpen && (
             <div className="workspace-menu-dropdown">
-              <div style={{ padding: "4px 12px 6px 12px", fontSize: "0.7rem", fontWeight: "bold", color: "var(--color-text-muted)" }}>
-                SWITCH WORKSPACE
+              <div className="workspace-menu-header">
+                <span>Workspaces</span>
+                <span className="details-count-badge">{workspaces.length}</span>
               </div>
-              {workspaces.map(wPath => (
-                <div 
-                  key={wPath}
-                  className={`workspace-menu-item ${repoPath === wPath ? "active" : ""}`}
-                  onClick={() => selectWorkspace(wPath)}
-                >
-                  <span className="workspace-menu-item-text" title={wPath}>
-                    {wPath.split("/").pop() || wPath}
-                  </span>
-                  <Minus 
-                    size={12} 
-                    style={{ color: "var(--color-deleted)", marginLeft: "8px", cursor: "pointer", opacity: 0.7 }}
-                    onClick={(e) => removeWorkspace(e, wPath)} 
-                  />
-                </div>
-              ))}
+              <div className="workspace-menu-list">
+                {workspaces.map(wPath => {
+                  const name = wPath.split("/").pop() || wPath;
+                  const isActive = repoPath === wPath;
+                  return (
+                    <div 
+                      key={wPath}
+                      className={`workspace-menu-item ${isActive ? "active" : ""}`}
+                      onClick={() => {
+                        selectWorkspace(wPath);
+                        setIsWorkspaceDropdownOpen(false);
+                      }}
+                    >
+                      <div className="workspace-item-content">
+                        <Folder size={13} style={{ color: isActive ? "var(--accent-purple-bright)" : "var(--color-text-muted)", flexShrink: 0 }} />
+                        <span className="workspace-menu-item-text" title={wPath}>
+                          {name}
+                        </span>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                        {isActive && (
+                          <Check size={12} style={{ color: "var(--color-staged)", flexShrink: 0 }} />
+                        )}
+                        {workspaces.length > 1 && (
+                          <button 
+                            className="workspace-remove-btn"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              removeWorkspace(e, wPath);
+                            }}
+                            title="Remove workspace from list"
+                            type="button"
+                          >
+                            <X size={11} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
               
               <div className="workspace-menu-divider" />
               
@@ -181,8 +220,8 @@ const Sidebar: React.FC<SidebarProps> = ({
                   setDialogInput("");
                 }}
               >
-                <FolderPlus size={14} />
-                Add Workspace Folder
+                <FolderPlus size={13} />
+                <span>Add Workspace Folder...</span>
               </button>
             </div>
           )}
@@ -553,17 +592,11 @@ const Sidebar: React.FC<SidebarProps> = ({
             <span>Collaboration</span>
           </div>
           <button 
-            className="sync-button" 
-            style={{ 
-              width: "100%", 
-              gap: "8px", 
-              background: isCollabActive ? "var(--bg-hover)" : "var(--bg-app)", 
-              border: "1px solid var(--border-color)" 
-            }}
+            className={`collab-toggle-btn ${isCollabActive ? "active" : ""}`}
             onClick={() => setIsCollabActive(!isCollabActive)}
           >
             <Users size={14} style={{ color: isCollabActive ? "var(--color-conflict)" : "inherit" }} />
-            {isCollabActive ? "Session Room Active" : "Go Multiplayer"}
+            <span>{isCollabActive ? "Session Room Active" : "Go Multiplayer"}</span>
           </button>
         </div>
 
@@ -574,36 +607,33 @@ const Sidebar: React.FC<SidebarProps> = ({
         <div style={{ display: "flex", gap: "8px", marginBottom: "4px" }}>
           {!hasUpstream ? (
             <button 
-              className="sync-button" 
-              style={{ flex: 1, background: "var(--accent-purple)" }}
+              className="sync-button sync-button--primary" 
               onClick={() => handleGitPush(true)}
               disabled={isPushingRemote}
               title="Publish branch to remote origin"
             >
               <Globe size={14} className={isPushingRemote ? "spin-icon" : ""} />
-              {isPushingRemote ? "Publishing..." : "Publish Branch"}
+              <span>{isPushingRemote ? "Publishing..." : "Publish Branch"}</span>
             </button>
           ) : unpushedCount > 0 ? (
             <button 
-              className="sync-button" 
-              style={{ flex: 1, background: "var(--accent-purple)" }}
+              className="sync-button sync-button--primary" 
               onClick={() => handleGitPush(false)}
               disabled={isPushingRemote}
               title={`Push ${unpushedCount} local commit(s) to origin`}
             >
               <ArrowUp size={14} className={isPushingRemote ? "spin-icon" : ""} />
-              {isPushingRemote ? "Pushing..." : `Push Origin (${unpushedCount})`}
+              <span>{isPushingRemote ? "Pushing..." : `Push Origin (${unpushedCount})`}</span>
             </button>
           ) : (
             <button 
-              className="sync-button" 
-              style={{ flex: 1 }}
+              className="sync-button sync-button--secondary" 
               onClick={() => handleGitFetch(false)}
               disabled={isFetchingRemote}
               title="Fetch updates from origin"
             >
               <RefreshCw size={14} className={isFetchingRemote ? "spin-icon" : ""} />
-              {isFetchingRemote ? "Fetching..." : "Fetch Origin"}
+              <span>{isFetchingRemote ? "Fetching..." : "Fetch Origin"}</span>
             </button>
           )}
         </div>

@@ -680,22 +680,25 @@ const Dialogs: React.FC<DialogsProps> = ({
 
         {/* CONNECT GITHUB ACCOUNT */}
         {dialogType === "login" && (
-          <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-            <button className="sync-button" onClick={loginGitHubOAuth}>
-              <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: "4px" }}><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path></svg>
-              Authorize via browser (OAuth)
+          <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+            <button className="sync-button" style={{ background: "var(--accent-button)", padding: "10px 14px", fontWeight: 600 }} onClick={loginGitHubOAuth}>
+              <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: "6px" }}><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path></svg>
+              Authorize via Browser (OAuth)
             </button>
-            <div style={{ textAlign: "center", color: "var(--color-text-muted)", fontSize: "0.75rem" }}>— OR —</div>
+            <div style={{ textAlign: "center", color: "var(--color-text-muted)", fontSize: "0.75rem", letterSpacing: "0.05em" }}>— OR USE PERSONAL ACCESS TOKEN —</div>
             <input 
               className="dialog-input"
               value={dialogInput}
               onChange={(e) => setDialogInput(e.target.value)}
               type="password"
-              placeholder="Paste GitHub Personal Access Token (PAT)"
+              placeholder="Paste GitHub Personal Access Token (PAT)..."
             />
-            <button className="sync-button" style={{ background: "var(--accent-button)" }} onClick={handlePATLogin}>
-              Connect via PAT
-            </button>
+            <div className="dialog-actions">
+              <button className="dialog-button secondary" onClick={() => setDialogType(null)}>Cancel</button>
+              <button className="dialog-button primary" onClick={handlePATLogin} disabled={!dialogInput}>
+                Connect via PAT
+              </button>
+            </div>
           </div>
         )}
 
@@ -749,9 +752,12 @@ const Dialogs: React.FC<DialogsProps> = ({
                 Browse...
               </button>
             </div>
-            <button className="sync-button" onClick={handleCloneRepo}>
-              Clone Repository
-            </button>
+            <div className="dialog-actions">
+              <button className="dialog-button secondary" onClick={() => setDialogType(null)}>Cancel</button>
+              <button className="dialog-button primary" onClick={handleCloneRepo} disabled={!dialogInput}>
+                Clone Repository
+              </button>
+            </div>
           </div>
         )}
 
@@ -767,15 +773,19 @@ const Dialogs: React.FC<DialogsProps> = ({
               onChange={(e) => setDialogInput(e.target.value)}
               placeholder="Pull request title..."
             />
-            <input 
+            <textarea 
               className="dialog-input"
+              style={{ minHeight: "70px", resize: "vertical" }}
               value={dialogInput2}
               onChange={(e) => setDialogInput2(e.target.value)}
               placeholder="Pull request description..."
             />
-            <button className="sync-button" onClick={handleCreatePR}>
-              Publish Pull Request
-            </button>
+            <div className="dialog-actions">
+              <button className="dialog-button secondary" onClick={() => setDialogType(null)}>Cancel</button>
+              <button className="dialog-button primary" onClick={handleCreatePR} disabled={!dialogInput}>
+                Publish Pull Request
+              </button>
+            </div>
           </div>
         )}
 
@@ -960,11 +970,7 @@ const Dialogs: React.FC<DialogsProps> = ({
           </div>
         )}
 
-        {dialogType !== "branch" && dialogType !== "checkout" && dialogType !== "workspace-add" && dialogType !== "git-init-confirm" && dialogType !== "checkout-conflict" && dialogType !== "delete-branch-confirm" && dialogType !== "git-delete-force-confirm" && dialogType !== "stash-name" && dialogType !== "stash-inspector" && dialogType !== "merge-rebase" && dialogType !== "set-remote" && dialogType !== "publish" && (
-          <div className="dialog-actions" style={{ marginTop: "6px" }}>
-            <button className="dialog-button secondary" style={{ width: "100%" }} onClick={() => setDialogType(null)}>Cancel</button>
-          </div>
-        )}
+
       </div>
     </div>
   );

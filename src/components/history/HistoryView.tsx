@@ -274,9 +274,10 @@ const HistoryView: React.FC<HistoryViewProps> = ({
                           line.origin === "+" ? "addition" : 
                           line.origin === "-" ? "deletion" : "context"
                         }`}
+                        style={{ fontFamily: "var(--font-mono)", fontSize: "0.78rem", padding: "2px 8px", display: "flex", gap: "8px" }}
                       >
-                        <span>{line.origin}</span>
-                        <span>{line.content.trim()}</span>
+                        <span style={{ width: "14px", display: "inline-block", userSelect: "none", opacity: 0.6 }}>{line.origin}</span>
+                        <span style={{ flex: 1, whiteSpace: "pre-wrap", wordBreak: "break-all" }}>{line.content}</span>
                       </div>
                     ))}
                   </div>

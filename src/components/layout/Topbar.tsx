@@ -7,6 +7,7 @@ interface TopbarProps {
   setSidebarCollapsed: (val: boolean) => void;
   activeTab: any;
   setActiveTab: (val: any) => void;
+  currentBranch?: string;
   githubToken: string | null;
   remoteUrl: string | null;
   setDialogType: (val: any) => void;
@@ -21,6 +22,7 @@ const Topbar: React.FC<TopbarProps> = ({
   setSidebarCollapsed,
   activeTab,
   setActiveTab,
+  currentBranch,
   githubToken,
   remoteUrl,
   setDialogType,
@@ -31,11 +33,10 @@ const Topbar: React.FC<TopbarProps> = ({
 }) => {
   return (
     <div className={`topbar ${sidebarCollapsed ? "sidebar-collapsed-topbar" : ""}`} data-tauri-drag-region>
-      <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+      <div style={{ display: "flex", gap: "10px", alignItems: "center", minWidth: 0 }}>
         {sidebarCollapsed && (
           <button 
             className="sidebar-toggle-btn"
-            style={{ marginRight: "8px" }}
             onClick={() => setSidebarCollapsed(false)}
             title="Expand Sidebar"
           >
@@ -58,6 +59,13 @@ const Topbar: React.FC<TopbarProps> = ({
             <span>History Graph</span>
           </button>
         </div>
+
+        {currentBranch && (
+          <div className="topbar-branch-pill" title={`Active Branch: ${currentBranch}`}>
+            <div className="topbar-branch-dot" />
+            <span className="topbar-branch-name">{currentBranch}</span>
+          </div>
+        )}
       </div>
 
       {/* Restored GitHub Auth Badge (Topbar Right-Side) */}
@@ -65,27 +73,15 @@ const Topbar: React.FC<TopbarProps> = ({
         
         {githubToken && remoteUrl && (
           <button 
-            style={{
-              background: "var(--bg-app)",
-              border: "1px solid var(--border-color)",
-              borderRadius: "4px",
-              color: "var(--color-text-bright)",
-              fontSize: "0.8rem",
-              padding: "4px 8px",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              gap: "4px",
-              marginRight: "4px"
-            }}
+            className="topbar-action-btn"
             onClick={() => {
               setDialogType("pr-create");
               setDialogInput("");
               setDialogInput2("");
             }}
           >
-            <GitPullRequest size={12} />
-            Create PR
+            <GitPullRequest size={13} />
+            <span>Create PR</span>
           </button>
         )}
 
@@ -93,11 +89,11 @@ const Topbar: React.FC<TopbarProps> = ({
         <div className="topbar-auth-section">
           {!githubToken ? (
             <button 
-              className="topbar-link-btn"
+              className="topbar-action-btn"
               onClick={() => setDialogType("login")}
             >
               <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path></svg>
-              Connect GitHub
+              <span>Connect GitHub</span>
             </button>
           ) : (
             <div className="topbar-auth-badge">

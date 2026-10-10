@@ -115,16 +115,31 @@ const StagingCanvas: React.FC<StagingCanvasProps> = ({
               cursor: draggingNodeId === node.id ? "grabbing" : "grab"
             }}
             onMouseDown={(e) => handleNodeMouseDown(e, node.id)}
+            onDoubleClick={() => setActiveDetailHunk(node.hunk)}
           >
             <div className="node-header">
               <span className="node-title">{node.hunk.header}</span>
-              <button 
-                className="node-action"
-                onMouseDown={(e) => e.stopPropagation()} 
-                onClick={() => stageSingleHunk(node)}
-              >
-                Stage Hunk
-              </button>
+              <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                <button 
+                  className="node-action"
+                  style={{ background: "rgba(255, 255, 255, 0.05)", border: "1px solid var(--border-color)", color: "var(--color-text-main)" }}
+                  onMouseDown={(e) => e.stopPropagation()} 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setActiveDetailHunk(node.hunk);
+                  }}
+                  title="Open floating inspector for this hunk"
+                >
+                  Inspect
+                </button>
+                <button 
+                  className={`node-action ${node.isStaged ? "staged" : ""}`}
+                  onMouseDown={(e) => e.stopPropagation()} 
+                  onClick={() => stageSingleHunk(node)}
+                >
+                  {node.isStaged ? "Unstage Hunk" : "Stage Hunk"}
+                </button>
+              </div>
             </div>
 
             <div 
@@ -134,7 +149,7 @@ const StagingCanvas: React.FC<StagingCanvasProps> = ({
                 setActiveDetailHunk(node.hunk);
               }}
               style={{ cursor: "pointer" }}
-              title="Click to view detailed changes"
+              title="Click to view floating detailed inspector"
             >
               <div className="diff-hunk-header">{node.hunk.header}</div>
               <div style={{ maxHeight: "110px", overflowY: "auto" }}>
