@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { CheckCircle2, AlertCircle, Info, AlertTriangle, X } from "lucide-react";
+import { X } from "lucide-react";
 import "./App.css";
 
 // --- Types & Interfaces ---
@@ -122,94 +122,16 @@ function App() {
   const [mergeRebaseMode, setMergeRebaseMode] = useState<"merge" | "rebase">("merge");
   const [targetMergeBranch, setTargetMergeBranch] = useState<string>("");
 
-  // --- TOAST ALERTS SYSTEM ---
-  const [toasts, setToasts] = useState<{ id: string; type: "success" | "error" | "info" | "warning"; title: string; message?: string }[]>([]);
-
-  const addToast = (type: "success" | "error" | "info" | "warning", title: string, message?: string) => {
-    const id = Date.now().toString() + Math.random().toString(36).substring(2, 5);
-    const newToast = { id, type, title, message };
-    setToasts(prev => [...prev.slice(-4), newToast]);
-
-    setTimeout(() => {
-      setToasts(prev => prev.filter(t => t.id !== id));
-    }, type === "error" ? 6000 : 4000);
-  };
-
-  const removeToast = (id: string) => {
-    setToasts(prev => prev.filter(t => t.id !== id));
-  };
-
-  const formatGitAlertMessage = (raw: string, type: "success" | "error"): { title: string; message: string } => {
-    const clean = raw.trim();
-
-    if (type === "success") {
-      if (clean.includes("Changes to be committed:") || clean.includes("new file:") || clean.includes("modified:")) {
-        const lineCount = clean.split("\n").filter(l => l.includes(":")).length || 1;
-        return { title: "Files Staged", message: `${lineCount} file(s) staged successfully.` };
-      }
-      if (clean.includes("Switched to branch")) {
-        const match = clean.match(/Switched to branch ['"](.+?)['"]/);
-        const branch = match ? match[1] : "target branch";
-        return { title: "Branch Switched", message: `Now active on branch "${branch}".` };
-      }
-      if (clean.includes("Switched to a new branch")) {
-        const match = clean.match(/Switched to a new branch ['"](.+?)['"]/);
-        const branch = match ? match[1] : "new branch";
-        return { title: "Branch Created", message: `Created and checked out "${branch}".` };
-      }
-      if (clean.includes("Already on")) {
-        return { title: "Already Active", message: "You are already on this branch." };
-      }
-      if (clean.includes("Saved working directory")) {
-        return { title: "Stash Created", message: "Stashed working changes successfully." };
-      }
-      if (clean.includes("Applied stash") || clean.includes("Restored")) {
-        return { title: "Stash Restored", message: "Stashed changes restored to working directory." };
-      }
-      if (clean.includes("Dropped stash") || clean.includes("Deleted")) {
-        return { title: "Stash Deleted", message: "Stash entry removed." };
-      }
-      if (clean.includes("Deleted branch")) {
-        return { title: "Branch Deleted", message: "Branch deleted successfully." };
-      }
-      return { title: "Action Succeeded", message: clean.length > 80 ? clean.substring(0, 80) + "..." : clean };
-    } else {
-      if (clean.includes("Your local changes to the following files would be overwritten")) {
-        return { title: "Uncommitted Changes Conflict", message: "Please stash or commit your changes before switching branches." };
-      }
-      if (clean.includes("already exists")) {
-        return { title: "Already Exists", message: "A branch or reference with this name already exists." };
-      }
-      if (clean.includes("pathspec") && clean.includes("did not match")) {
-        return { title: "Target Not Found", message: "The specified target or file could not be found." };
-      }
-      if (clean.includes("Permission denied") || clean.includes("Authentication failed")) {
-        return { title: "Authentication Failed", message: "Check your SSH key or GitHub credentials." };
-      }
-      if (clean.includes("merge conflict") || clean.includes("CONFLICT")) {
-        return { title: "Merge Conflict", message: "Merge conflict detected. Resolve conflicts to proceed." };
-      }
-      return { title: "Action Failed", message: clean.length > 100 ? clean.substring(0, 100) + "..." : clean };
-    }
-  };
-
-  // --- POPUPS & INTERACTIVE INPUT STATES ---
+  // --- ERROR & CLI OUTPUT HANDLERS ---
   const setErrorMessage = (msg: string | null) => {
     if (!msg) return;
-    const alert = formatGitAlertMessage(msg, "error");
-    addToast("error", alert.title, alert.message);
+    console.error("Git error:", msg);
   };
 
   const setCliOutput = (res: GitCliResult | null) => {
     if (!res) return;
-    if (res.exit_code === 0) {
-      if (res.stdout.trim()) {
-        const alert = formatGitAlertMessage(res.stdout, "success");
-        addToast("success", alert.title, alert.message);
-      }
-    } else {
-      const alert = formatGitAlertMessage(res.stderr || res.stdout || "Command failed", "error");
-      addToast("error", alert.title, alert.message);
+    if (res.exit_code !== 0) {
+      console.error("Git CLI error:", res.stderr || res.stdout);
     }
   };
   const [dialogType, setDialogType] = useState<"branch" | "checkout" | "clone" | "publish" | "set-remote" | "pr-create" | "login" | "workspace-add" | "git-init-confirm" | "delete-branch-confirm" | "git-delete-force-confirm" | "checkout-conflict" | "stash-name" | "stash-inspector" | "merge-rebase" | null>(null);
@@ -608,7 +530,6 @@ function App() {
   const handleGitFetch = async (allRemotes: boolean = false) => {
     if (isFetchingRemote) return;
     setIsFetchingRemote(true);
-    addToast("info", "Fetching Remote", "Checking origin for updates...");
     // Guarantee loading indicator renders on screen immediately before CLI command
     await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     try {
@@ -618,14 +539,12 @@ function App() {
         args
       });
       if (res.exit_code === 0) {
-        addToast("success", "Fetch Complete", "Remote origin up to date.");
         await refreshRepository();
       } else {
-        const alert = formatGitAlertMessage(res.stderr || res.stdout, "error");
-        addToast("error", alert.title, alert.message);
+        setErrorMessage(res.stderr || res.stdout);
       }
     } catch (err: any) {
-      addToast("error", "Fetch Failed", err.toString());
+      setErrorMessage(err.toString());
     } finally {
       setIsFetchingRemote(false);
     }
@@ -640,7 +559,6 @@ function App() {
     if (isPushingRemote) return;
 
     setIsPushingRemote(true);
-    addToast("info", publish || !hasUpstream ? "Publishing Branch" : "Pushing to Origin", `Pushing ${currentBranch} to origin...`);
     // Guarantee loading indicator and button update render on screen immediately before CLI command
     await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
@@ -654,19 +572,17 @@ function App() {
         args
       });
       if (res.exit_code === 0) {
-        addToast("success", "Push Succeeded", `Successfully pushed ${currentBranch} to origin.`);
         await refreshRepository();
       } else {
         if (res.stderr.includes("does not appear to be a git repository") || res.stderr.includes("No such remote") || res.stderr.includes("destination specifier")) {
           setDialogInput("");
           setDialogType("set-remote");
         } else {
-          const alert = formatGitAlertMessage(res.stderr || res.stdout, "error");
-          addToast("error", alert.title, alert.message);
+          setErrorMessage(res.stderr || res.stdout);
         }
       }
     } catch (err: any) {
-      addToast("error", "Push Failed", err.toString());
+      setErrorMessage(err.toString());
     } finally {
       setIsPushingRemote(false);
     }
@@ -705,7 +621,6 @@ function App() {
   const handleGitPull = async () => {
     if (isPullingRemote) return;
     setIsPullingRemote(true);
-    addToast("info", "Pulling Changes", `Pulling updates from origin for ${currentBranch}...`);
     // Guarantee loading indicator renders on screen immediately before CLI command
     await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     try {
@@ -716,15 +631,11 @@ function App() {
       setCliOutput(res);
       if (res.exit_code === 0) {
         setErrorMessage(null);
-        addToast("success", "Pull Complete", "Local branch updated successfully.");
         await refreshRepository();
       } else {
-        const alert = formatGitAlertMessage(res.stderr || res.stdout, "error");
-        addToast("error", alert.title || "Pull Failed", alert.message || res.stderr);
         setErrorMessage(`Pull failed:\n${res.stderr || res.stdout}`);
       }
     } catch (err: any) {
-      addToast("error", "Pull Failed", err.toString());
       setErrorMessage(err.toString());
     } finally {
       setIsPullingRemote(false);
@@ -1254,7 +1165,6 @@ function App() {
   const handleCloneRepo = async () => {
     if (!dialogInput || !dialogInput2 || isCloningRepo) return;
     setIsCloningRepo(true);
-    addToast("info", "Cloning Repository", `Cloning repository into ${dialogInput2}...`);
     // Ensure loading indicator renders on screen immediately before CLI command
     await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
@@ -1266,7 +1176,6 @@ function App() {
       });
       setCliOutput(res);
       if (res.exit_code === 0) {
-        addToast("success", "Clone Succeeded", `Successfully cloned repository into ${folderName}.`);
         const fullClonedPath = `${dialogInput2}/${folderName}`;
         const newList = [...workspaces];
         if (!newList.includes(fullClonedPath)) {
@@ -1280,12 +1189,9 @@ function App() {
         setDialogInput2("");
         await refreshRepository(fullClonedPath);
       } else {
-        const alert = formatGitAlertMessage(res.stderr || res.stdout, "error");
-        addToast("error", alert.title || "Clone Failed", alert.message || res.stderr);
         setErrorMessage(res.stderr);
       }
     } catch (err: any) {
-      addToast("error", "Clone Failed", err.toString());
       setErrorMessage(err.toString());
     } finally {
       setIsCloningRepo(false);
@@ -1851,27 +1757,6 @@ function App() {
           />
 
           <div className="view-content">
-            {/* Sleek Floating Toast Notifications Alert System */}
-            <div className="toast-container">
-              {toasts.map(toast => (
-                <div key={toast.id} className={`toast-item ${toast.type}`}>
-                  <div className="toast-icon">
-                    {toast.type === "success" && <CheckCircle2 size={14} />}
-                    {toast.type === "error" && <AlertCircle size={14} />}
-                    {toast.type === "info" && <Info size={14} />}
-                    {toast.type === "warning" && <AlertTriangle size={14} />}
-                  </div>
-                  <div className="toast-content">
-                    <span className="toast-title">{toast.title}</span>
-                    {toast.message && <span className="toast-message">{toast.message}</span>}
-                  </div>
-                  <button className="toast-close-btn" onClick={() => removeToast(toast.id)} type="button">
-                    <X size={12} />
-                  </button>
-                </div>
-              ))}
-            </div>
-
             {activeTab === "workspace" ? (
               <div className="workspace-view">
                 <FilePane 
@@ -1930,7 +1815,6 @@ function App() {
                       canvasNodes={canvasNodes}
                       draggingNodeId={draggingNodeId}
                       handleNodeMouseDown={handleNodeMouseDown}
-                      stageSingleHunk={stageSingleHunk}
                       setActiveDetailHunk={setActiveDetailHunk}
                     />
                   )}
