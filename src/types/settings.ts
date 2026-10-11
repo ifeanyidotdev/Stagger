@@ -1,0 +1,29 @@
+export interface GlobalSettings {
+  git_user_name?: string | null;
+  git_user_email?: string | null;
+  git_default_branch?: string | null;
+  global_gitignore_path?: string | null;
+  sync_git_global_config?: boolean | null;
+  ai_provider?: 'gemini' | 'openai' | null;
+  gemini_api_key?: string | null;
+  gemini_model?: string | null;
+  openai_api_key?: string | null;
+  openai_model?: string | null;
+  openai_base_url?: string | null;
+}
+
+export interface SystemGitConfig {
+  user_name?: string | null;
+  user_email?: string | null;
+  default_branch?: string | null;
+  excludes_file?: string | null;
+}
+
+export interface WorkspaceSettings {
+  repo_path: string;
+  remote_url?: string | null;
+  local_user_name?: string | null;
+  local_user_email?: string | null;
+  has_local_identity: boolean;
+  gitignore_exists: boolean;
+}

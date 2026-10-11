@@ -20,6 +20,7 @@ import StagingCanvas from "./components/staging/StagingCanvas";
 import CommitBuilder from "./components/staging/CommitBuilder";
 import HistoryView from "./components/history/HistoryView";
 import Dialogs from "./components/modals/Dialogs";
+import SettingsModal from "./components/modals/SettingsModal";
 
 function App() {
   // --- REPOSITORY & WORKSPACE STATE ---
@@ -137,6 +138,7 @@ function App() {
   const [dialogType, setDialogType] = useState<"branch" | "checkout" | "clone" | "publish" | "set-remote" | "pr-create" | "login" | "workspace-add" | "git-init-confirm" | "delete-branch-confirm" | "git-delete-force-confirm" | "checkout-conflict" | "stash-name" | "stash-inspector" | "merge-rebase" | null>(null);
   const [dialogInput, setDialogInput] = useState("");
   const [dialogInput2, setDialogInput2] = useState(""); 
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   // --- REMOTE COLLABORATION STATE ---
   const [isCollabActive, setIsCollabActive] = useState(false);
@@ -1754,6 +1756,7 @@ function App() {
             setDialogInput2={setDialogInput2}
             githubUser={githubUser}
             handleGitHubSignout={handleGitHubSignout}
+            onOpenSettings={() => setIsSettingsOpen(true)}
           />
 
           <div className="view-content">
@@ -1920,6 +1923,17 @@ function App() {
         stashNameInput={stashNameInput}
         setStashNameInput={setStashNameInput}
         pushStash={pushStash}
+      />
+
+      <SettingsModal 
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        repoPath={repoPath}
+        currentBranch={currentBranch}
+        onRemoteUrlUpdated={(newUrl) => setRemoteUrl(newUrl)}
+        onSettingsSaved={() => {
+          refreshRepository(repoPath);
+        }}
       />
 
       {activeDetailHunk && (

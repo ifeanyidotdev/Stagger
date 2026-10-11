@@ -117,6 +117,25 @@ pub fn get_git_status_impl(repo_path: &str) -> Result<GitStatusResult, String> {
         }
     };
 
+    // Apply global gitignore if configured
+    if let Ok(settings) = crate::settings::get_global_settings_impl() {
+        if let Some(ref ignore_path) = settings.global_gitignore_path {
+            if !ignore_path.trim().is_empty() {
+                let resolved = crate::settings::expand_tilde(ignore_path.trim());
+                if resolved.exists() {
+                    if let Ok(content) = std::fs::read_to_string(&resolved) {
+                        for line in content.lines() {
+                            let trimmed = line.trim();
+                            if !trimmed.is_empty() && !trimmed.starts_with('#') {
+                                let _ = repo.add_ignore_rule(trimmed);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     let mut status_options = git2::StatusOptions::new();
     status_options.include_untracked(true);
     status_options.recurse_untracked_dirs(true);
