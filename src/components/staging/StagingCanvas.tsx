@@ -14,7 +14,6 @@ interface StagingCanvasProps {
   canvasNodes: HunkNode[];
   draggingNodeId: string | null;
   handleNodeMouseDown: (e: React.MouseEvent, nodeId: string) => void;
-  stageSingleHunk: (node: HunkNode) => void;
   setActiveDetailHunk: (hunk: DiffHunk) => void;
 }
 
@@ -30,7 +29,6 @@ const StagingCanvas: React.FC<StagingCanvasProps> = ({
   canvasNodes,
   draggingNodeId,
   handleNodeMouseDown,
-  stageSingleHunk,
   setActiveDetailHunk
 }) => {
   return (
@@ -117,29 +115,32 @@ const StagingCanvas: React.FC<StagingCanvasProps> = ({
             onMouseDown={(e) => handleNodeMouseDown(e, node.id)}
             onDoubleClick={() => setActiveDetailHunk(node.hunk)}
           >
-            <div className="node-header">
+            <div 
+              className="node-header"
+              onClick={(e) => {
+                e.stopPropagation();
+                setActiveDetailHunk(node.hunk);
+              }}
+              style={{ cursor: "pointer" }}
+              title="Click to open inspector for this hunk"
+            >
               <span className="node-title">{node.hunk.header}</span>
-              <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
-                <button 
-                  className="node-action"
-                  style={{ background: "rgba(255, 255, 255, 0.05)", border: "1px solid var(--border-color)", color: "var(--color-text-main)" }}
-                  onMouseDown={(e) => e.stopPropagation()} 
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setActiveDetailHunk(node.hunk);
+              {node.isStaged && (
+                <span 
+                  className="node-badge staged" 
+                  style={{ 
+                    fontSize: "0.68rem", 
+                    fontWeight: 600, 
+                    color: "var(--color-staged)", 
+                    padding: "2px 6px", 
+                    background: "rgba(34, 197, 94, 0.12)", 
+                    borderRadius: "4px",
+                    border: "1px solid rgba(34, 197, 94, 0.25)"
                   }}
-                  title="Open floating inspector for this hunk"
                 >
-                  Inspect
-                </button>
-                <button 
-                  className={`node-action ${node.isStaged ? "staged" : ""}`}
-                  onMouseDown={(e) => e.stopPropagation()} 
-                  onClick={() => stageSingleHunk(node)}
-                >
-                  {node.isStaged ? "Unstage Hunk" : "Stage Hunk"}
-                </button>
-              </div>
+                  Staged
+                </span>
+              )}
             </div>
 
             <div 
