@@ -76,3 +76,38 @@ jobs:
           releaseDraft: true
           prerelease: false
           args: '--target ${{ matrix.target }}'
+
+  finalize-release:
+    needs: publish-tauri
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Publish Draft Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.ref_type == 'tag' && github.ref_name || '' }}"
+          if [ -z "$TAG" ]; then
+            VERSION=$(node -p "require('./src-tauri/tauri.conf.json').version")
+            TAG="v$VERSION"
+          fi
+
+          echo "Target release tag: $TAG"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Publishing draft release for tag: $TAG"
+            gh release edit "$TAG" --draft=false --latest
+            echo "Successfully published release $TAG!"
+          else
+            DRAFT_TAG=$(gh release list --limit 10 --json isDraft,tagName --jq '.[] | select(.isDraft) | .tagName' | head -n 1)
+            if [ -n "$DRAFT_TAG" ]; then
+              echo "Found draft release $DRAFT_TAG, publishing..."
+              gh release edit "$DRAFT_TAG" --draft=false --latest
+              echo "Successfully published release $DRAFT_TAG!"
+            else
+              echo "No draft release found to publish."
+            fi
+          fi
