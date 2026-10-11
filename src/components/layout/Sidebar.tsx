@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import {
   Layers,
   ChevronDown,
@@ -130,6 +130,44 @@ const Sidebar: React.FC<SidebarProps> = ({
   setIsCollabActive,
   unpushedCount
 }) => {
+  const branchOpsMenuRef = useRef<HTMLDivElement>(null);
+  const branchOpsBtnRef = useRef<HTMLSpanElement>(null);
+  const workspaceDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isBranchOpsDropdownOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        branchOpsMenuRef.current && 
+        !branchOpsMenuRef.current.contains(e.target as Node) &&
+        branchOpsBtnRef.current &&
+        !branchOpsBtnRef.current.contains(e.target as Node)
+      ) {
+        setIsBranchOpsDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isBranchOpsDropdownOpen, setIsBranchOpsDropdownOpen]);
+
+  useEffect(() => {
+    if (!isWorkspaceDropdownOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        workspaceDropdownRef.current && 
+        !workspaceDropdownRef.current.contains(e.target as Node)
+      ) {
+        setIsWorkspaceDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isWorkspaceDropdownOpen, setIsWorkspaceDropdownOpen]);
+
   return (
     <div 
       className={`sidebar ${sidebarCollapsed ? "collapsed" : ""}`}
@@ -137,7 +175,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     >
       {/* Sidebar Header: Relocated Workspace Switcher Dropdown (Replacing static logo) */}
       <div className="sidebar-header" data-tauri-drag-region style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-        <div className="sidebar-workspace-switcher" style={{ flex: 1 }}>
+        <div className="sidebar-workspace-switcher" ref={workspaceDropdownRef} style={{ flex: 1 }}>
           <button 
             className="workspace-trigger-btn"
             onClick={() => setIsWorkspaceDropdownOpen(!isWorkspaceDropdownOpen)}
@@ -260,8 +298,17 @@ const Sidebar: React.FC<SidebarProps> = ({
             </div>
             <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
               <span
+                ref={branchOpsBtnRef}
                 title="Git Operations & Sync Menu"
-                style={{ display: "inline-flex", alignItems: "center", cursor: "pointer", padding: "2px" }}
+                style={{ 
+                  display: "inline-flex", 
+                  alignItems: "center", 
+                  cursor: "pointer", 
+                  padding: "2px",
+                  borderRadius: "4px",
+                  background: isBranchOpsDropdownOpen ? "var(--bg-hover)" : "transparent",
+                  color: isBranchOpsDropdownOpen ? "var(--color-text-bright)" : "inherit"
+                }}
                 onClick={(e) => {
                   e.stopPropagation();
                   setIsBranchOpsDropdownOpen(!isBranchOpsDropdownOpen);
@@ -285,6 +332,7 @@ const Sidebar: React.FC<SidebarProps> = ({
             {/* SIDEBAR BRANCH & REMOTE OPERATIONS DROPDOWN MENU */}
             {isBranchOpsDropdownOpen && (
               <div 
+                ref={branchOpsMenuRef}
                 className="branch-ops-dropdown"
                 onClick={(e) => e.stopPropagation()}
               >

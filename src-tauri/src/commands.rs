@@ -29,13 +29,21 @@ pub fn unstage_file(repo_path: String, file_path: String) -> Result<(), String> 
 }
 
 #[tauri::command]
-pub fn apply_patch_to_index(repo_path: String, patch_content: String) -> Result<GitCliResult, String> {
-    git::apply_patch_to_index_impl(&repo_path, &patch_content)
+pub async fn apply_patch_to_index(repo_path: String, patch_content: String) -> Result<GitCliResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        git::apply_patch_to_index_impl(&repo_path, &patch_content)
+    })
+    .await
+    .map_err(|e| format!("Task execution error: {}", e))?
 }
 
 #[tauri::command]
-pub fn run_git_cli_cmd(repo_path: String, args: Vec<String>) -> Result<GitCliResult, String> {
-    git::run_git_cli_cmd_impl(&repo_path, &args)
+pub async fn run_git_cli_cmd(repo_path: String, args: Vec<String>) -> Result<GitCliResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        git::run_git_cli_cmd_impl(&repo_path, &args)
+    })
+    .await
+    .map_err(|e| format!("Task execution error: {}", e))?
 }
 
 #[tauri::command]
@@ -83,11 +91,15 @@ pub fn unstage_files(repo_path: String, file_paths: Vec<String>) -> Result<(), S
 }
 
 #[tauri::command]
-pub fn select_folder() -> Option<String> {
-    rfd::FileDialog::new()
-        .set_title("Select Workspace Folder")
-        .pick_folder()
-        .map(|path| path.to_string_lossy().into_owned())
+pub async fn select_folder() -> Option<String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        rfd::FileDialog::new()
+            .set_title("Select Workspace Folder")
+            .pick_folder()
+            .map(|path| path.to_string_lossy().into_owned())
+    })
+    .await
+    .unwrap_or(None)
 }
 
 

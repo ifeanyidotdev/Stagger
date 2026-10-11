@@ -44,6 +44,7 @@ interface DialogsProps {
   loginGitHubOAuth: () => void;
   handlePATLogin: () => void;
   githubRepos: GitHubRepo[];
+  isCloningRepo?: boolean;
   handleCloneRepo: () => void;
   handleCreatePR: () => void;
   handleDialogSubmit: () => void;
@@ -102,6 +103,7 @@ const Dialogs: React.FC<DialogsProps> = ({
   loginGitHubOAuth,
   handlePATLogin,
   githubRepos,
+  isCloningRepo = false,
   handleCloneRepo,
   handleCreatePR,
   handleDialogSubmit,
@@ -723,6 +725,7 @@ const Dialogs: React.FC<DialogsProps> = ({
               value={dialogInput}
               onChange={(e) => setDialogInput(e.target.value)}
               placeholder="Or enter git URL (https://github.com/...)"
+              disabled={isCloningRepo}
             />
             <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
               <input 
@@ -731,11 +734,13 @@ const Dialogs: React.FC<DialogsProps> = ({
                 value={dialogInput2}
                 onChange={(e) => setDialogInput2(e.target.value)}
                 placeholder="Local destination path..."
+                disabled={isCloningRepo}
               />
               <button 
                 className="dialog-button secondary"
                 style={{ display: "flex", alignItems: "center", gap: "6px", whiteSpace: "nowrap" }}
                 type="button"
+                disabled={isCloningRepo}
                 onClick={async () => {
                   try {
                     const folder = await invoke<string | null>("select_folder");
@@ -753,9 +758,21 @@ const Dialogs: React.FC<DialogsProps> = ({
               </button>
             </div>
             <div className="dialog-actions">
-              <button className="dialog-button secondary" onClick={() => setDialogType(null)}>Cancel</button>
-              <button className="dialog-button primary" onClick={handleCloneRepo} disabled={!dialogInput}>
-                Clone Repository
+              <button className="dialog-button secondary" onClick={() => setDialogType(null)} disabled={isCloningRepo}>Cancel</button>
+              <button 
+                className="dialog-button primary" 
+                onClick={handleCloneRepo} 
+                disabled={!dialogInput || !dialogInput2 || isCloningRepo}
+                style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+              >
+                {isCloningRepo ? (
+                  <>
+                    <RefreshCw size={13} className="spin-icon" />
+                    <span>Cloning Repository...</span>
+                  </>
+                ) : (
+                  <span>Clone Repository</span>
+                )}
               </button>
             </div>
           </div>

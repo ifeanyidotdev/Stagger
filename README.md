@@ -1,11 +1,11 @@
-# StageNode
+# Stagger
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Tauri](https://img.shields.io/badge/Tauri-v2-24C8D8.svg?logo=tauri)](https://tauri.app)
 [![React](https://img.shields.io/badge/React-v19-61DAFB.svg?logo=react)](https://react.dev)
 [![TypeScript](https://img.shields.io/badge/TypeScript-v5-3178C6.svg?logo=typescript)](https://www.typescriptlang.org)
 
-**StageNode** is a modern, lightweight desktop Git GUI client built for speed, clarity, and seamless workflow management. Powered by **Tauri v2**, **React 19**, **TypeScript**, and **Rust**, StageNode provides a visual workspace for staging changes, switching branches, stashing work, and creating pull requests without leaving your desktop interface.
+**Stagger** is a modern, lightweight desktop Git GUI client built for speed, clarity, and seamless workflow management. Powered by **Tauri v2**, **React 19**, **TypeScript**, and **Rust**, StageNode provides a visual workspace for staging changes, switching branches, stashing work, and creating pull requests without leaving your desktop interface.
 
 ---
 
@@ -16,7 +16,7 @@
 - **🛡️ Smart Auto-Stashing**: Safely switch branches without losing uncommitted work thanks to automatic worktree stashing.
 - **📦 Stash Management**: Save, view, pop, apply, or drop stashes directly within the application.
 - **🚀 Pull Request Integration**: Draft and initiate GitHub/GitLab pull requests directly from your workspace.
-- **🎨 Modern Dark/Purple UI**: Premium aesthetic with intuitive navigation, keyboard shortcuts, and responsive layouts.
+- **🎨 Modern Theme**: Premium aesthetic with intuitive navigation, keyboard shortcuts, and responsive layouts.
 
 ---
 
@@ -43,12 +43,14 @@ Ensure you have the following installed on your development machine:
 ### Installation
 
 1. Clone the repository:
+
    ```bash
-   git clone https://github.com/your-username/StageNode.git
-   cd StageNode
+   git clone https://github.com/your-username/Stagger.git
+   cd Stagger
    ```
 
 2. Install dependencies:
+
    ```bash
    npm install
    # or
@@ -80,7 +82,7 @@ bun tauri build
 ## 📂 Project Structure
 
 ```
-StageNode/
+Stagger/
 ├── src/                # React 19 Frontend (TypeScript, CSS, Components)
 │   ├── App.tsx         # Main Application UI & Git State Management
 │   ├── App.css         # Styling system & dark purple theme
@@ -103,6 +105,7 @@ This project is licensed under the **GNU General Public License v3.0** - see the
 ### Summary of GPL-3.0
 
 You are free to:
+
 - **Use**: Run the software for any purpose.
 - **Study**: Inspect and modify the source code.
 - **Share**: Copy and redistribute the software.

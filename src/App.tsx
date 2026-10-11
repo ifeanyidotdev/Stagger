@@ -116,6 +116,7 @@ function App() {
   const [isFetchingRemote, setIsFetchingRemote] = useState<boolean>(false);
   const [isPushingRemote, setIsPushingRemote] = useState<boolean>(false);
   const [isPullingRemote, setIsPullingRemote] = useState<boolean>(false);
+  const [isCloningRepo, setIsCloningRepo] = useState<boolean>(false);
   const [isRemoteBranchListExpanded, setIsRemoteBranchListExpanded] = useState<boolean>(true);
   const [isBranchOpsDropdownOpen, setIsBranchOpsDropdownOpen] = useState<boolean>(false);
   const [mergeRebaseMode, setMergeRebaseMode] = useState<"merge" | "rebase">("merge");
@@ -605,9 +606,11 @@ function App() {
 
   // --- GIT REMOTE & MERGE/REBASE ACTIONS ---
   const handleGitFetch = async (allRemotes: boolean = false) => {
+    if (isFetchingRemote) return;
     setIsFetchingRemote(true);
     addToast("info", "Fetching Remote", "Checking origin for updates...");
-    await new Promise(resolve => setTimeout(resolve, 10));
+    // Guarantee loading indicator renders on screen immediately before CLI command
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     try {
       const args = allRemotes ? ["fetch", "--all", "--prune"] : ["fetch", "origin"];
       const res = await invoke<GitCliResult>("run_git_cli_cmd", {
@@ -634,9 +637,12 @@ function App() {
       setDialogType("set-remote");
       return;
     }
+    if (isPushingRemote) return;
+
     setIsPushingRemote(true);
     addToast("info", publish || !hasUpstream ? "Publishing Branch" : "Pushing to Origin", `Pushing ${currentBranch} to origin...`);
-    await new Promise(resolve => setTimeout(resolve, 10));
+    // Guarantee loading indicator and button update render on screen immediately before CLI command
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
     try {
       let args = ["push", "origin", currentBranch];
@@ -697,7 +703,11 @@ function App() {
   };
 
   const handleGitPull = async () => {
+    if (isPullingRemote) return;
     setIsPullingRemote(true);
+    addToast("info", "Pulling Changes", `Pulling updates from origin for ${currentBranch}...`);
+    // Guarantee loading indicator renders on screen immediately before CLI command
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     try {
       const res = await invoke<GitCliResult>("run_git_cli_cmd", {
         repoPath,
@@ -706,11 +716,15 @@ function App() {
       setCliOutput(res);
       if (res.exit_code === 0) {
         setErrorMessage(null);
+        addToast("success", "Pull Complete", "Local branch updated successfully.");
         await refreshRepository();
       } else {
+        const alert = formatGitAlertMessage(res.stderr || res.stdout, "error");
+        addToast("error", alert.title || "Pull Failed", alert.message || res.stderr);
         setErrorMessage(`Pull failed:\n${res.stderr || res.stdout}`);
       }
     } catch (err: any) {
+      addToast("error", "Pull Failed", err.toString());
       setErrorMessage(err.toString());
     } finally {
       setIsPullingRemote(false);
@@ -1238,7 +1252,12 @@ function App() {
 
   // --- REPO CLONING ---
   const handleCloneRepo = async () => {
-    if (!dialogInput || !dialogInput2) return;
+    if (!dialogInput || !dialogInput2 || isCloningRepo) return;
+    setIsCloningRepo(true);
+    addToast("info", "Cloning Repository", `Cloning repository into ${dialogInput2}...`);
+    // Ensure loading indicator renders on screen immediately before CLI command
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
     try {
       const folderName = dialogInput.split("/").pop()?.replace(".git", "") || "cloned-repo";
       const res = await invoke<GitCliResult>("run_git_cli_cmd", {
@@ -1247,6 +1266,7 @@ function App() {
       });
       setCliOutput(res);
       if (res.exit_code === 0) {
+        addToast("success", "Clone Succeeded", `Successfully cloned repository into ${folderName}.`);
         const fullClonedPath = `${dialogInput2}/${folderName}`;
         const newList = [...workspaces];
         if (!newList.includes(fullClonedPath)) {
@@ -1260,10 +1280,15 @@ function App() {
         setDialogInput2("");
         await refreshRepository(fullClonedPath);
       } else {
+        const alert = formatGitAlertMessage(res.stderr || res.stdout, "error");
+        addToast("error", alert.title || "Clone Failed", alert.message || res.stderr);
         setErrorMessage(res.stderr);
       }
     } catch (err: any) {
+      addToast("error", "Clone Failed", err.toString());
       setErrorMessage(err.toString());
+    } finally {
+      setIsCloningRepo(false);
     }
   };
 
@@ -1995,6 +2020,7 @@ function App() {
         loginGitHubOAuth={loginGitHubOAuth}
         handlePATLogin={handlePATLogin}
         githubRepos={githubRepos}
+        isCloningRepo={isCloningRepo}
         handleCloneRepo={handleCloneRepo}
         handleCreatePR={handleCreatePR}
         handleDialogSubmit={handleDialogSubmit}
