@@ -1,5 +1,5 @@
 import React from 'react';
-import { ChevronRight, Layers, History, GitPullRequest, FolderSync, LogOut, Sparkles } from 'lucide-react';
+import { ChevronRight, Layers, History, GitPullRequest, FolderSync, LogOut, Sparkles, Settings } from 'lucide-react';
 import type { GitHubUser } from '../../types/git';
 
 interface TopbarProps {
@@ -8,6 +8,7 @@ interface TopbarProps {
   activeTab: any;
   setActiveTab: (val: any) => void;
   currentBranch?: string;
+  hasRepo?: boolean;
   githubToken: string | null;
   remoteUrl: string | null;
   setDialogType: (val: any) => void;
@@ -15,6 +16,7 @@ interface TopbarProps {
   setDialogInput2: (val: string) => void;
   githubUser: GitHubUser | null;
   handleGitHubSignout: () => void;
+  onOpenSettings?: () => void;
 }
 
 const Topbar: React.FC<TopbarProps> = ({
@@ -23,13 +25,15 @@ const Topbar: React.FC<TopbarProps> = ({
   activeTab,
   setActiveTab,
   currentBranch,
+  hasRepo,
   githubToken,
   remoteUrl,
   setDialogType,
   setDialogInput,
   setDialogInput2,
   githubUser,
-  handleGitHubSignout
+  handleGitHubSignout,
+  onOpenSettings
 }) => {
   return (
     <div className={`topbar ${sidebarCollapsed ? "sidebar-collapsed-topbar" : ""}`} data-tauri-drag-region>
@@ -60,7 +64,7 @@ const Topbar: React.FC<TopbarProps> = ({
           </button>
         </div>
 
-        {currentBranch && (
+        {hasRepo && currentBranch && (
           <div className="topbar-branch-pill" title={`Active Branch: ${currentBranch}`}>
             <div className="topbar-branch-dot" />
             <span className="topbar-branch-name">{currentBranch}</span>
@@ -68,7 +72,7 @@ const Topbar: React.FC<TopbarProps> = ({
         )}
       </div>
 
-      {/* Restored GitHub Auth Badge (Topbar Right-Side) */}
+      {/* Restored GitHub Auth Badge & Global Settings (Topbar Right-Side) */}
       <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
         
         {githubToken && remoteUrl && (
@@ -84,6 +88,17 @@ const Topbar: React.FC<TopbarProps> = ({
             <span>Create PR</span>
           </button>
         )}
+
+        {/* Global Settings Trigger */}
+        <button 
+          className="topbar-action-btn"
+          onClick={onOpenSettings}
+          title="Global Settings (Git, Universal .gitignore, AI Keys)"
+          style={{ display: "flex", alignItems: "center", gap: "6px" }}
+        >
+          <Settings size={13} />
+          <span>Settings</span>
+        </button>
 
         {/* GitHub circular avatar connection badge */}
         {githubToken && (
@@ -102,7 +117,7 @@ const Topbar: React.FC<TopbarProps> = ({
                 onClick={() => {
                   setDialogType("clone");
                   setDialogInput("");
-                  setDialogInput2("/Users/melodyfidel/Code/projects");
+                  setDialogInput2("");
                 }}
                 title="Clone Remote Repo"
               >
