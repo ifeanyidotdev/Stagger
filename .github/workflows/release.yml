@@ -2,9 +2,15 @@ name: 'Publish Desktop Release'
 
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: write
@@ -20,7 +26,7 @@ jobs:
           - platform: 'macos-latest'
             target: 'aarch64-apple-darwin'
             arch_name: 'macOS Apple Silicon (M-series)'
-          - platform: 'macos-13'
+          - platform: 'macos-latest'
             target: 'x86_64-apple-darwin'
             arch_name: 'macOS Intel'
           - platform: 'ubuntu-22.04'
@@ -64,9 +70,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: ${{ github.ref_type == 'tag' && github.ref_name || 'v0.1.0' }}
-          releaseName: 'StageNode ${{ github.ref_type == "tag" && github.ref_name || "v0.1.0" }}'
-          releaseBody: 'See the assets below to download StageNode for your platform.'
+          tagName: ${{ github.ref_type == 'tag' && github.ref_name || 'v__VERSION__' }}
+          releaseName: 'Stagger ${{ github.ref_type == "tag" && github.ref_name || "v__VERSION__" }}'
+          releaseBody: 'See the assets below to download Stagger for your platform.'
           releaseDraft: true
           prerelease: false
           args: '--target ${{ matrix.target }}'

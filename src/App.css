@@ -564,6 +564,7 @@ button, input, textarea, select, a, .workspace-trigger-btn, .tab-button, .branch
 
 /* Antigravity Elegant Sync Buttons (NOT Flat Purple Grass) */
 .sync-button {
+  width: 100%;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid var(--border-color);
   border-radius: 8px;
@@ -1541,6 +1542,10 @@ button, input, textarea, select, a, .workspace-trigger-btn, .tab-button, .branch
   max-width: 860px;
 }
 
+.dialog-content--visible-overflow {
+  overflow: visible;
+}
+
 /* --- HUNK DETAILS FLOATING MODAL OVERLAY (STAGING MESH INSPECTOR) --- */
 .hunk-details-overlay {
   position: fixed;
@@ -1655,6 +1660,316 @@ button, input, textarea, select, a, .workspace-trigger-btn, .tab-button, .branch
   outline: none;
   border-color: var(--accent-purple);
   box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.25);
+}
+
+select.dialog-input {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 14px;
+  padding-right: 36px;
+  cursor: pointer;
+}
+
+select.dialog-input optgroup {
+  background: var(--bg-panel);
+  color: var(--color-text-muted);
+  font-weight: 600;
+}
+
+select.dialog-input option {
+  background: var(--bg-panel);
+  color: var(--color-text-bright);
+}
+
+/* ==========================================================================
+   MODERN BRANCH SELECTOR COMPONENT
+   ========================================================================== */
+
+.modern-branch-select-container {
+  position: relative;
+  width: 100%;
+}
+
+.modern-branch-select-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 9px 12px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--color-text-bright);
+  font-family: var(--font-sans);
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: var(--transition-quick);
+  outline: none;
+  user-select: none;
+}
+
+.modern-branch-select-trigger:hover {
+  border-color: var(--border-hover);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.modern-branch-select-trigger.active {
+  border-color: var(--accent-purple);
+  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.25);
+  background: var(--bg-app);
+}
+
+.modern-branch-select-value {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.modern-branch-icon {
+  flex-shrink: 0;
+}
+
+.modern-branch-icon.local {
+  color: var(--accent-purple-bright);
+}
+
+.modern-branch-icon.remote {
+  color: var(--accent-blue);
+}
+
+.modern-branch-name {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  color: var(--color-text-bright);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 500;
+}
+
+.modern-branch-badge {
+  font-size: 0.62rem;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.modern-branch-badge.local {
+  background: rgba(139, 92, 246, 0.15);
+  color: var(--accent-purple-bright);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+}
+
+.modern-branch-badge.remote {
+  background: rgba(96, 165, 250, 0.15);
+  color: var(--accent-blue);
+  border: 1px solid rgba(96, 165, 250, 0.3);
+}
+
+.modern-branch-chevron {
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), color 0.15s ease;
+}
+
+.modern-branch-select-trigger:hover .modern-branch-chevron,
+.modern-branch-chevron.open {
+  color: var(--color-text-bright);
+}
+
+.modern-branch-chevron.open {
+  transform: rotate(180deg);
+}
+
+/* Dropdown menu popup */
+.modern-branch-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 120;
+  background: rgba(18, 19, 28, 0.98);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  animation: modernDropdownPop 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes modernDropdownPop {
+  0% {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.99);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Search box */
+.modern-branch-search-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: rgba(0, 0, 0, 0.25);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.modern-branch-search-icon {
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
+.modern-branch-search-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-family: var(--font-sans);
+  font-size: 0.8rem;
+  color: var(--color-text-bright);
+  padding: 0;
+}
+
+.modern-branch-search-input::placeholder {
+  color: var(--color-text-muted);
+}
+
+.modern-branch-search-clear {
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: var(--transition-quick);
+}
+
+.modern-branch-search-clear:hover {
+  color: var(--color-text-bright);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* Scrollable branch list */
+.modern-branch-list {
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.modern-branch-list::-webkit-scrollbar {
+  width: 5px;
+}
+.modern-branch-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+}
+
+.modern-branch-group {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-bottom: 4px;
+}
+
+.modern-branch-group:last-child {
+  margin-bottom: 0;
+}
+
+.modern-branch-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px 4px 8px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--color-text-muted);
+}
+
+.modern-branch-count {
+  font-size: 0.65rem;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 1px 5px;
+  border-radius: 10px;
+  color: var(--color-text-muted);
+}
+
+.modern-branch-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+  user-select: none;
+}
+
+.modern-branch-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.modern-branch-item.selected {
+  background: rgba(139, 92, 246, 0.14);
+}
+
+.modern-branch-item-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.modern-branch-item-text {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--color-text-bright);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.modern-branch-item.selected .modern-branch-item-text {
+  color: #ffffff;
+  font-weight: 550;
+}
+
+.modern-branch-check {
+  color: var(--accent-purple-bright);
+  flex-shrink: 0;
+  margin-left: 8px;
+}
+
+.modern-branch-empty {
+  padding: 16px 12px;
+  text-align: center;
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+  font-style: italic;
 }
 
 .dialog-actions {

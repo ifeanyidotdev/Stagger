@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Archive, X, Eye, FileCode, RefreshCw, FolderSync, Trash2, RefreshCcw, FolderPlus, GitMerge, GitCommit, Globe, ChevronDown } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Archive, X, Eye, FileCode, RefreshCw, FolderSync, Trash2, RefreshCcw, FolderPlus, GitMerge, GitCommit, Globe, ChevronDown, GitBranch, Check, Search } from 'lucide-react';
 import type { GitHubRepo, DialogType, StashEntry } from '../../types/git';
 import { invoke } from '@tauri-apps/api/core';
 
@@ -121,12 +121,48 @@ const Dialogs: React.FC<DialogsProps> = ({
   pushStash
 }) => {
   const [isRestoreDropdownOpen, setIsRestoreDropdownOpen] = useState(false);
+  const [isTargetBranchDropdownOpen, setIsTargetBranchDropdownOpen] = useState(false);
+  const [targetBranchSearch, setTargetBranchSearch] = useState('');
+  const targetBranchDropdownRef = useRef<HTMLDivElement>(null);
+  const branchSearchInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!isTargetBranchDropdownOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        targetBranchDropdownRef.current &&
+        !targetBranchDropdownRef.current.contains(e.target as Node)
+      ) {
+        setIsTargetBranchDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isTargetBranchDropdownOpen]);
+
+  useEffect(() => {
+    if (isTargetBranchDropdownOpen) {
+      const timer = setTimeout(() => {
+        branchSearchInputRef.current?.focus();
+      }, 50);
+      return () => clearTimeout(timer);
+    } else {
+      setTargetBranchSearch('');
+    }
+  }, [isTargetBranchDropdownOpen]);
+
+  useEffect(() => {
+    setIsTargetBranchDropdownOpen(false);
+    setTargetBranchSearch('');
+  }, [dialogType]);
 
   if (!dialogType) return null;
 
   return (
     <div className="dialog-overlay">
-      <div className={`dialog-content${dialogType === "stash-inspector" ? " dialog-content--wide" : ""}`}>
+      <div className={`dialog-content${dialogType === "stash-inspector" ? " dialog-content--wide" : ""}${dialogType === "merge-rebase" ? " dialog-content--visible-overflow" : ""}`}>
         <div className="dialog-title">
           <span>
             {dialogType === "branch" && "Create Branch"}
@@ -886,37 +922,157 @@ const Dialogs: React.FC<DialogsProps> = ({
               )}
             </div>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-              <label style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", fontWeight: 500 }}>
-                Select Target Branch:
-              </label>
-              <select
-                className="dialog-input"
-                value={targetMergeBranch}
-                onChange={(e) => setTargetMergeBranch(e.target.value)}
-                style={{
-                  padding: "8px 10px",
-                  background: "var(--bg-app)",
-                  border: "1px solid var(--border-color)",
-                  color: "var(--color-text-bright)",
-                  borderRadius: "6px",
-                  fontSize: "0.82rem"
-                }}
-              >
-                <optgroup label="Local Branches">
-                  {branchList.filter(b => b !== currentBranch).map(b => (
-                    <option key={b} value={b}>{b}</option>
-                  ))}
-                </optgroup>
-                {remoteBranches.length > 0 && (
-                  <optgroup label="Remote Branches">
-                    {remoteBranches.map(r => (
-                      <option key={r} value={r}>{r}</option>
-                    ))}
-                  </optgroup>
-                )}
-              </select>
-            </div>
+            {(() => {
+              const query = targetBranchSearch.trim().toLowerCase();
+              const availableLocal = branchList.filter(b => b !== currentBranch);
+              const filteredLocal = availableLocal.filter(b => !query || b.toLowerCase().includes(query));
+              const filteredRemote = remoteBranches.filter(r => !query || r.toLowerCase().includes(query));
+              const isTargetRemote = remoteBranches.includes(targetMergeBranch);
+
+              return (
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  <label style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", fontWeight: 500, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span>Select Target Branch:</span>
+                    {targetMergeBranch && (
+                      <span style={{ fontSize: "0.7rem", color: isTargetRemote ? "var(--accent-blue)" : "var(--accent-purple-bright)", fontFamily: "var(--font-mono)" }}>
+                        {isTargetRemote ? "remote" : "local"}
+                      </span>
+                    )}
+                  </label>
+
+                  <div className="modern-branch-select-container" ref={targetBranchDropdownRef}>
+                    <button
+                      type="button"
+                      className={`modern-branch-select-trigger ${isTargetBranchDropdownOpen ? 'active' : ''}`}
+                      onClick={() => setIsTargetBranchDropdownOpen(prev => !prev)}
+                      aria-haspopup="listbox"
+                      aria-expanded={isTargetBranchDropdownOpen}
+                    >
+                      <div className="modern-branch-select-value">
+                        {isTargetRemote ? (
+                          <Globe size={14} className="modern-branch-icon remote" />
+                        ) : (
+                          <GitBranch size={14} className="modern-branch-icon local" />
+                        )}
+                        <span className="modern-branch-name">
+                          {targetMergeBranch || "Select a branch..."}
+                        </span>
+                        {targetMergeBranch && (
+                          <span className={`modern-branch-badge ${isTargetRemote ? 'remote' : 'local'}`}>
+                            {isTargetRemote ? "remote" : "local"}
+                          </span>
+                        )}
+                      </div>
+                      <ChevronDown
+                        size={14}
+                        className={`modern-branch-chevron ${isTargetBranchDropdownOpen ? 'open' : ''}`}
+                      />
+                    </button>
+
+                    {isTargetBranchDropdownOpen && (
+                      <div className="modern-branch-dropdown-menu" role="listbox">
+                        <div className="modern-branch-search-box">
+                          <Search size={13} className="modern-branch-search-icon" />
+                          <input
+                            ref={branchSearchInputRef}
+                            type="text"
+                            className="modern-branch-search-input"
+                            placeholder="Filter branches..."
+                            value={targetBranchSearch}
+                            onChange={(e) => setTargetBranchSearch(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Escape") {
+                                setIsTargetBranchDropdownOpen(false);
+                              }
+                            }}
+                          />
+                          {targetBranchSearch && (
+                            <button
+                              type="button"
+                              className="modern-branch-search-clear"
+                              onClick={() => setTargetBranchSearch('')}
+                              title="Clear search"
+                            >
+                              <X size={12} />
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="modern-branch-list">
+                          {filteredLocal.length === 0 && filteredRemote.length === 0 ? (
+                            <div className="modern-branch-empty">
+                              No branches match "{targetBranchSearch}"
+                            </div>
+                          ) : (
+                            <>
+                              {filteredLocal.length > 0 && (
+                                <div className="modern-branch-group">
+                                  <div className="modern-branch-group-header">
+                                    <span>Local Branches</span>
+                                    <span className="modern-branch-count">{filteredLocal.length}</span>
+                                  </div>
+                                  {filteredLocal.map(b => {
+                                    const isSelected = b === targetMergeBranch;
+                                    return (
+                                      <div
+                                        key={b}
+                                        role="option"
+                                        aria-selected={isSelected}
+                                        className={`modern-branch-item ${isSelected ? 'selected' : ''}`}
+                                        onClick={() => {
+                                          setTargetMergeBranch(b);
+                                          setIsTargetBranchDropdownOpen(false);
+                                        }}
+                                      >
+                                        <div className="modern-branch-item-left">
+                                          <GitBranch size={13} className="modern-branch-icon local" />
+                                          <span className="modern-branch-item-text">{b}</span>
+                                        </div>
+                                        {isSelected && <Check size={14} className="modern-branch-check" />}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+
+                              {filteredRemote.length > 0 && (
+                                <div className="modern-branch-group">
+                                  <div className="modern-branch-group-header">
+                                    <span>Remote Branches</span>
+                                    <span className="modern-branch-count">{filteredRemote.length}</span>
+                                  </div>
+                                  {filteredRemote.map(r => {
+                                    const isSelected = r === targetMergeBranch;
+                                    return (
+                                      <div
+                                        key={r}
+                                        role="option"
+                                        aria-selected={isSelected}
+                                        className={`modern-branch-item ${isSelected ? 'selected' : ''}`}
+                                        onClick={() => {
+                                          setTargetMergeBranch(r);
+                                          setIsTargetBranchDropdownOpen(false);
+                                        }}
+                                      >
+                                        <div className="modern-branch-item-left">
+                                          <Globe size={13} className="modern-branch-icon remote" />
+                                          <span className="modern-branch-item-text">{r}</span>
+                                        </div>
+                                        {isSelected && <Check size={14} className="modern-branch-check" />}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
 
             <div className="dialog-actions" style={{ marginTop: "10px" }}>
               <button className="dialog-button secondary" onClick={() => setDialogType(null)}>Cancel</button>
