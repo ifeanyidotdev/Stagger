@@ -652,7 +652,7 @@ const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Sidebar Footer */}
       <div className="sidebar-footer">
-        <div style={{ display: "flex", gap: "8px", marginBottom: "4px" }}>
+        <div style={{ display: "flex", width: "100%", marginBottom: "4px" }}>
           {!hasUpstream ? (
             <button 
               className="sync-button sync-button--primary" 
