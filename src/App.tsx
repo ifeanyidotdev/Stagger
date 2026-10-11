@@ -24,12 +24,33 @@ import SettingsModal from "./components/modals/SettingsModal";
 
 function App() {
   // --- REPOSITORY & WORKSPACE STATE ---
-  const [repoPath, setRepoPath] = useState(() => {
-    return localStorage.getItem("sn_current_repo") || "";
-  });
   const [workspaces, setWorkspaces] = useState<string[]>(() => {
-    const saved = localStorage.getItem("sn_workspaces");
-    return saved ? JSON.parse(saved) : [];
+    try {
+      const saved = localStorage.getItem("sn_workspaces");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          return parsed.filter((w: any) => typeof w === "string" && w.trim().length > 0);
+        }
+      }
+    } catch (_) {}
+    return [];
+  });
+
+  const [repoPath, setRepoPath] = useState<string>(() => {
+    try {
+      const savedWorkspaces = localStorage.getItem("sn_workspaces");
+      const list: string[] = savedWorkspaces ? JSON.parse(savedWorkspaces) : [];
+      if (!Array.isArray(list) || list.length === 0) {
+        return "";
+      }
+      const savedCurrent = localStorage.getItem("sn_current_repo");
+      if (savedCurrent && list.includes(savedCurrent)) {
+        return savedCurrent;
+      }
+      return list[0] || "";
+    } catch (_) {}
+    return "";
   });
   const [hasRepo, setHasRepo] = useState(false);
   const [activeTab, setActiveTab] = useState<"workspace" | "history">("workspace");
@@ -199,10 +220,23 @@ function App() {
     return () => clearInterval(interval);
   }, [isCollabActive, files]);
 
-  // --- PERSIST ACTIVE REPOSITORY PATH ---
+  // --- PERSIST ACTIVE REPOSITORY PATH & KEEP IN SYNC ---
   useEffect(() => {
-    localStorage.setItem("sn_current_repo", repoPath);
-  }, [repoPath]);
+    if (workspaces.length === 0) {
+      if (repoPath !== "") {
+        setRepoPath("");
+      }
+      localStorage.removeItem("sn_current_repo");
+      setHasRepo(false);
+    } else {
+      if (!repoPath || !workspaces.includes(repoPath)) {
+        setRepoPath(workspaces[0]);
+        localStorage.setItem("sn_current_repo", workspaces[0]);
+      } else {
+        localStorage.setItem("sn_current_repo", repoPath);
+      }
+    }
+  }, [workspaces, repoPath]);
 
   // --- PRUNE CHECKED SELECTIONS ON FILES CHANGE ---
   useEffect(() => {
@@ -367,11 +401,18 @@ function App() {
     const newList = workspaces.filter(w => w !== path);
     setWorkspaces(newList);
     localStorage.setItem("sn_workspaces", JSON.stringify(newList));
-    if (repoPath === path && newList.length > 0) {
-      setRepoPath(newList[0]);
-      refreshRepository(newList[0]);
-    } else if (newList.length === 0) {
+    if (newList.length === 0) {
+      setRepoPath("");
+      localStorage.removeItem("sn_current_repo");
       setHasRepo(false);
+      setFiles([]);
+      setCommits([]);
+      setBranchList([]);
+      setRemoteUrl(null);
+    } else if (repoPath === path) {
+      setRepoPath(newList[0]);
+      localStorage.setItem("sn_current_repo", newList[0]);
+      refreshRepository(newList[0]);
     }
   };
 
@@ -1639,7 +1680,9 @@ function App() {
 
   // --- REAL-TIME AUTOMATIC REPOSITORY WATCHER & REFRESH ---
   useEffect(() => {
-    refreshRepository();
+    if (repoPath && workspaces.length > 0) {
+      refreshRepository();
+    }
     if (githubToken) {
       fetchGitHubUser(githubToken);
     }
@@ -1687,7 +1730,7 @@ function App() {
   const { paths: graphPaths, nodes: graphNodes } = calculateGraphPaths(filteredCommits);
 
   // Active workspace directory name
-  const activeWorkspaceName = repoPath ? (repoPath.split("/").pop() || repoPath) : "No Workspace";
+  const activeWorkspaceName = (workspaces.length > 0 && repoPath) ? (repoPath.split("/").pop() || repoPath) : "No Workspace";
 
   return (
     <div className="app-container">
@@ -2035,11 +2078,13 @@ function App() {
       <SettingsModal 
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
-        repoPath={repoPath}
-        currentBranch={currentBranch}
+        repoPath={workspaces.length > 0 && hasRepo ? repoPath : ""}
+        currentBranch={workspaces.length > 0 && hasRepo ? currentBranch : ""}
         onRemoteUrlUpdated={(newUrl) => setRemoteUrl(newUrl)}
         onSettingsSaved={() => {
-          refreshRepository(repoPath);
+          if (workspaces.length > 0 && repoPath) {
+            refreshRepository(repoPath);
+          }
         }}
       />
 

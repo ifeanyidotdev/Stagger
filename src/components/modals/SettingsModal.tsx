@@ -109,7 +109,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   // Copy Tooltip Feedback
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
-  const workspaceName = repoPath ? (repoPath.split('/').filter(Boolean).pop() || 'Current Project') : 'No Workspace';
+  const hasWorkspace = Boolean(repoPath && repoPath.trim().length > 0);
+  const workspaceName = hasWorkspace ? (repoPath.split('/').filter(Boolean).pop() || 'Current Project') : 'No Workspace';
+
+  // Ensure activeContext stays in 'global' if no workspace is active
+  useEffect(() => {
+    if (!hasWorkspace && activeContext === 'workspace') {
+      setActiveContext('global');
+    }
+  }, [hasWorkspace, activeContext]);
 
   // Load all settings when modal opens
   useEffect(() => {
@@ -122,6 +130,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     setRemoteTestResult(null);
     setRemoteApplyNotice(null);
     setGlobalGitignoreNotice(null);
+
+    if (!hasWorkspace) {
+      setActiveContext('global');
+      setWorkspaceData(null);
+      setWorkspaceRemoteUrl('');
+      setOverrideWorkspaceIdentity(false);
+      setWorkspaceUserName('');
+      setWorkspaceUserEmail('');
+    }
 
     const loadData = async () => {
       try {
@@ -163,7 +180,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         }
 
         // Load Workspace Specific Settings if a repository is open
-        if (repoPath) {
+        if (hasWorkspace) {
           try {
             const ws = await invoke<WorkspaceSettings>('get_workspace_settings', { repoPath });
             if (mounted) {
@@ -175,6 +192,14 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
             }
           } catch (err) {
             console.warn('Could not load workspace settings:', err);
+          }
+        } else {
+          if (mounted) {
+            setWorkspaceData(null);
+            setWorkspaceRemoteUrl('');
+            setOverrideWorkspaceIdentity(false);
+            setWorkspaceUserName('');
+            setWorkspaceUserEmail('');
           }
         }
       } catch (err) {
@@ -189,7 +214,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     return () => {
       mounted = false;
     };
-  }, [isOpen, repoPath]);
+  }, [isOpen, repoPath, hasWorkspace]);
 
   // Handle ESC key to close
   useEffect(() => {
@@ -462,21 +487,27 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
               <Globe size={14} />
               <span>Global Settings</span>
             </button>
-            <button
-              type="button"
-              className={`settings-context-tab ${activeContext === 'workspace' ? 'active' : ''}`}
-              onClick={() => {
-                if (repoPath) {
-                  setActiveContext('workspace');
-                }
-              }}
-              disabled={!repoPath}
-              title={repoPath ? `Workspace settings for ${workspaceName}` : 'No active workspace'}
-            >
-              <Folder size={14} />
-              <span>Workspace: <strong>{workspaceName}</strong></span>
-              {repoPath && <span className="settings-context-pill">Active</span>}
-            </button>
+            {hasWorkspace ? (
+              <button
+                type="button"
+                className={`settings-context-tab ${activeContext === 'workspace' ? 'active' : ''}`}
+                onClick={() => setActiveContext('workspace')}
+                title={`Workspace settings for ${workspaceName}`}
+              >
+                <Folder size={14} />
+                <span>Workspace: <strong>{workspaceName}</strong></span>
+                <span className="settings-context-pill">Active</span>
+              </button>
+            ) : (
+              <div 
+                className="settings-context-tab disabled"
+                title="No active workspace. Add or open a Git repository to configure project settings."
+                style={{ opacity: 0.45, cursor: 'not-allowed', userSelect: 'none' }}
+              >
+                <Folder size={14} />
+                <span>No Workspace Active</span>
+              </div>
+            )}
           </div>
 
           <button 
@@ -493,7 +524,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         <div className="settings-body">
           {/* Left Navigation Sidebar */}
           <div className="settings-sidebar">
-            {activeContext === 'global' ? (
+            {activeContext === 'global' || !hasWorkspace ? (
               <div className="settings-nav-group">
                 <div className="settings-nav-group-title">
                   <span>Global Preferences</span>
@@ -1426,6 +1457,29 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                       )}
                     </div>
                   </>
+                )}
+
+                {/* Empty Workspace Fallback */}
+                {!hasWorkspace && activeContext === 'workspace' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', textAlign: 'center', padding: '40px 20px' }}>
+                    <div style={{ width: 48, height: 48, borderRadius: '12px', background: 'rgba(255, 255, 255, 0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px', color: 'var(--color-text-muted)' }}>
+                      <Folder size={24} />
+                    </div>
+                    <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--color-text-bright)', marginBottom: '8px' }}>
+                      No Workspace Open
+                    </h3>
+                    <p style={{ fontSize: '0.82rem', color: 'var(--color-text-muted)', maxWidth: '400px', lineHeight: 1.5, marginBottom: '20px' }}>
+                      Open or clone a Git repository to configure project-specific settings such as remote origin URLs, repository author signatures, and workspace overview details.
+                    </p>
+                    <button
+                      type="button"
+                      className="settings-btn-primary"
+                      onClick={() => setActiveContext('global')}
+                      style={{ padding: '8px 18px', fontSize: '0.8rem' }}
+                    >
+                      Return to Global Settings
+                    </button>
+                  </div>
                 )}
               </>
             )}
