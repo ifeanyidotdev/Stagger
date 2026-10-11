@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { X } from "lucide-react";
+import { X, Layers, Globe, FolderGit2, ChevronRight, FolderOpen } from "lucide-react";
 import "./App.css";
 
 // --- Types & Interfaces ---
@@ -25,11 +25,11 @@ import SettingsModal from "./components/modals/SettingsModal";
 function App() {
   // --- REPOSITORY & WORKSPACE STATE ---
   const [repoPath, setRepoPath] = useState(() => {
-    return localStorage.getItem("sn_current_repo") || "/Users/melodyfidel/Code/projects/StageNode";
+    return localStorage.getItem("sn_current_repo") || "";
   });
   const [workspaces, setWorkspaces] = useState<string[]>(() => {
     const saved = localStorage.getItem("sn_workspaces");
-    return saved ? JSON.parse(saved) : ["/Users/melodyfidel/Code/projects/StageNode"];
+    return saved ? JSON.parse(saved) : [];
   });
   const [hasRepo, setHasRepo] = useState(false);
   const [activeTab, setActiveTab] = useState<"workspace" | "history">("workspace");
@@ -276,7 +276,31 @@ function App() {
     }
   }, [selectedFile, conflictedFiles, files]);
 
-  // --- WORKSPACE PROJECTS SWAP & ADD FLOW ---
+  const openFolderPickerAndAddWorkspace = async () => {
+    try {
+      const folder = await invoke<string | null>("select_folder");
+      if (!folder) return;
+      const targetPath = folder.trim();
+      try {
+        await invoke("get_git_status", { repoPath: targetPath });
+        const newList = [...workspaces];
+        if (!newList.includes(targetPath)) {
+          newList.push(targetPath);
+        }
+        setWorkspaces(newList);
+        localStorage.setItem("sn_workspaces", JSON.stringify(newList));
+        setRepoPath(targetPath);
+        localStorage.setItem("sn_current_repo", targetPath);
+        await refreshRepository(targetPath);
+      } catch (_) {
+        setPendingWorkspacePath(targetPath);
+        setDialogType("git-init-confirm");
+      }
+    } catch (err: any) {
+      console.error("Folder picker error:", err);
+    }
+  };
+
   const selectWorkspace = (path: string) => {
     setRepoPath(path);
     setIsWorkspaceDropdownOpen(false);
@@ -1663,7 +1687,7 @@ function App() {
   const { paths: graphPaths, nodes: graphNodes } = calculateGraphPaths(filteredCommits);
 
   // Active workspace directory name
-  const activeWorkspaceName = repoPath.split("/").pop() || repoPath;
+  const activeWorkspaceName = repoPath ? (repoPath.split("/").pop() || repoPath) : "No Workspace";
 
   return (
     <div className="app-container">
@@ -1674,6 +1698,7 @@ function App() {
         setIsWorkspaceDropdownOpen={setIsWorkspaceDropdownOpen}
         activeWorkspaceName={activeWorkspaceName}
         workspaces={workspaces}
+        onOpenFolderPicker={openFolderPickerAndAddWorkspace}
         selectWorkspace={selectWorkspace}
         repoPath={repoPath}
         removeWorkspace={removeWorkspace}
@@ -1749,6 +1774,7 @@ function App() {
             activeTab={activeTab}
             setActiveTab={setActiveTab}
             currentBranch={currentBranch}
+            hasRepo={hasRepo}
             githubToken={githubToken}
             remoteUrl={remoteUrl}
             setDialogType={setDialogType}
@@ -1760,7 +1786,88 @@ function App() {
           />
 
           <div className="view-content">
-            {activeTab === "workspace" ? (
+            {workspaces.length === 0 || !repoPath ? (
+              <div className="welcome-screen">
+                <div className="welcome-container">
+                  <div className="welcome-icon-glow">
+                    <div className="welcome-icon-circle">
+                      <Layers size={32} className="welcome-hero-icon" />
+                    </div>
+                  </div>
+
+                  <h1 className="welcome-title">Welcome to Stagger</h1>
+                  <p className="welcome-subtitle">
+                    A visual Git workspace for staging changes, inspecting diffs, and managing branches. 
+                    Choose how you'd like to get started:
+                  </p>
+
+                  <div className="welcome-actions">
+                    <button 
+                      type="button"
+                      className="welcome-action-card primary"
+                      onClick={openFolderPickerAndAddWorkspace}
+                    >
+                      <div className="welcome-card-icon-wrap primary">
+                        <FolderOpen size={20} />
+                      </div>
+                      <div className="welcome-card-info">
+                        <span className="welcome-card-title">Open Local Repository</span>
+                        <span className="welcome-card-desc">Choose an existing Git repository folder from your computer</span>
+                      </div>
+                      <ChevronRight size={16} className="welcome-card-chevron" />
+                    </button>
+
+                    <button 
+                      type="button"
+                      className="welcome-action-card"
+                      onClick={() => {
+                        setDialogInput("");
+                        setDialogInput2("");
+                        setDialogType("clone");
+                      }}
+                    >
+                      <div className="welcome-card-icon-wrap">
+                        <Globe size={20} />
+                      </div>
+                      <div className="welcome-card-info">
+                        <span className="welcome-card-title">Clone Remote Repository</span>
+                        <span className="welcome-card-desc">Clone via HTTPS, SSH, or from your GitHub repositories</span>
+                      </div>
+                      <ChevronRight size={16} className="welcome-card-chevron" />
+                    </button>
+
+                    <button 
+                      type="button"
+                      className="welcome-action-card"
+                      onClick={async () => {
+                        try {
+                          const folder = await invoke<string | null>("select_folder");
+                          if (folder) {
+                            setPendingWorkspacePath(folder);
+                            setDialogType("git-init-confirm");
+                          }
+                        } catch (err: any) {
+                          console.error(err);
+                        }
+                      }}
+                    >
+                      <div className="welcome-card-icon-wrap">
+                        <FolderGit2 size={20} />
+                      </div>
+                      <div className="welcome-card-info">
+                        <span className="welcome-card-title">Initialize New Repository</span>
+                        <span className="welcome-card-desc">Turn an existing project directory into a new Git repository</span>
+                      </div>
+                      <ChevronRight size={16} className="welcome-card-chevron" />
+                    </button>
+                  </div>
+
+                  <div className="welcome-footer-hint">
+                    <span>You can add and manage multiple workspace repositories anytime from the sidebar dropdown.</span>
+                  </div>
+                </div>
+              </div>
+            ) : activeTab === "workspace" ? (
               <div className="workspace-view">
                 <FilePane 
                   filePaneWidth={filePaneWidth}

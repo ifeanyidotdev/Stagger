@@ -8,6 +8,7 @@ interface TopbarProps {
   activeTab: any;
   setActiveTab: (val: any) => void;
   currentBranch?: string;
+  hasRepo?: boolean;
   githubToken: string | null;
   remoteUrl: string | null;
   setDialogType: (val: any) => void;
@@ -24,6 +25,7 @@ const Topbar: React.FC<TopbarProps> = ({
   activeTab,
   setActiveTab,
   currentBranch,
+  hasRepo,
   githubToken,
   remoteUrl,
   setDialogType,
@@ -62,7 +64,7 @@ const Topbar: React.FC<TopbarProps> = ({
           </button>
         </div>
 
-        {currentBranch && (
+        {hasRepo && currentBranch && (
           <div className="topbar-branch-pill" title={`Active Branch: ${currentBranch}`}>
             <div className="topbar-branch-dot" />
             <span className="topbar-branch-name">{currentBranch}</span>
@@ -115,7 +117,7 @@ const Topbar: React.FC<TopbarProps> = ({
                 onClick={() => {
                   setDialogType("clone");
                   setDialogInput("");
-                  setDialogInput2("/Users/melodyfidel/Code/projects");
+                  setDialogInput2("");
                 }}
                 title="Clone Remote Repo"
               >

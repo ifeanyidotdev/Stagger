@@ -21,7 +21,8 @@ import {
   Folder, 
   Copy, 
   CheckCheck,
-  CheckCircle2
+  CheckCircle2,
+  Zap
 } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { openUrl, revealItemInDir } from '@tauri-apps/plugin-opener';
@@ -666,25 +667,28 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                       className="settings-card"
                       style={{
                         flexDirection: 'row',
-                        alignItems: 'flex-start',
-                        gap: '12px',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '16px',
                         background: 'rgba(255, 255, 255, 0.02)',
+                        padding: '16px 20px',
                       }}
                     >
-                      <input
-                        id="sync-sys-git"
-                        type="checkbox"
-                        checked={syncSystemGit}
-                        onChange={e => setSyncSystemGit(e.target.checked)}
-                        style={{ marginTop: '3px', cursor: 'pointer' }}
-                      />
-                      <label htmlFor="sync-sys-git" style={{ cursor: 'pointer', flex: 1 }}>
-                        <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--color-text-bright)' }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--color-text-bright)' }}>
                           Auto-sync with System Git (<code style={{ fontFamily: 'var(--font-mono)', fontSize: '0.74rem' }}>git config --global</code>)
                         </div>
-                        <div className="settings-field-hint" style={{ marginTop: '2px' }}>
+                        <div className="settings-field-hint" style={{ marginTop: '3px' }}>
                           Synchronizes these values directly with your machine&apos;s global git configuration so external CLI tools and IDEs stay in harmony.
                         </div>
+                      </div>
+                      <label className="settings-switch" title="Toggle system git synchronization">
+                        <input
+                          type="checkbox"
+                          checked={syncSystemGit}
+                          onChange={e => setSyncSystemGit(e.target.checked)}
+                        />
+                        <span className="settings-switch-slider" />
                       </label>
                     </div>
                   </>
@@ -748,42 +752,38 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                       </div>
 
                       {/* Presets */}
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                         <span style={{ fontSize: '0.74rem', color: 'var(--color-text-muted)' }}>
                           Insert common universal patterns:
                         </span>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                           <button
                             type="button"
                             onClick={() => addTemplateToContent(['.DS_Store', 'Thumbs.db', 'desktop.ini'], setGlobalGitignoreContent)}
-                            className="dialog-button secondary"
-                            style={{ fontSize: '0.72rem', padding: '3px 8px' }}
+                            className="settings-chip"
                           >
-                            + OS Junk (.DS_Store)
+                            <span>+ OS Junk (.DS_Store)</span>
                           </button>
                           <button
                             type="button"
                             onClick={() => addTemplateToContent(['node_modules/', '.pnp*', 'dist/', '*.log'], setGlobalGitignoreContent)}
-                            className="dialog-button secondary"
-                            style={{ fontSize: '0.72rem', padding: '3px 8px' }}
+                            className="settings-chip"
                           >
-                            + Node / Build outputs
+                            <span>+ Node / Build outputs</span>
                           </button>
                           <button
                             type="button"
                             onClick={() => addTemplateToContent(['.vscode/', '.idea/', '*.swp'], setGlobalGitignoreContent)}
-                            className="dialog-button secondary"
-                            style={{ fontSize: '0.72rem', padding: '3px 8px' }}
+                            className="settings-chip"
                           >
-                            + IDEs (.vscode, .idea)
+                            <span>+ IDEs (.vscode, .idea)</span>
                           </button>
                           <button
                             type="button"
                             onClick={() => addTemplateToContent(['.env', '.env.local', '*.pem'], setGlobalGitignoreContent)}
-                            className="dialog-button secondary"
-                            style={{ fontSize: '0.72rem', padding: '3px 8px' }}
+                            className="settings-chip"
                           >
-                            + Secrets (.env)
+                            <span>+ Secrets (.env)</span>
                           </button>
                         </div>
                       </div>
@@ -858,51 +858,82 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                     </div>
 
                     {/* Provider Toggle Cards */}
-                    <div style={{ display: 'flex', gap: '12px' }}>
+                    <div style={{ display: 'flex', gap: '14px' }}>
                       <button
                         type="button"
+                        className={`settings-provider-card ${aiProvider === 'gemini' ? 'active' : ''}`}
                         onClick={() => { setAiProvider('gemini'); setAiTestResult(null); }}
-                        style={{
-                          flex: 1,
-                          padding: '12px 14px',
-                          borderRadius: '10px',
-                          background: aiProvider === 'gemini' ? 'rgba(139, 92, 246, 0.12)' : 'rgba(255, 255, 255, 0.02)',
-                          border: aiProvider === 'gemini' ? '1px solid var(--accent-purple-bright)' : '1px solid var(--border-color)',
-                          cursor: 'pointer',
-                          textAlign: 'left',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          gap: '4px',
-                        }}
                       >
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ fontSize: '0.86rem', fontWeight: 600, color: 'var(--color-text-bright)' }}>Google Gemini</span>
-                          {aiProvider === 'gemini' && <Check size={14} style={{ color: 'var(--accent-purple-bright)' }} />}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <div 
+                              style={{ 
+                                width: '28px', 
+                                height: '28px', 
+                                borderRadius: '7px', 
+                                background: 'rgba(139, 92, 246, 0.18)', 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                justifyContent: 'center',
+                                color: 'var(--accent-purple-bright)' 
+                              }}
+                            >
+                              <Sparkles size={15} />
+                            </div>
+                            <span style={{ fontSize: '0.88rem', fontWeight: 600, color: 'var(--color-text-bright)' }}>
+                              Google Gemini
+                            </span>
+                          </div>
+                          {aiProvider === 'gemini' && (
+                            <span className="settings-context-pill">Active</span>
+                          )}
                         </div>
-                        <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>Gemini 2.5 Flash, 2.5 Pro, 2.0. Multimodal & ultra fast.</span>
+                        <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', lineHeight: 1.4 }}>
+                          Gemini 2.5 Flash, 2.5 Pro, 2.0 Flash. Ultra-fast multimodal reasoning via Vercel AI SDK.
+                        </span>
                       </button>
 
                       <button
                         type="button"
+                        className={`settings-provider-card ${aiProvider === 'openai' ? 'active openai' : ''}`}
                         onClick={() => { setAiProvider('openai'); setAiTestResult(null); }}
-                        style={{
-                          flex: 1,
-                          padding: '12px 14px',
-                          borderRadius: '10px',
-                          background: aiProvider === 'openai' ? 'rgba(139, 92, 246, 0.12)' : 'rgba(255, 255, 255, 0.02)',
-                          border: aiProvider === 'openai' ? '1px solid var(--accent-purple-bright)' : '1px solid var(--border-color)',
-                          cursor: 'pointer',
-                          textAlign: 'left',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          gap: '4px',
-                        }}
                       >
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ fontSize: '0.86rem', fontWeight: 600, color: 'var(--color-text-bright)' }}>OpenAI</span>
-                          {aiProvider === 'openai' && <Check size={14} style={{ color: 'var(--accent-purple-bright)' }} />}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <div 
+                              style={{ 
+                                width: '28px', 
+                                height: '28px', 
+                                borderRadius: '7px', 
+                                background: 'rgba(16, 185, 129, 0.18)', 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                justifyContent: 'center',
+                                color: '#10b981' 
+                              }}
+                            >
+                              <Zap size={15} />
+                            </div>
+                            <span style={{ fontSize: '0.88rem', fontWeight: 600, color: 'var(--color-text-bright)' }}>
+                              OpenAI
+                            </span>
+                          </div>
+                          {aiProvider === 'openai' && (
+                            <span 
+                              className="settings-context-pill" 
+                              style={{ 
+                                background: 'rgba(16, 185, 129, 0.15)', 
+                                color: '#10b981', 
+                                borderColor: 'rgba(16, 185, 129, 0.3)' 
+                              }}
+                            >
+                              Active
+                            </span>
+                          )}
                         </div>
-                        <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>GPT-4o, GPT-4o-mini, o1, o3-mini. Custom endpoint support.</span>
+                        <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', lineHeight: 1.4 }}>
+                          GPT-4o, GPT-4o-mini, o1, o3-mini. Supports custom endpoints (OpenRouter, Ollama, Azure).
+                        </span>
                       </button>
                     </div>
 
@@ -1086,10 +1117,22 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                     <div className="settings-card">
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <label className="settings-field-label">
-                            <Globe size={13} />
-                            <span>Remote Origin URL</span>
-                          </label>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <label className="settings-field-label">
+                              <Globe size={13} />
+                              <span>Remote Origin URL</span>
+                            </label>
+                            {workspaceRemoteUrl.trim() && (
+                              <div style={{ display: 'flex', gap: '5px' }}>
+                                <span className="settings-context-pill" style={{ background: 'rgba(139, 92, 246, 0.15)', color: 'var(--accent-purple-bright)', borderColor: 'rgba(139, 92, 246, 0.3)' }}>
+                                  {workspaceRemoteUrl.includes('github.com') ? 'GitHub' : workspaceRemoteUrl.includes('gitlab.com') ? 'GitLab' : workspaceRemoteUrl.includes('bitbucket.org') ? 'Bitbucket' : 'Git'}
+                                </span>
+                                <span className="settings-context-pill" style={{ background: 'rgba(255, 255, 255, 0.06)', color: 'var(--color-text-main)', borderColor: 'var(--border-color)' }}>
+                                  {workspaceRemoteUrl.startsWith('git@') || workspaceRemoteUrl.startsWith('ssh://') ? 'SSH' : 'HTTPS'}
+                                </span>
+                              </div>
+                            )}
+                          </div>
                           {workspaceRemoteUrl && (
                             <div style={{ display: 'flex', gap: '8px' }}>
                               <button
@@ -1153,23 +1196,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                             type="button"
                             onClick={handleApplyRemoteUrl}
                             disabled={isApplyingRemote || !workspaceRemoteUrl.trim()}
+                            className="settings-btn-primary"
                             style={{
-                              background: 'var(--accent-purple)',
-                              border: 'none',
-                              borderRadius: '8px',
-                              color: '#fff',
                               padding: '0 14px',
+                              height: '34px',
                               fontSize: '0.78rem',
-                              fontWeight: 500,
-                              cursor: 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '6px',
                               whiteSpace: 'nowrap',
-                              opacity: workspaceRemoteUrl.trim() ? 1 : 0.5,
                             }}
                           >
-                            <Save size={13} />
+                            {isApplyingRemote ? <RefreshCw size={13} className="spin-icon" /> : <Save size={13} />}
                             <span>{isApplyingRemote ? 'Updating...' : 'Update Remote URL'}</span>
                           </button>
                         </div>
@@ -1257,21 +1292,22 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                     </div>
 
                     <div className="settings-card">
-                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
-                        <input
-                          id="override-identity-toggle"
-                          type="checkbox"
-                          checked={overrideWorkspaceIdentity}
-                          onChange={e => setOverrideWorkspaceIdentity(e.target.checked)}
-                          style={{ marginTop: '3px', cursor: 'pointer' }}
-                        />
-                        <label htmlFor="override-identity-toggle" style={{ cursor: 'pointer', flex: 1 }}>
-                          <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--color-text-bright)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px' }}>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--color-text-bright)' }}>
                             Override Author Identity for this Repository
                           </div>
-                          <div className="settings-field-hint">
-                            Ideal for distinguishing between work and personal email addresses.
+                          <div className="settings-field-hint" style={{ marginTop: '3px' }}>
+                            Ideal for distinguishing between work and personal email addresses for this project.
                           </div>
+                        </div>
+                        <label className="settings-switch" title="Toggle project author override">
+                          <input
+                            type="checkbox"
+                            checked={overrideWorkspaceIdentity}
+                            onChange={e => setOverrideWorkspaceIdentity(e.target.checked)}
+                          />
+                          <span className="settings-switch-slider" />
                         </label>
                       </div>
 
@@ -1426,17 +1462,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
             </button>
             <button
               type="button"
-              className="dialog-button"
+              className="settings-btn-primary"
               onClick={handleSaveAll}
               disabled={isSaving || isLoading}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                background: 'var(--accent-purple)',
-              }}
             >
-              <Save size={14} />
+              {isSaving ? <RefreshCw size={14} className="spin-icon" /> : <Save size={14} />}
               <span>{isSaving ? 'Saving Changes...' : 'Save All Changes'}</span>
             </button>
           </div>

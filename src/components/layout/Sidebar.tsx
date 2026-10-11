@@ -75,6 +75,7 @@ interface SidebarProps {
   isCollabActive: boolean;
   setIsCollabActive: (val: boolean) => void;
   unpushedCount: number;
+  onOpenFolderPicker?: () => void;
 }
 
 const Sidebar: React.FC<SidebarProps> = ({
@@ -84,6 +85,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   setIsWorkspaceDropdownOpen,
   activeWorkspaceName,
   workspaces,
+  onOpenFolderPicker,
   selectWorkspace,
   repoPath,
   removeWorkspace,
@@ -277,9 +279,32 @@ const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Sidebar Content */}
       <div className="sidebar-content">
-        
-        {/* Local Branches Section */}
-        <div className="sidebar-section">
+        {workspaces.length === 0 ? (
+          <div className="sidebar-empty-state">
+            <div className="sidebar-empty-icon-wrap">
+              <Layers size={22} />
+            </div>
+            <span className="sidebar-empty-title">No Workspace</span>
+            <span className="sidebar-empty-desc">
+              Add a Git project to view branches and staging.
+            </span>
+            <button 
+              className="sync-button sync-button--primary"
+              style={{ marginTop: "8px", width: "100%" }}
+              type="button"
+              onClick={onOpenFolderPicker || (() => {
+                setDialogType("workspace-add");
+                setDialogInput("");
+              })}
+            >
+              <FolderPlus size={14} />
+              <span>Add Workspace</span>
+            </button>
+          </div>
+        ) : (
+          <>
+            {/* Local Branches Section */}
+            <div className="sidebar-section">
           <div 
             className="section-title" 
             onClick={() => setIsBranchListExpanded(!isBranchListExpanded)} 
@@ -647,50 +672,53 @@ const Sidebar: React.FC<SidebarProps> = ({
             <span>{isCollabActive ? "Session Room Active" : "Go Multiplayer"}</span>
           </button>
         </div>
-
+          </>
+        )}
       </div>
 
       {/* Sidebar Footer */}
-      <div className="sidebar-footer">
-        <div style={{ display: "flex", width: "100%", marginBottom: "4px" }}>
-          {!hasUpstream ? (
-            <button 
-              className="sync-button sync-button--primary" 
-              onClick={() => handleGitPush(true)}
-              disabled={isPushingRemote}
-              title="Publish branch to remote origin"
-            >
-              <Globe size={14} className={isPushingRemote ? "spin-icon" : ""} />
-              <span>{isPushingRemote ? "Publishing..." : "Publish Branch"}</span>
-            </button>
-          ) : unpushedCount > 0 ? (
-            <button 
-              className="sync-button sync-button--primary" 
-              onClick={() => handleGitPush(false)}
-              disabled={isPushingRemote}
-              title={`Push ${unpushedCount} local commit(s) to origin`}
-            >
-              <ArrowUp size={14} className={isPushingRemote ? "spin-icon" : ""} />
-              <span>{isPushingRemote ? "Pushing..." : `Push Origin (${unpushedCount})`}</span>
-            </button>
-          ) : (
-            <button 
-              className="sync-button sync-button--secondary" 
-              onClick={() => handleGitFetch(false)}
-              disabled={isFetchingRemote}
-              title="Fetch updates from origin"
-            >
-              <RefreshCw size={14} className={isFetchingRemote ? "spin-icon" : ""} />
-              <span>{isFetchingRemote ? "Fetching..." : "Fetch Origin"}</span>
-            </button>
+      {workspaces.length > 0 && hasRepo && (
+        <div className="sidebar-footer">
+          <div style={{ display: "flex", width: "100%", marginBottom: "4px" }}>
+            {!hasUpstream ? (
+              <button 
+                className="sync-button sync-button--primary" 
+                onClick={() => handleGitPush(true)}
+                disabled={isPushingRemote}
+                title="Publish branch to remote origin"
+              >
+                <Globe size={14} className={isPushingRemote ? "spin-icon" : ""} />
+                <span>{isPushingRemote ? "Publishing..." : "Publish Branch"}</span>
+              </button>
+            ) : unpushedCount > 0 ? (
+              <button 
+                className="sync-button sync-button--primary" 
+                onClick={() => handleGitPush(false)}
+                disabled={isPushingRemote}
+                title={`Push ${unpushedCount} local commit(s) to origin`}
+              >
+                <ArrowUp size={14} className={isPushingRemote ? "spin-icon" : ""} />
+                <span>{isPushingRemote ? "Pushing..." : `Push Origin (${unpushedCount})`}</span>
+              </button>
+            ) : (
+              <button 
+                className="sync-button sync-button--secondary" 
+                onClick={() => handleGitFetch(false)}
+                disabled={isFetchingRemote}
+                title="Fetch updates from origin"
+              >
+                <RefreshCw size={14} className={isFetchingRemote ? "spin-icon" : ""} />
+                <span>{isFetchingRemote ? "Fetching..." : "Fetch Origin"}</span>
+              </button>
+            )}
+          </div>
+          {remoteUrl && (
+            <div style={{ fontSize: "0.65rem", color: "var(--color-text-muted)", marginTop: "6px", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
+              Origin: {remoteUrl}
+            </div>
           )}
         </div>
-        {remoteUrl && (
-          <div style={{ fontSize: "0.65rem", color: "var(--color-text-muted)", marginTop: "6px", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
-            Origin: {remoteUrl}
-          </div>
-        )}
-      </div>
+      )}
     </div>
   );
 };
