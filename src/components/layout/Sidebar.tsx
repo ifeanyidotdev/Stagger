@@ -781,53 +781,29 @@ const Sidebar: React.FC<SidebarProps> = ({
               </div>
             ) : behindCount > 0 ? (
               <div style={{ display: "flex", flexDirection: "column", gap: "6px", width: "100%" }}>
-                <div style={{ display: "flex", gap: "6px", width: "100%" }}>
-                  <button 
-                    className="sync-button sync-button--warning" 
-                    style={{ flex: 1 }}
-                    onClick={() => handleGitPull()}
-                    disabled={isPullingRemote}
-                    title={`Pull ${behindCount} incoming commit(s) from origin`}
-                  >
-                    <ArrowDown size={14} className={isPullingRemote ? "spin-icon" : ""} />
-                    <span>{isPullingRemote ? "Pulling..." : `Pull Origin (${behindCount})`}</span>
-                  </button>
-                  <button 
-                    className="sync-button sync-button--secondary" 
-                    style={{ width: "36px", padding: 0, flexShrink: 0 }}
-                    onClick={() => handleGitFetch(false)}
-                    disabled={isFetchingRemote}
-                    title="Check / Fetch updates from origin"
-                  >
-                    <RefreshCw size={13} className={isFetchingRemote ? "spin-icon" : ""} />
-                  </button>
-                </div>
+                <button 
+                  className="sync-button sync-button--warning" 
+                  onClick={() => handleGitPull()}
+                  disabled={isPullingRemote}
+                  title={`Pull ${behindCount} incoming commit(s) from origin`}
+                >
+                  <ArrowDown size={14} className={isPullingRemote ? "spin-icon" : ""} />
+                  <span>{isPullingRemote ? "Pulling..." : `Pull Origin (${behindCount})`}</span>
+                </button>
                 <div style={{ fontSize: "0.68rem", color: "#fbbf24", textAlign: "center" }}>
                   Origin is ahead by {behindCount} commit{behindCount > 1 ? "s" : ""}
                 </div>
               </div>
             ) : unpushedCount > 0 ? (
-              <div style={{ display: "flex", gap: "6px", width: "100%" }}>
-                <button 
-                  className="sync-button sync-button--primary" 
-                  style={{ flex: 1 }}
-                  onClick={() => handleGitPush(false)}
-                  disabled={isPushingRemote}
-                  title={`Push ${unpushedCount} local commit(s) to origin`}
-                >
-                  <ArrowUp size={14} className={isPushingRemote ? "spin-icon" : ""} />
-                  <span>{isPushingRemote ? "Pushing..." : `Push Origin (${unpushedCount})`}</span>
-                </button>
-                <button 
-                  className="sync-button sync-button--secondary" 
-                  style={{ width: "36px", padding: 0, flexShrink: 0 }}
-                  onClick={() => handleGitFetch(false)}
-                  disabled={isFetchingRemote}
-                  title="Check / Fetch updates from origin"
-                >
-                  <RefreshCw size={13} className={isFetchingRemote ? "spin-icon" : ""} />
-                </button>
-              </div>
+              <button 
+                className="sync-button sync-button--primary" 
+                onClick={() => handleGitPush(false)}
+                disabled={isPushingRemote}
+                title={`Push ${unpushedCount} local commit(s) to origin`}
+              >
+                <ArrowUp size={14} className={isPushingRemote ? "spin-icon" : ""} />
+                <span>{isPushingRemote ? "Pushing..." : `Push Origin (${unpushedCount})`}</span>
+              </button>
             ) : (
               <button 
                 className="sync-button sync-button--secondary" 

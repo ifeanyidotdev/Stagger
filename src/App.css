@@ -2853,52 +2853,40 @@ select.dialog-input option {
    COMMIT BRANCH CREATION & CONTEXT MENU
    ========================================================================== */
 
-.commit-branch-btn {
+.commit-header-icon-btn {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  background: rgba(139, 92, 246, 0.15);
-  border: 1px solid rgba(139, 92, 246, 0.35);
-  color: var(--accent-purple-bright);
-  font-size: 0.74rem;
-  font-weight: 500;
-  padding: 4px 10px;
-  border-radius: 6px;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+  color: var(--color-text-muted);
   cursor: pointer;
-  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
-  white-space: nowrap;
+  transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.commit-branch-btn:hover {
-  background: var(--accent-purple);
-  border-color: var(--accent-purple);
-  color: #fff;
+.commit-header-icon-btn:hover {
+  background: var(--bg-hover);
+  color: var(--color-text-bright);
+  border-color: rgba(255, 255, 255, 0.2);
   transform: translateY(-1px);
-  box-shadow: 0 3px 10px rgba(139, 92, 246, 0.35);
 }
 
-.commit-push-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  background: rgba(16, 185, 129, 0.15);
-  border: 1px solid rgba(16, 185, 129, 0.35);
+.commit-header-icon-btn.push-btn:hover {
   color: var(--color-staged);
-  font-size: 0.74rem;
-  font-weight: 500;
-  padding: 4px 10px;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
-  white-space: nowrap;
+  border-color: rgba(16, 185, 129, 0.4);
+  background: rgba(16, 185, 129, 0.12);
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.2);
 }
 
-.commit-push-btn:hover {
-  background: var(--color-staged);
-  border-color: var(--color-staged);
-  color: #fff;
-  transform: translateY(-1px);
-  box-shadow: 0 3px 10px rgba(16, 185, 129, 0.35);
+.commit-header-icon-btn.branch-btn:hover {
+  color: var(--accent-purple-bright);
+  border-color: rgba(168, 85, 247, 0.4);
+  background: rgba(168, 85, 247, 0.12);
+  box-shadow: 0 2px 8px rgba(168, 85, 247, 0.2);
 }
 
 .commit-row-branch-btn {

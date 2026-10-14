@@ -274,27 +274,25 @@ const HistoryView: React.FC<HistoryViewProps> = ({
             <div className="details-header">
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", marginBottom: "8px" }}>
                 <div className="commit-sha-badge" style={{ marginBottom: 0 }}>{selectedCommit.id.substring(0, 10)}...</div>
-                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
                   {onOpenPushToCommit && (
                     <button
                       type="button"
-                      className="commit-push-btn"
+                      className="commit-header-icon-btn push-btn"
                       onClick={() => onOpenPushToCommit(selectedCommit)}
-                      title={`Push to remote up to commit ${selectedCommit.id.substring(0, 8)}`}
+                      title={`Push up to this commit (${selectedCommit.id.substring(0, 8)})`}
                     >
-                      <ArrowUpCircle size={13} />
-                      <span>Push to Here</span>
+                      <ArrowUpCircle size={14} />
                     </button>
                   )}
                   {onOpenCreateBranchFromCommit && (
                     <button
                       type="button"
-                      className="commit-branch-btn"
+                      className="commit-header-icon-btn branch-btn"
                       onClick={() => onOpenCreateBranchFromCommit(selectedCommit)}
-                      title={`Create a new branch starting at commit ${selectedCommit.id.substring(0, 8)}`}
+                      title={`Create branch starting at commit ${selectedCommit.id.substring(0, 8)}`}
                     >
-                      <GitBranch size={13} />
-                      <span>Create Branch</span>
+                      <GitBranch size={14} />
                     </button>
                   )}
                 </div>
