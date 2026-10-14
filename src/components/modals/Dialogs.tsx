@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Archive, X, Eye, FileCode, RefreshCw, FolderSync, Trash2, RefreshCcw, FolderPlus, GitMerge, GitCommit, Globe, ChevronDown, GitBranch, Check, Search, ArrowUpCircle } from 'lucide-react';
+import { Archive, X, Eye, FileCode, RefreshCw, FolderSync, Trash2, RefreshCcw, FolderPlus, GitMerge, GitCommit, Globe, ChevronDown, GitBranch, Check, Search, ArrowUpCircle, ArrowDown, Settings } from 'lucide-react';
 import type { GitHubRepo, DialogType, StashEntry, CommitInfo } from '../../types/git';
 import { invoke } from '@tauri-apps/api/core';
 
@@ -70,6 +70,11 @@ interface DialogsProps {
   stashNameInput: string;
   setStashNameInput: (val: string) => void;
   pushStash: (msg?: string) => void;
+  behindCount?: number;
+  upstreamBranchName?: string | null;
+  handleGitPull?: (mode?: 'merge' | 'rebase') => Promise<void>;
+  isPullingRemote?: boolean;
+  onOpenSettings?: () => void;
 }
 
 const Dialogs: React.FC<DialogsProps> = ({
@@ -138,8 +143,14 @@ const Dialogs: React.FC<DialogsProps> = ({
   handleSetRemoteUrl,
   stashNameInput,
   setStashNameInput,
-  pushStash
+  pushStash,
+  behindCount = 0,
+  upstreamBranchName = null,
+  handleGitPull,
+  isPullingRemote = false,
+  onOpenSettings
 }) => {
+  const [rememberPullChoice, setRememberPullChoice] = useState(false);
   const [isRestoreDropdownOpen, setIsRestoreDropdownOpen] = useState(false);
   const [isTargetBranchDropdownOpen, setIsTargetBranchDropdownOpen] = useState(false);
   const [targetBranchSearch, setTargetBranchSearch] = useState('');
@@ -214,6 +225,12 @@ const Dialogs: React.FC<DialogsProps> = ({
             {dialogType === "checkout-conflict" && "Uncommitted Changes"}
             {dialogType === "stash-name" && "Save Stash"}
             {dialogType === "merge-rebase" && "Merge / Rebase Branch"}
+            {dialogType === "pull-strategy" && (
+              <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <ArrowDown size={16} style={{ color: "var(--accent-purple-bright)" }} />
+                <span>Integrate Remote Changes</span>
+              </span>
+            )}
             {dialogType === "push-commit" && (
               <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                 <ArrowUpCircle size={16} style={{ color: "var(--color-staged)" }} />
@@ -1215,6 +1232,148 @@ const Dialogs: React.FC<DialogsProps> = ({
                 {mergeRebaseMode === "merge"
                   ? `Merge '${targetMergeBranch}' into '${currentBranch}'`
                   : `Rebase '${currentBranch}' onto '${targetMergeBranch}'`}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* PULL STRATEGY DIALOG (REBASE OR FULLY MERGE) */}
+        {dialogType === "pull-strategy" && (
+          <div className="pull-strategy-container">
+            <div className="pull-strategy-header">
+              Remote <strong style={{ color: "var(--color-text-bright)" }}>{upstreamBranchName || `origin/${currentBranch}`}</strong> has{" "}
+              <strong style={{ color: "#fbbf24" }}>{behindCount > 0 ? behindCount : 1} new commit{(behindCount > 1 || behindCount === 0) ? "s" : ""}</strong> ready to integrate into your local branch <strong style={{ color: "var(--color-text-bright)" }}>{currentBranch}</strong>.
+              <br />Choose your integration strategy:
+            </div>
+
+            <div className="pull-strategy-cards">
+              {/* Option 1: Fully Merge */}
+              <div 
+                className={`pull-strategy-card ${mergeRebaseMode === "merge" ? "selected" : ""}`}
+                onClick={() => setMergeRebaseMode("merge")}
+              >
+                <div className="pull-strategy-icon-box">
+                  <GitMerge size={17} />
+                </div>
+                <div className="pull-strategy-card-body">
+                  <div className="pull-strategy-card-title-row">
+                    <span className="pull-strategy-card-title">Fully Merge</span>
+                    <span className="pull-strategy-badge merge">git pull --no-rebase</span>
+                  </div>
+                  <span className="pull-strategy-card-desc">
+                    Integrates remote commits with a merge commit. Preserves exact history, branch topology, and full commit context. Recommended for shared or public branches.
+                  </span>
+                </div>
+              </div>
+
+              {/* Option 2: Rebase */}
+              <div 
+                className={`pull-strategy-card ${mergeRebaseMode === "rebase" ? "selected" : ""}`}
+                onClick={() => setMergeRebaseMode("rebase")}
+              >
+                <div className="pull-strategy-icon-box">
+                  <GitCommit size={17} />
+                </div>
+                <div className="pull-strategy-card-body">
+                  <div className="pull-strategy-card-title-row">
+                    <span className="pull-strategy-card-title">Rebase Local Commits</span>
+                    <span className="pull-strategy-badge linear">git pull --rebase</span>
+                  </div>
+                  <span className="pull-strategy-card-desc">
+                    Replays your unpushed local commits on top of incoming remote commits. Keeps history clean, linear, and avoids redundant merge commits.
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Preference Option & Settings Link */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '2px 4px', marginTop: '2px' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.76rem', color: 'var(--color-text-muted)', userSelect: 'none' }}>
+                <input 
+                  type="checkbox"
+                  checked={rememberPullChoice}
+                  onChange={e => setRememberPullChoice(e.target.checked)}
+                  style={{ cursor: 'pointer', accentColor: 'var(--accent-purple)' }}
+                />
+                <span>Set as default pull strategy in Settings</span>
+              </label>
+
+              {onOpenSettings && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDialogType(null);
+                    onOpenSettings();
+                  }}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'var(--accent-purple-bright)',
+                    fontSize: '0.74rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '2px 6px',
+                    borderRadius: '4px'
+                  }}
+                  title="Open Settings to customize pull behavior"
+                >
+                  <Settings size={12} />
+                  <span>Configure Settings</span>
+                </button>
+              )}
+            </div>
+
+            <div className="dialog-actions" style={{ marginTop: "6px" }}>
+              <button 
+                type="button"
+                className="dialog-button secondary" 
+                onClick={() => setDialogType(null)}
+                disabled={isPullingRemote}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="dialog-button primary"
+                disabled={isPullingRemote}
+                onClick={async () => {
+                  if (rememberPullChoice) {
+                    localStorage.setItem('stagenode_pull_strategy', mergeRebaseMode);
+                    invoke('save_global_settings', {
+                      settings: {
+                        default_pull_strategy: mergeRebaseMode
+                      }
+                    }).catch(() => {});
+                  }
+                  setDialogType(null);
+                  if (handleGitPull) {
+                    await handleGitPull(mergeRebaseMode);
+                  }
+                }}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px"
+                }}
+              >
+                {isPullingRemote ? (
+                  <>
+                    <RefreshCw size={13} className="spin-icon" />
+                    <span>Pulling...</span>
+                  </>
+                ) : mergeRebaseMode === "rebase" ? (
+                  <>
+                    <GitCommit size={13} />
+                    <span>Pull with Rebase</span>
+                  </>
+                ) : (
+                  <>
+                    <GitMerge size={13} />
+                    <span>Pull with Merge</span>
+                  </>
+                )}
               </button>
             </div>
           </div>

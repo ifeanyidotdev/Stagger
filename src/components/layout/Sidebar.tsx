@@ -15,6 +15,7 @@ import {
   Globe,
   ArrowUp,
   GitMerge,
+  GitCommit,
   Trash2,
   GitBranch,
   Users,
@@ -42,7 +43,8 @@ interface SidebarProps {
   setIsBranchOpsDropdownOpen: (val: boolean) => void;
   handleGitFetch: (all: boolean) => void;
   isPullingRemote: boolean;
-  handleGitPull: () => void;
+  handleGitPull: (mode?: "merge" | "rebase") => void;
+  onOpenPullStrategy?: () => void;
   hasUpstream: boolean;
   handleGitPush: (publish: boolean) => void;
   isPushingRemote: boolean;
@@ -101,6 +103,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   handleGitFetch,
   isPullingRemote,
   handleGitPull,
+  onOpenPullStrategy,
   hasUpstream,
   handleGitPush,
   isPushingRemote,
@@ -409,12 +412,39 @@ const Sidebar: React.FC<SidebarProps> = ({
                   className={`dropdown-menu-item ${behindCount > 0 ? "highlight-warning" : ""}`}
                   onClick={() => {
                     setIsBranchOpsDropdownOpen(false);
-                    handleGitPull();
+                    handleGitPull("merge");
                   }}
+                  title="Integrate remote changes with a merge commit (git pull --no-rebase)"
                 >
-                  <ArrowDown size={13} className={isPullingRemote ? "spin-icon" : ""} style={{ color: behindCount > 0 ? "#f59e0b" : "var(--color-staged)" }} />
-                  <span>{behindCount > 0 ? `Pull from Origin (${behindCount} new)` : "Pull from Origin"}</span>
+                  <GitMerge size={13} className={isPullingRemote ? "spin-icon" : ""} style={{ color: behindCount > 0 ? "#f59e0b" : "var(--color-modified)" }} />
+                  <span>{behindCount > 0 ? `Pull & Merge (${behindCount} new)` : "Pull & Merge from Origin"}</span>
                 </div>
+
+                <div 
+                  className={`dropdown-menu-item ${behindCount > 0 ? "highlight-warning" : ""}`}
+                  onClick={() => {
+                    setIsBranchOpsDropdownOpen(false);
+                    handleGitPull("rebase");
+                  }}
+                  title="Replay local commits on top of remote changes (git pull --rebase)"
+                >
+                  <GitCommit size={13} className={isPullingRemote ? "spin-icon" : ""} style={{ color: behindCount > 0 ? "#f59e0b" : "var(--accent-purple-bright)" }} />
+                  <span>{behindCount > 0 ? `Pull & Rebase (${behindCount} new)` : "Pull & Rebase from Origin"}</span>
+                </div>
+
+                {onOpenPullStrategy && (
+                  <div 
+                    className="dropdown-menu-item"
+                    onClick={() => {
+                      setIsBranchOpsDropdownOpen(false);
+                      onOpenPullStrategy();
+                    }}
+                    title="Open Pull Options modal to configure integration strategy"
+                  >
+                    <ArrowDown size={13} style={{ color: "var(--accent-purple)" }} />
+                    <span>Pull Options...</span>
+                  </div>
+                )}
 
                 {!hasUpstream ? (
                   <div 
@@ -611,6 +641,16 @@ const Sidebar: React.FC<SidebarProps> = ({
                         >
                           <GitMerge size={12} style={{ color: "var(--color-modified)" }} />
                         </button>
+                        <button
+                          className="branch-action-icon-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openMergeRebaseModal(rName, "rebase");
+                          }}
+                          title={`Rebase '${currentBranch}' onto '${rName}'`}
+                        >
+                          <GitCommit size={12} style={{ color: "var(--accent-purple-bright)" }} />
+                        </button>
                       </div>
                     </div>
                   ))
@@ -747,9 +787,9 @@ const Sidebar: React.FC<SidebarProps> = ({
             ) : behindCount > 0 ? (
               <button 
                 className="sync-button sync-button--primary" 
-                onClick={() => handleGitPull()}
+                onClick={() => onOpenPullStrategy ? onOpenPullStrategy() : handleGitPull("merge")}
                 disabled={isPullingRemote}
-                title={`Pull ${behindCount} commit(s) from origin`}
+                title={`Pull ${behindCount} commit(s) from origin (choose Rebase or Merge)`}
               >
                 <ArrowDown size={14} className={isPullingRemote ? "spin-icon" : ""} />
                 <span>{isPullingRemote ? "Pulling..." : `Pull Origin (${behindCount})`}</span>

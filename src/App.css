@@ -1643,6 +1643,114 @@ button, input, textarea, select, a, .workspace-trigger-btn, .tab-button, .branch
   overflow: visible;
 }
 
+/* --- PULL STRATEGY MODAL STYLING --- */
+.pull-strategy-container {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.pull-strategy-header {
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+  line-height: 1.45;
+}
+
+.pull-strategy-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pull-strategy-card {
+  display: flex;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  background: rgba(255, 255, 255, 0.02);
+  cursor: pointer;
+  transition: all 0.16s ease;
+  position: relative;
+  user-select: none;
+}
+
+.pull-strategy-card:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(168, 85, 247, 0.35);
+}
+
+.pull-strategy-card.selected {
+  border-color: var(--accent-purple);
+  background: rgba(168, 85, 247, 0.09);
+  box-shadow: 0 0 16px -4px rgba(139, 92, 246, 0.25);
+}
+
+.pull-strategy-icon-box {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+  transition: all 0.16s ease;
+  color: var(--color-text-muted);
+}
+
+.pull-strategy-card.selected .pull-strategy-icon-box {
+  background: rgba(168, 85, 247, 0.22);
+  color: var(--accent-purple-bright);
+}
+
+.pull-strategy-card-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.pull-strategy-card-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.pull-strategy-card-title {
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--color-text-bright);
+}
+
+.pull-strategy-badge {
+  font-size: 0.67rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--color-text-muted);
+}
+
+.pull-strategy-badge.linear {
+  background: rgba(168, 85, 247, 0.16);
+  color: var(--accent-purple-bright);
+  border: 1px solid rgba(168, 85, 247, 0.3);
+}
+
+.pull-strategy-badge.merge {
+  background: rgba(97, 175, 239, 0.15);
+  color: #61afef;
+  border: 1px solid rgba(97, 175, 239, 0.3);
+}
+
+.pull-strategy-card-desc {
+  font-size: 0.76rem;
+  color: var(--color-text-muted);
+  line-height: 1.35;
+}
+
 /* --- HUNK DETAILS FLOATING MODAL OVERLAY (STAGING MESH INSPECTOR) --- */
 .hunk-details-overlay {
   position: fixed;
@@ -2543,6 +2651,141 @@ select.dialog-input option {
   color: var(--color-text-muted);
   line-height: 1.4;
 }
+
+.settings-radio-card {
+  display: flex;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  background: rgba(255, 255, 255, 0.02);
+  cursor: pointer;
+  transition: all 0.16s ease;
+  user-select: none;
+}
+
+.settings-radio-card:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(168, 85, 247, 0.35);
+}
+
+.settings-radio-card.selected {
+  border-color: var(--accent-purple);
+  background: rgba(168, 85, 247, 0.09);
+  box-shadow: 0 0 16px -4px rgba(139, 92, 246, 0.25);
+}
+
+/* Clean, Modern Radio Rows */
+.settings-radio-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+  cursor: pointer;
+  transition: all 0.16s ease;
+  user-select: none;
+}
+
+.settings-radio-row:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.settings-radio-row.selected {
+  border-color: var(--accent-purple);
+  background: rgba(168, 85, 247, 0.08);
+}
+
+.settings-radio-row-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.16s ease;
+}
+
+.settings-radio-row.selected .settings-radio-row-icon {
+  background: rgba(168, 85, 247, 0.18);
+}
+
+.settings-radio-circle {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.16s ease;
+}
+
+.settings-radio-row.selected .settings-radio-circle {
+  border-color: var(--accent-purple-bright);
+  background: var(--accent-purple);
+}
+
+.settings-radio-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ffffff;
+}
+
+.settings-tag-pill {
+  font-size: 0.65rem;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(168, 85, 247, 0.15);
+  color: var(--accent-purple-bright);
+  font-family: var(--font-mono);
+  font-weight: 500;
+}
+
+/* Clean Segmented PR Merge Method Group */
+.settings-segmented-group {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.settings-segmented-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 500;
+  transition: all 0.15s ease;
+}
+
+.settings-segmented-btn:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--color-text-bright);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.settings-segmented-btn.selected {
+  border-color: var(--accent-purple);
+  background: rgba(168, 85, 247, 0.12);
+  color: var(--color-text-bright);
+  font-weight: 600;
+}
+
 
 /* Preset Chips */
 .settings-chip {
