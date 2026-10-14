@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { RefreshCw, AlertTriangle, ChevronRight, ChevronDown, FileCode, CheckCircle2, Check } from 'lucide-react';
 import type { GitFileStatus } from '../../types/git';
 
@@ -55,7 +55,6 @@ const FilePane: React.FC<FilePaneProps> = ({
   hasRepo,
   initializeGitRepo
 }) => {
-  const [showCleanSections, setShowCleanSections] = useState(false);
   const isWorkingTreeClean = hasRepo && unstagedFiles.length === 0 && stagedFiles.length === 0 && conflictedFiles.length === 0;
   return (
     <div 
@@ -67,21 +66,13 @@ const FilePane: React.FC<FilePaneProps> = ({
         <RefreshCw size={12} className="refresh-icon" onClick={() => refreshRepository()} />
       </div>
       <div className="file-list-container">
-        {isWorkingTreeClean && !showCleanSections ? (
+        {isWorkingTreeClean ? (
           <div className="working-tree-clean">
             <div className="clean-tree-icon-wrapper">
               <CheckCircle2 size={24} className="clean-tree-icon" />
             </div>
             <div className="clean-tree-title">Working Tree Clean</div>
             <div className="clean-tree-desc">No unstaged or staged changes detected</div>
-            <button 
-              type="button" 
-              className="clean-tree-toggle-btn" 
-              onClick={() => setShowCleanSections(true)}
-              title="Show section headers"
-            >
-              Show section headers
-            </button>
           </div>
         ) : (
           <>
@@ -313,18 +304,6 @@ const FilePane: React.FC<FilePaneProps> = ({
                 </div>
               )}
             </div>
-
-            {isWorkingTreeClean && showCleanSections && (
-              <div style={{ display: 'flex', justifyContent: 'center', marginTop: '10px' }}>
-                <button 
-                  type="button" 
-                  className="clean-tree-toggle-btn" 
-                  onClick={() => setShowCleanSections(false)}
-                >
-                  Show clean summary
-                </button>
-              </div>
-            )}
           </>
         )}
       </div>

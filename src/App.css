@@ -1192,23 +1192,6 @@ button, input, textarea, select, a, .workspace-trigger-btn, .tab-button, .branch
   max-width: 200px;
 }
 
-.clean-tree-toggle-btn {
-  background: transparent;
-  border: none;
-  color: var(--color-text-muted);
-  font-size: 0.7rem;
-  cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 4px;
-  margin-top: 10px;
-  transition: color 0.15s ease, background-color 0.15s ease;
-}
-
-.clean-tree-toggle-btn:hover {
-  color: var(--color-text-bright);
-  background: rgba(255, 255, 255, 0.05);
-}
-
 .empty-section-row {
   display: flex;
   align-items: center;
