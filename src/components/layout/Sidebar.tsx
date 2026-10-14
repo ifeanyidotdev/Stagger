@@ -745,24 +745,15 @@ const Sidebar: React.FC<SidebarProps> = ({
                 <span>{isPushingRemote ? "Publishing..." : "Publish Branch"}</span>
               </button>
             ) : behindCount > 0 ? (
-              <div style={{ display: "flex", flexDirection: "column", gap: "6px", width: "100%" }}>
-                <button 
-                  className="sync-button sync-button--warning" 
-                  onClick={() => handleGitPull()}
-                  disabled={isPullingRemote}
-                  title={unpushedCount > 0 
-                    ? `Pull and merge ${behindCount} commit(s) from origin before pushing your ${unpushedCount} local commit(s)` 
-                    : `Pull ${behindCount} incoming commit(s) from origin`}
-                >
-                  <ArrowDown size={14} className={isPullingRemote ? "spin-icon" : ""} />
-                  <span>{isPullingRemote ? "Pulling..." : behindCount > 1 ? `Pull Origin (${behindCount})` : "Pull Origin"}</span>
-                </button>
-                <div style={{ fontSize: "0.68rem", color: "#fbbf24", textAlign: "center" }}>
-                  {unpushedCount > 0 
-                    ? (behindCount > 1 ? `Origin is ahead (${behindCount}). Pull to integrate changes before pushing.` : "Origin has changes. Pull to integrate before pushing.")
-                    : (behindCount > 1 ? `Origin is ahead by ${behindCount} commits` : "Origin has new changes. Pull to update.")}
-                </div>
-              </div>
+              <button 
+                className="sync-button sync-button--primary" 
+                onClick={() => handleGitPull()}
+                disabled={isPullingRemote}
+                title={`Pull ${behindCount} commit(s) from origin`}
+              >
+                <ArrowDown size={14} className={isPullingRemote ? "spin-icon" : ""} />
+                <span>{isPullingRemote ? "Pulling..." : `Pull Origin (${behindCount})`}</span>
+              </button>
             ) : unpushedCount > 0 ? (
               <button 
                 className="sync-button sync-button--primary" 
