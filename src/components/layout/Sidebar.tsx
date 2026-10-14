@@ -19,8 +19,7 @@ import {
   GitBranch,
   Users,
   Archive,
-  RefreshCw,
-  AlertTriangle
+  RefreshCw
 } from "lucide-react";
 import type { GitHubPR, StashEntry, BranchInfo } from '../../types/git';
 
@@ -734,7 +733,7 @@ const Sidebar: React.FC<SidebarProps> = ({
       {/* Sidebar Footer */}
       {workspaces.length > 0 && hasRepo && (
         <div className="sidebar-footer">
-          <div style={{ display: "flex", flexDirection: "column", width: "100%", marginBottom: "4px" }}>
+          <div style={{ display: "flex", flexDirection: "column", width: "100%" }}>
             {!hasUpstream ? (
               <button 
                 className="sync-button sync-button--primary" 
@@ -745,53 +744,23 @@ const Sidebar: React.FC<SidebarProps> = ({
                 <Globe size={14} className={isPushingRemote ? "spin-icon" : ""} />
                 <span>{isPushingRemote ? "Publishing..." : "Publish Branch"}</span>
               </button>
-            ) : (behindCount > 0 && unpushedCount > 0) ? (
-              <div style={{ display: "flex", flexDirection: "column", gap: "6px", width: "100%" }}>
-                <div className="sync-diverged-card">
-                  <div style={{ display: "flex", alignItems: "center", gap: "6px", fontWeight: 600 }}>
-                    <AlertTriangle size={13} style={{ color: "#f59e0b", flexShrink: 0 }} />
-                    <span>Origin is ahead ({behindCount})</span>
-                  </div>
-                  <span style={{ fontSize: "0.68rem", opacity: 0.9, lineHeight: 1.3 }}>
-                    Pull and settle {behindCount} incoming commit{behindCount > 1 ? "s" : ""} from origin before pushing your {unpushedCount} local commit{unpushedCount > 1 ? "s" : ""}.
-                  </span>
-                </div>
-
-                <div style={{ display: "flex", gap: "6px", width: "100%" }}>
-                  <button 
-                    className="sync-button sync-button--warning" 
-                    style={{ flex: 1 }}
-                    onClick={() => handleGitPull()}
-                    disabled={isPullingRemote}
-                    title={`Pull and settle ${behindCount} commit(s) from origin`}
-                  >
-                    <ArrowDown size={14} className={isPullingRemote ? "spin-icon" : ""} />
-                    <span>{isPullingRemote ? "Pulling..." : `Pull Origin (${behindCount})`}</span>
-                  </button>
-                  <button 
-                    className="sync-button sync-button--blocked" 
-                    style={{ flex: 1 }}
-                    disabled={true}
-                    title={`Cannot push: Origin is ahead by ${behindCount} commit(s). Pull changes from origin first.`}
-                  >
-                    <ArrowUp size={14} />
-                    <span>Push Blocked</span>
-                  </button>
-                </div>
-              </div>
             ) : behindCount > 0 ? (
               <div style={{ display: "flex", flexDirection: "column", gap: "6px", width: "100%" }}>
                 <button 
                   className="sync-button sync-button--warning" 
                   onClick={() => handleGitPull()}
                   disabled={isPullingRemote}
-                  title={`Pull ${behindCount} incoming commit(s) from origin`}
+                  title={unpushedCount > 0 
+                    ? `Pull and merge ${behindCount} commit(s) from origin before pushing your ${unpushedCount} local commit(s)` 
+                    : `Pull ${behindCount} incoming commit(s) from origin`}
                 >
                   <ArrowDown size={14} className={isPullingRemote ? "spin-icon" : ""} />
-                  <span>{isPullingRemote ? "Pulling..." : `Pull Origin (${behindCount})`}</span>
+                  <span>{isPullingRemote ? "Pulling..." : behindCount > 1 ? `Pull Origin (${behindCount})` : "Pull Origin"}</span>
                 </button>
                 <div style={{ fontSize: "0.68rem", color: "#fbbf24", textAlign: "center" }}>
-                  Origin is ahead by {behindCount} commit{behindCount > 1 ? "s" : ""}
+                  {unpushedCount > 0 
+                    ? (behindCount > 1 ? `Origin is ahead (${behindCount}). Pull to integrate changes before pushing.` : "Origin has changes. Pull to integrate before pushing.")
+                    : (behindCount > 1 ? `Origin is ahead by ${behindCount} commits` : "Origin has new changes. Pull to update.")}
                 </div>
               </div>
             ) : unpushedCount > 0 ? (
@@ -816,11 +785,6 @@ const Sidebar: React.FC<SidebarProps> = ({
               </button>
             )}
           </div>
-          {remoteUrl && (
-            <div style={{ fontSize: "0.65rem", color: "var(--color-text-muted)", marginTop: "6px", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
-              Origin: {remoteUrl}
-            </div>
-          )}
         </div>
       )}
     </div>
