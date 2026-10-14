@@ -19,9 +19,10 @@ import {
   GitBranch,
   Users,
   Archive,
-  RefreshCw
+  RefreshCw,
+  AlertTriangle
 } from "lucide-react";
-import type { GitHubPR, StashEntry } from '../../types/git';
+import type { GitHubPR, StashEntry, BranchInfo } from '../../types/git';
 
 interface SidebarProps {
   sidebarCollapsed: boolean;
@@ -75,6 +76,8 @@ interface SidebarProps {
   isCollabActive: boolean;
   setIsCollabActive: (val: boolean) => void;
   unpushedCount: number;
+  behindCount: number;
+  allBranches: BranchInfo[];
   onOpenFolderPicker?: () => void;
 }
 
@@ -130,7 +133,9 @@ const Sidebar: React.FC<SidebarProps> = ({
   dropStash,
   isCollabActive,
   setIsCollabActive,
-  unpushedCount
+  unpushedCount,
+  behindCount = 0,
+  allBranches = []
 }) => {
   const branchOpsMenuRef = useRef<HTMLDivElement>(null);
   const branchOpsBtnRef = useRef<HTMLSpanElement>(null);
@@ -323,6 +328,22 @@ const Sidebar: React.FC<SidebarProps> = ({
             </div>
             <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
               <span
+                title="Fetch updates from origin"
+                style={{ 
+                  display: "inline-flex", 
+                  alignItems: "center", 
+                  cursor: isFetchingRemote ? "wait" : "pointer", 
+                  padding: "2px",
+                  color: isFetchingRemote ? "var(--accent-purple-bright)" : "inherit"
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleGitFetch(false);
+                }}
+              >
+                <RefreshCw size={13} className={isFetchingRemote ? "spin-icon" : ""} />
+              </span>
+              <span
                 ref={branchOpsBtnRef}
                 title="Git Operations & Sync Menu"
                 style={{ 
@@ -386,14 +407,14 @@ const Sidebar: React.FC<SidebarProps> = ({
                 </div>
 
                 <div 
-                  className="dropdown-menu-item"
+                  className={`dropdown-menu-item ${behindCount > 0 ? "highlight-warning" : ""}`}
                   onClick={() => {
                     setIsBranchOpsDropdownOpen(false);
                     handleGitPull();
                   }}
                 >
-                  <ArrowDown size={13} className={isPullingRemote ? "spin-icon" : ""} style={{ color: "var(--color-staged)" }} />
-                  <span>Pull from Origin</span>
+                  <ArrowDown size={13} className={isPullingRemote ? "spin-icon" : ""} style={{ color: behindCount > 0 ? "#f59e0b" : "var(--color-staged)" }} />
+                  <span>{behindCount > 0 ? `Pull from Origin (${behindCount} new)` : "Pull from Origin"}</span>
                 </div>
 
                 {!hasUpstream ? (
@@ -414,9 +435,14 @@ const Sidebar: React.FC<SidebarProps> = ({
                       setIsBranchOpsDropdownOpen(false);
                       handleGitPush(false);
                     }}
+                    style={{
+                      opacity: behindCount > 0 ? 0.6 : 1,
+                      cursor: behindCount > 0 ? "not-allowed" : "pointer"
+                    }}
+                    title={behindCount > 0 ? `Push blocked: Origin is ahead by ${behindCount} commit(s)` : `Push to ${upstreamBranchName || "Origin"}`}
                   >
-                    <ArrowUp size={13} className={isPushingRemote ? "spin-icon" : ""} style={{ color: "var(--color-staged)" }} />
-                    <span>Push to {upstreamBranchName || "Origin"}</span>
+                    <ArrowUp size={13} className={isPushingRemote ? "spin-icon" : ""} style={{ color: behindCount > 0 ? "var(--color-conflict)" : "var(--color-staged)" }} />
+                    <span>{behindCount > 0 ? `Push Blocked (Origin ahead by ${behindCount})` : `Push to ${upstreamBranchName || "Origin"}`}</span>
                   </div>
                 )}
 
@@ -450,49 +476,78 @@ const Sidebar: React.FC<SidebarProps> = ({
           </div>
           {isBranchListExpanded && (
             <div className="branch-list">
-              {branchList.map(bName => (
-                <div 
-                  key={bName} 
-                  className={`branch-item ${currentBranch === bName ? "active" : ""}`}
-                  onDragOver={handleDragOverBranch}
-                  onDrop={handleDropOnBranch}
-                  onClick={() => startCheckoutBranch(bName)}
-                  style={{
-                    border: draggedCommitSha ? "1px dashed var(--color-conflict)" : "1px solid transparent"
-                  }}
-                >
-                  <GitBranch size={14} />
-                  <span style={{ flex: 1, textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>{bName}</span>
-                  {currentBranch === bName ? (
-                    <span className="branch-tick" title="Focused Branch">✓</span>
-                  ) : draggedCommitSha ? (
-                    <span style={{ marginLeft: "auto", fontSize: "0.65rem", color: "var(--color-conflict)" }}>Merge Drop</span>
-                  ) : (
-                    <div className="branch-item-actions" style={{ display: "flex", gap: "4px", alignItems: "center", marginLeft: "auto" }}>
-                      <button
-                        className="branch-action-icon-btn"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openMergeRebaseModal(bName, "merge");
-                        }}
-                        title={`Merge '${bName}' into '${currentBranch}'`}
-                      >
-                        <GitMerge size={12} style={{ color: "var(--color-modified)" }} />
-                      </button>
-                      <button 
-                        className="branch-action-icon-btn"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          startDeleteBranch(bName);
-                        }}
-                        title="Delete Branch"
-                      >
-                        <Trash2 size={12} style={{ color: "var(--color-deleted)", opacity: 0.7 }} />
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ))}
+              {branchList.map(bName => {
+                const bInfo = allBranches.find(b => !b.is_remote && b.name === bName);
+                const ahead = bInfo?.ahead ?? 0;
+                const behind = bInfo?.behind ?? 0;
+                return (
+                  <div 
+                    key={bName} 
+                    className={`branch-item ${currentBranch === bName ? "active" : ""}`}
+                    onDragOver={handleDragOverBranch}
+                    onDrop={handleDropOnBranch}
+                    onClick={() => startCheckoutBranch(bName)}
+                    style={{
+                      border: draggedCommitSha ? "1px dashed var(--color-conflict)" : "1px solid transparent"
+                    }}
+                  >
+                    <GitBranch size={14} />
+                    <span style={{ flex: 1, textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>{bName}</span>
+                    
+                    {(ahead > 0 || behind > 0) && (
+                      <div className="branch-sync-pills" onClick={(e) => e.stopPropagation()}>
+                        {behind > 0 && (
+                          <span 
+                            className="branch-sync-pill behind" 
+                            title={`Origin is ahead by ${behind} commit(s)`}
+                          >
+                            <ArrowDown size={10} />
+                            <span>{behind}</span>
+                          </span>
+                        )}
+                        {ahead > 0 && (
+                          <span 
+                            className="branch-sync-pill ahead" 
+                            title={`${ahead} unpushed commit(s)`}
+                          >
+                            <ArrowUp size={10} />
+                            <span>{ahead}</span>
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    {currentBranch === bName ? (
+                      <span className="branch-tick" title="Focused Branch">✓</span>
+                    ) : draggedCommitSha ? (
+                      <span style={{ marginLeft: "auto", fontSize: "0.65rem", color: "var(--color-conflict)" }}>Merge Drop</span>
+                    ) : (
+                      <div className="branch-item-actions" style={{ display: "flex", gap: "4px", alignItems: "center", marginLeft: (ahead > 0 || behind > 0) ? "4px" : "auto" }}>
+                        <button
+                          className="branch-action-icon-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openMergeRebaseModal(bName, "merge");
+                          }}
+                          title={`Merge '${bName}' into '${currentBranch}'`}
+                        >
+                          <GitMerge size={12} style={{ color: "var(--color-modified)" }} />
+                        </button>
+                        <button 
+                          className="branch-action-icon-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            startDeleteBranch(bName);
+                          }}
+                          title="Delete Branch"
+                        >
+                          <Trash2 size={12} style={{ color: "var(--color-deleted)", opacity: 0.7 }} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
@@ -679,7 +734,7 @@ const Sidebar: React.FC<SidebarProps> = ({
       {/* Sidebar Footer */}
       {workspaces.length > 0 && hasRepo && (
         <div className="sidebar-footer">
-          <div style={{ display: "flex", width: "100%", marginBottom: "4px" }}>
+          <div style={{ display: "flex", flexDirection: "column", width: "100%", marginBottom: "4px" }}>
             {!hasUpstream ? (
               <button 
                 className="sync-button sync-button--primary" 
@@ -690,25 +745,98 @@ const Sidebar: React.FC<SidebarProps> = ({
                 <Globe size={14} className={isPushingRemote ? "spin-icon" : ""} />
                 <span>{isPushingRemote ? "Publishing..." : "Publish Branch"}</span>
               </button>
+            ) : (behindCount > 0 && unpushedCount > 0) ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px", width: "100%" }}>
+                <div className="sync-diverged-card">
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px", fontWeight: 600 }}>
+                    <AlertTriangle size={13} style={{ color: "#f59e0b", flexShrink: 0 }} />
+                    <span>Origin is ahead ({behindCount})</span>
+                  </div>
+                  <span style={{ fontSize: "0.68rem", opacity: 0.9, lineHeight: 1.3 }}>
+                    Pull and settle {behindCount} incoming commit{behindCount > 1 ? "s" : ""} from origin before pushing your {unpushedCount} local commit{unpushedCount > 1 ? "s" : ""}.
+                  </span>
+                </div>
+
+                <div style={{ display: "flex", gap: "6px", width: "100%" }}>
+                  <button 
+                    className="sync-button sync-button--warning" 
+                    style={{ flex: 1 }}
+                    onClick={() => handleGitPull()}
+                    disabled={isPullingRemote}
+                    title={`Pull and settle ${behindCount} commit(s) from origin`}
+                  >
+                    <ArrowDown size={14} className={isPullingRemote ? "spin-icon" : ""} />
+                    <span>{isPullingRemote ? "Pulling..." : `Pull Origin (${behindCount})`}</span>
+                  </button>
+                  <button 
+                    className="sync-button sync-button--blocked" 
+                    style={{ flex: 1 }}
+                    disabled={true}
+                    title={`Cannot push: Origin is ahead by ${behindCount} commit(s). Pull changes from origin first.`}
+                  >
+                    <ArrowUp size={14} />
+                    <span>Push Blocked</span>
+                  </button>
+                </div>
+              </div>
+            ) : behindCount > 0 ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px", width: "100%" }}>
+                <div style={{ display: "flex", gap: "6px", width: "100%" }}>
+                  <button 
+                    className="sync-button sync-button--warning" 
+                    style={{ flex: 1 }}
+                    onClick={() => handleGitPull()}
+                    disabled={isPullingRemote}
+                    title={`Pull ${behindCount} incoming commit(s) from origin`}
+                  >
+                    <ArrowDown size={14} className={isPullingRemote ? "spin-icon" : ""} />
+                    <span>{isPullingRemote ? "Pulling..." : `Pull Origin (${behindCount})`}</span>
+                  </button>
+                  <button 
+                    className="sync-button sync-button--secondary" 
+                    style={{ width: "36px", padding: 0, flexShrink: 0 }}
+                    onClick={() => handleGitFetch(false)}
+                    disabled={isFetchingRemote}
+                    title="Check / Fetch updates from origin"
+                  >
+                    <RefreshCw size={13} className={isFetchingRemote ? "spin-icon" : ""} />
+                  </button>
+                </div>
+                <div style={{ fontSize: "0.68rem", color: "#fbbf24", textAlign: "center" }}>
+                  Origin is ahead by {behindCount} commit{behindCount > 1 ? "s" : ""}
+                </div>
+              </div>
             ) : unpushedCount > 0 ? (
-              <button 
-                className="sync-button sync-button--primary" 
-                onClick={() => handleGitPush(false)}
-                disabled={isPushingRemote}
-                title={`Push ${unpushedCount} local commit(s) to origin`}
-              >
-                <ArrowUp size={14} className={isPushingRemote ? "spin-icon" : ""} />
-                <span>{isPushingRemote ? "Pushing..." : `Push Origin (${unpushedCount})`}</span>
-              </button>
+              <div style={{ display: "flex", gap: "6px", width: "100%" }}>
+                <button 
+                  className="sync-button sync-button--primary" 
+                  style={{ flex: 1 }}
+                  onClick={() => handleGitPush(false)}
+                  disabled={isPushingRemote}
+                  title={`Push ${unpushedCount} local commit(s) to origin`}
+                >
+                  <ArrowUp size={14} className={isPushingRemote ? "spin-icon" : ""} />
+                  <span>{isPushingRemote ? "Pushing..." : `Push Origin (${unpushedCount})`}</span>
+                </button>
+                <button 
+                  className="sync-button sync-button--secondary" 
+                  style={{ width: "36px", padding: 0, flexShrink: 0 }}
+                  onClick={() => handleGitFetch(false)}
+                  disabled={isFetchingRemote}
+                  title="Check / Fetch updates from origin"
+                >
+                  <RefreshCw size={13} className={isFetchingRemote ? "spin-icon" : ""} />
+                </button>
+              </div>
             ) : (
               <button 
                 className="sync-button sync-button--secondary" 
                 onClick={() => handleGitFetch(false)}
                 disabled={isFetchingRemote}
-                title="Fetch updates from origin"
+                title="Branch is in sync with origin. Click to fetch remote updates."
               >
                 <RefreshCw size={14} className={isFetchingRemote ? "spin-icon" : ""} />
-                <span>{isFetchingRemote ? "Fetching..." : "Fetch Origin"}</span>
+                <span>{isFetchingRemote ? "Fetching..." : "Fetch Origin (In Sync)"}</span>
               </button>
             )}
           </div>

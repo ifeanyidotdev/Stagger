@@ -14,7 +14,6 @@ import {
   ExternalLink, 
   RefreshCw, 
   FileCode, 
-  Terminal, 
   Globe, 
   User, 
   UserCheck, 
@@ -63,9 +62,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<{ success?: boolean; message?: string } | null>(null);
-
-  // System Git Config
-  const [systemGit, setSystemGit] = useState<SystemGitConfig | null>(null);
 
   // Global Git Settings
   const [userName, setUserName] = useState('');
@@ -148,8 +144,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         ]);
 
         if (!mounted) return;
-
-        if (sysGit) setSystemGit(sysGit);
 
         setUserName(settings.git_user_name || sysGit?.user_name || '');
         setUserEmail(settings.git_user_email || sysGit?.user_email || '');
@@ -610,41 +604,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 {/* 1. GLOBAL GIT IDENTITY */}
                 {activeContext === 'global' && activeGlobalTab === 'global-git' && (
                   <>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <div>
-                        <h3 style={{ fontSize: '0.96rem', fontWeight: 600, color: 'var(--color-text-bright)' }}>
-                          Global Git Identity
-                        </h3>
-                        <p className="settings-field-hint">
-                          Default author signature attached to commits across all repositories on this machine.
-                        </p>
-                      </div>
-
-                      {systemGit && (systemGit.user_name || systemGit.user_email) && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (systemGit.user_name) setUserName(systemGit.user_name);
-                            if (systemGit.user_email) setUserEmail(systemGit.user_email);
-                            if (systemGit.default_branch) setDefaultBranch(systemGit.default_branch);
-                          }}
-                          style={{
-                            background: 'rgba(255, 255, 255, 0.05)',
-                            border: '1px solid var(--border-color)',
-                            borderRadius: '6px',
-                            color: 'var(--color-text-main)',
-                            fontSize: '0.72rem',
-                            padding: '5px 10px',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '6px',
-                          }}
-                        >
-                          <Terminal size={12} />
-                          <span>Import System .gitconfig</span>
-                        </button>
-                      )}
+                    <div>
+                      <h3 style={{ fontSize: '0.96rem', fontWeight: 600, color: 'var(--color-text-bright)' }}>
+                        Global Git Identity
+                      </h3>
+                      <p className="settings-field-hint">
+                        Default author signature attached to commits across all repositories on this machine.
+                      </p>
                     </div>
 
                     <div className="settings-card">

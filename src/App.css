@@ -478,6 +478,15 @@ button, input, textarea, select, a, .workspace-trigger-btn, .tab-button, .branch
   color: #ffffff;
 }
 
+.dropdown-menu-item.highlight-warning {
+  color: #fbbf24;
+}
+
+.dropdown-menu-item.highlight-warning:hover {
+  background: rgba(245, 158, 11, 0.12);
+  color: #ffffff;
+}
+
 .dropdown-divider {
   height: 1px;
   background: var(--border-color);
@@ -532,6 +541,37 @@ button, input, textarea, select, a, .workspace-trigger-btn, .tab-button, .branch
   color: var(--accent-purple-bright);
   font-weight: 700;
   font-size: 0.75rem;
+}
+
+.branch-sync-pills {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: auto;
+}
+
+.branch-sync-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 0.65rem;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  padding: 1px 5px;
+  border-radius: 4px;
+  line-height: 1.2;
+}
+
+.branch-sync-pill.behind {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.branch-sync-pill.ahead {
+  background: rgba(139, 92, 246, 0.15);
+  color: var(--accent-purple-bright);
+  border: 1px solid rgba(139, 92, 246, 0.3);
 }
 
 .branch-action-icon-btn {
@@ -619,6 +659,39 @@ button, input, textarea, select, a, .workspace-trigger-btn, .tab-button, .branch
 .sync-button--primary:hover:not(:disabled) {
   background: var(--accent-button-hover) !important;
   border-color: var(--accent-button-hover) !important;
+}
+
+.sync-button--warning {
+  background: #d97706 !important;
+  border: 1px solid #f59e0b !important;
+  color: #ffffff !important;
+  font-weight: 600 !important;
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.25) !important;
+}
+
+.sync-button--warning:hover:not(:disabled) {
+  background: #b45309 !important;
+  border-color: #d97706 !important;
+}
+
+.sync-button--blocked {
+  background: rgba(239, 68, 68, 0.08) !important;
+  border: 1px dashed rgba(239, 68, 68, 0.35) !important;
+  color: #fca5a5 !important;
+  cursor: not-allowed !important;
+  opacity: 0.75 !important;
+}
+
+.sync-diverged-card {
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  border-radius: 6px;
+  padding: 7px 9px;
+  font-size: 0.72rem;
+  color: #fbbf24;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
 }
 
 .collab-toggle-btn {
@@ -742,6 +815,30 @@ button, input, textarea, select, a, .workspace-trigger-btn, .tab-button, .branch
   border-radius: 50%;
   background: var(--color-staged);
   box-shadow: 0 0 6px var(--color-staged);
+}
+
+.topbar-sync-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.68rem;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 4px;
+  line-height: 1.2;
+}
+
+.topbar-sync-tag.behind {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.topbar-sync-tag.ahead {
+  background: rgba(139, 92, 246, 0.15);
+  color: var(--accent-purple-bright);
+  border: 1px solid rgba(139, 92, 246, 0.3);
 }
 
 .topbar-action-btn {
@@ -1981,7 +2078,13 @@ select.dialog-input option {
 }
 
 .dialog-button {
-  padding: 8px 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 36px;
+  box-sizing: border-box;
+  padding: 0 16px;
   border-radius: 8px;
   font-family: var(--font-sans);
   font-size: 0.8rem;
@@ -1989,6 +2092,19 @@ select.dialog-input option {
   cursor: pointer;
   transition: var(--transition-quick);
   border: 1px solid transparent;
+  white-space: nowrap;
+  line-height: 1;
+}
+
+.dialog-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none !important;
+}
+
+.dialog-button svg {
+  flex-shrink: 0;
+  display: block;
 }
 
 .dialog-button.primary {
@@ -1997,7 +2113,7 @@ select.dialog-input option {
   box-shadow: 0 0 16px -3px rgba(139, 92, 246, 0.4);
 }
 
-.dialog-button.primary:hover {
+.dialog-button.primary:hover:not(:disabled) {
   background: var(--accent-gradient-hover);
   box-shadow: 0 0 20px -2px rgba(139, 92, 246, 0.6);
 }
@@ -2008,7 +2124,7 @@ select.dialog-input option {
   color: var(--color-text-main);
 }
 
-.dialog-button.secondary:hover {
+.dialog-button.secondary:hover:not(:disabled) {
   background: var(--bg-hover);
   color: var(--color-text-bright);
   border-color: var(--border-hover);
@@ -2732,4 +2848,142 @@ select.dialog-input option {
   line-height: 1.4;
   margin-bottom: 4px;
 }
+
+/* ==========================================================================
+   COMMIT BRANCH CREATION & CONTEXT MENU
+   ========================================================================== */
+
+.commit-branch-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(139, 92, 246, 0.15);
+  border: 1px solid rgba(139, 92, 246, 0.35);
+  color: var(--accent-purple-bright);
+  font-size: 0.74rem;
+  font-weight: 500;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  white-space: nowrap;
+}
+
+.commit-branch-btn:hover {
+  background: var(--accent-purple);
+  border-color: var(--accent-purple);
+  color: #fff;
+  transform: translateY(-1px);
+  box-shadow: 0 3px 10px rgba(139, 92, 246, 0.35);
+}
+
+.commit-push-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  color: var(--color-staged);
+  font-size: 0.74rem;
+  font-weight: 500;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  white-space: nowrap;
+}
+
+.commit-push-btn:hover {
+  background: var(--color-staged);
+  border-color: var(--color-staged);
+  color: #fff;
+  transform: translateY(-1px);
+  box-shadow: 0 3px 10px rgba(16, 185, 129, 0.35);
+}
+
+.commit-row-branch-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-color);
+  color: var(--color-text-muted);
+  font-size: 0.68rem;
+  font-weight: 500;
+  padding: 2px 7px;
+  border-radius: 4px;
+  cursor: pointer;
+  opacity: 0;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.commit-row:hover .commit-row-branch-btn {
+  opacity: 1;
+}
+
+.commit-row-branch-btn:hover {
+  background: rgba(139, 92, 246, 0.2);
+  border-color: rgba(139, 92, 246, 0.4);
+  color: var(--accent-purple-bright);
+}
+
+.dialog-commit-summary-card {
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 10px 12px;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.commit-context-menu {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  padding: 6px;
+  min-width: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  animation: dialogPop 0.12s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.context-menu-header {
+  padding: 4px 8px 6px;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+}
+
+.context-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  font-size: 0.78rem;
+  color: var(--color-text-main);
+  background: transparent;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.context-menu-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--color-text-bright);
+}
+
+.context-menu-divider {
+  height: 1px;
+  background: var(--border-color);
+  margin: 3px 0;
+}
+
 
