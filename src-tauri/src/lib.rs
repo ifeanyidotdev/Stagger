@@ -15,6 +15,8 @@ pub fn run() {
             commands::unstage_file,
             commands::stage_files,
             commands::unstage_files,
+            commands::discard_file_changes,
+            commands::discard_files_changes,
             commands::apply_patch_to_index,
             commands::run_git_cli_cmd,
             commands::login_with_github,

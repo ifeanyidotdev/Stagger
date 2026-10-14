@@ -521,4 +521,68 @@ pub fn unstage_files_impl(repo_path: &str, file_paths: Vec<String>) -> Result<()
     Ok(())
 }
 
+pub fn discard_file_changes_impl(repo_path: &str, file_path: &str) -> Result<(), String> {
+    discard_files_changes_impl(repo_path, vec![file_path.to_string()])
+}
+
+pub fn discard_files_changes_impl(repo_path: &str, file_paths: Vec<String>) -> Result<(), String> {
+    let repo = git2::Repository::open(repo_path)
+        .map_err(|e| format!("Failed to open repository: {}", e))?;
+    let workdir = repo.workdir().ok_or("Failed to get repository working directory")?;
+
+    for file_path in &file_paths {
+        let full_path = workdir.join(file_path);
+        let path = Path::new(file_path);
+
+        let status = repo.status_file(path).unwrap_or(git2::Status::empty());
+
+        if status.is_wt_new() {
+            if full_path.exists() {
+                if full_path.is_dir() {
+                    let _ = std::fs::remove_dir_all(&full_path);
+                } else {
+                    let _ = std::fs::remove_file(&full_path);
+                }
+            }
+            let _ = Command::new("git")
+                .args(&["clean", "-f", "-d", "--", file_path])
+                .current_dir(workdir)
+                .output();
+        } else {
+            let mut checkout_done = false;
+            if let Ok(out) = Command::new("git")
+                .args(&["checkout", "--", file_path])
+                .current_dir(workdir)
+                .output()
+            {
+                if out.status.success() {
+                    checkout_done = true;
+                }
+            }
+
+            if !checkout_done {
+                if let Ok(out) = Command::new("git")
+                    .args(&["restore", "--", file_path])
+                    .current_dir(workdir)
+                    .output()
+                {
+                    if out.status.success() {
+                        checkout_done = true;
+                    }
+                }
+            }
+
+            if !checkout_done && full_path.exists() {
+                if full_path.is_dir() {
+                    let _ = std::fs::remove_dir_all(&full_path);
+                } else {
+                    let _ = std::fs::remove_file(&full_path);
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+
 

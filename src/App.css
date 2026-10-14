@@ -1013,11 +1013,36 @@ button, input, textarea, select, a, .workspace-trigger-btn, .tab-button, .branch
   user-select: none;
   cursor: pointer;
   transition: var(--transition-quick);
+  white-space: nowrap;
+  gap: 8px;
 }
 
 .file-group-header:hover {
   background: var(--bg-hover);
   color: var(--color-text-bright);
+}
+
+.file-group-header-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+}
+
+.file-group-header-title {
+  white-space: nowrap;
+  font-size: 0.74rem;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-group-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .badge {
@@ -1028,6 +1053,18 @@ button, input, textarea, select, a, .workspace-trigger-btn, .tab-button, .branch
   font-size: 0.68rem;
   font-family: var(--font-mono);
   font-weight: 600;
+  flex-shrink: 0;
+}
+
+.header-checkbox,
+.item-checkbox {
+  appearance: auto;
+  accent-color: var(--accent-purple);
+  cursor: pointer;
+  margin: 0;
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
 }
 
 .stage-action-btn {
@@ -1041,6 +1078,8 @@ button, input, textarea, select, a, .workspace-trigger-btn, .tab-button, .branch
   border-radius: 5px;
   cursor: pointer;
   transition: var(--transition-quick);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .stage-action-btn:hover {
@@ -1055,6 +1094,83 @@ button, input, textarea, select, a, .workspace-trigger-btn, .tab-button, .branch
 }
 
 .stage-action-btn.unstage-btn:hover {
+  background: rgba(244, 63, 94, 0.22);
+  border-color: var(--color-conflict);
+}
+
+/* Dedicated Selection Action Bar */
+.file-selection-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 8px;
+  margin: 3px 2px 6px 2px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 7px;
+  animation: fadeIn 0.14s ease-out;
+  gap: 8px;
+}
+
+.file-selection-count {
+  font-size: 0.7rem;
+  color: var(--color-text-muted);
+  font-weight: 500;
+  font-family: var(--font-sans);
+  white-space: nowrap;
+}
+
+.file-selection-actions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.file-selection-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 5px;
+  font-size: 0.69rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition-quick);
+  border: 1px solid transparent;
+  font-family: var(--font-sans);
+  white-space: nowrap;
+}
+
+.file-selection-btn.discard {
+  background: rgba(244, 63, 94, 0.12);
+  color: var(--color-conflict);
+  border-color: rgba(244, 63, 94, 0.25);
+}
+
+.file-selection-btn.discard:hover {
+  background: rgba(244, 63, 94, 0.22);
+  border-color: var(--color-conflict);
+}
+
+.file-selection-btn.stage {
+  background: rgba(16, 185, 129, 0.12);
+  color: var(--color-staged);
+  border-color: rgba(16, 185, 129, 0.25);
+}
+
+.file-selection-btn.stage:hover {
+  background: rgba(16, 185, 129, 0.22);
+  border-color: var(--color-staged);
+}
+
+.file-selection-btn.unstage {
+  background: rgba(244, 63, 94, 0.12);
+  color: var(--color-conflict);
+  border-color: rgba(244, 63, 94, 0.25);
+}
+
+.file-selection-btn.unstage:hover {
   background: rgba(244, 63, 94, 0.22);
   border-color: var(--color-conflict);
 }
@@ -3292,6 +3408,15 @@ select.dialog-input option {
 .context-menu-item:hover {
   background: rgba(255, 255, 255, 0.08);
   color: var(--color-text-bright);
+}
+
+.context-menu-item.danger {
+  color: var(--color-conflict);
+}
+
+.context-menu-item.danger:hover {
+  background: rgba(244, 63, 94, 0.14);
+  color: #ff6b81;
 }
 
 .context-menu-divider {

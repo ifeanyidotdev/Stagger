@@ -166,6 +166,7 @@ function App() {
   const [checkoutNewBranch, setCheckoutNewBranch] = useState<boolean>(true);
   const [targetCommitForPush, setTargetCommitForPush] = useState<CommitInfo | null>(null);
   const [isPushingCommit, setIsPushingCommit] = useState<boolean>(false);
+  const [pendingDiscardFiles, setPendingDiscardFiles] = useState<string[] | null>(null);
 
   const handleOpenCreateBranchFromCommit = (commit: CommitInfo) => {
     setTargetCommitForBranch(commit);
@@ -1699,6 +1700,48 @@ function App() {
     }
   };
 
+  const requestDiscardFile = (filePath: string) => {
+    setPendingDiscardFiles([filePath]);
+    setDialogType("discard-changes-confirm");
+  };
+
+  const requestDiscardSelected = () => {
+    if (checkedUnstaged.length === 0) return;
+    setPendingDiscardFiles([...checkedUnstaged]);
+    setDialogType("discard-changes-confirm");
+  };
+
+  const handleExecuteDiscardChanges = async () => {
+    if (!pendingDiscardFiles || pendingDiscardFiles.length === 0) return;
+    const filesToDiscard = [...pendingDiscardFiles];
+    try {
+      try {
+        await invoke("discard_files_changes", { repoPath, filePaths: filesToDiscard });
+      } catch {
+        // Fallback using run_git_cli_cmd
+        for (const p of filesToDiscard) {
+          const fileObj = unstagedFiles.find(f => f.path === p);
+          if (fileObj?.unstaged_status === "Untracked") {
+            await invoke("run_git_cli_cmd", { repoPath, args: ["clean", "-f", "-d", "--", p] });
+          } else {
+            await invoke("run_git_cli_cmd", { repoPath, args: ["checkout", "--", p] });
+          }
+        }
+      }
+
+      setCheckedUnstaged(prev => prev.filter(p => !filesToDiscard.includes(p)));
+      if (selectedFile && filesToDiscard.includes(selectedFile)) {
+        setSelectedFile(null);
+        setCanvasNodes([]);
+      }
+      setPendingDiscardFiles(null);
+      setDialogType(null);
+      await refreshRepository();
+    } catch (err: any) {
+      setErrorMessage(`Failed to discard changes: ${err?.message || err}`);
+    }
+  };
+
   const stageSingleHunk = async (node: HunkNode) => {
     try {
       let patch = `diff --git a/${node.filePath} b/${node.filePath}\n`;
@@ -2259,6 +2302,8 @@ function App() {
                   unstageSelectedStaged={unstageSelectedStaged}
                   unstageAllStaged={unstageAllStaged}
                   unstageWholeFile={unstageWholeFile}
+                  requestDiscardFile={requestDiscardFile}
+                  requestDiscardSelected={requestDiscardSelected}
                   hasRepo={hasRepo}
                   initializeGitRepo={initializeGitRepo}
                 />
@@ -2413,6 +2458,9 @@ function App() {
         upstreamBranchName={upstreamBranchName}
         handleGitPull={handleGitPull}
         isPullingRemote={isPullingRemote}
+        pendingDiscardFiles={pendingDiscardFiles}
+        setPendingDiscardFiles={setPendingDiscardFiles}
+        handleExecuteDiscardChanges={handleExecuteDiscardChanges}
         onOpenSettings={() => setIsSettingsOpen(true)}
       />
 
