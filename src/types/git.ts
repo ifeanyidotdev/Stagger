@@ -13,6 +13,9 @@ export interface BranchInfo {
   name: string;
   is_remote: boolean;
   upstream?: string | null;
+  ahead?: number;
+  behind?: number;
+  is_gone?: boolean;
 }
 
 export interface CommitInfo {
@@ -93,4 +96,4 @@ export interface GitHubPR {
   base: { ref: string };
 }
 
-export type DialogType = "branch" | "checkout" | "clone" | "publish" | "set-remote" | "pr-create" | "login" | "workspace-add" | "git-init-confirm" | "delete-branch-confirm" | "git-delete-force-confirm" | "checkout-conflict" | "stash-name" | "stash-inspector" | "merge-rebase" | null;
+export type DialogType = "branch" | "checkout" | "clone" | "publish" | "set-remote" | "pr-create" | "login" | "workspace-add" | "git-init-confirm" | "delete-branch-confirm" | "git-delete-force-confirm" | "checkout-conflict" | "stash-name" | "stash-inspector" | "merge-rebase" | "push-commit" | null;

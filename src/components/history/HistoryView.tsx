@@ -1,5 +1,5 @@
-import React from 'react';
-import { History, GitCommit, GitBranch, Archive, Globe, FileCode, ChevronRight, FileText } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { History, GitCommit, GitBranch, Archive, Globe, FileCode, ChevronRight, FileText, Copy, ArrowUpCircle } from 'lucide-react';
 import type { CommitInfo, DiffInfo } from '../../types/git';
 import type { GraphPath, GraphNode } from '../../utils/graphUtils';
 
@@ -22,6 +22,8 @@ interface HistoryViewProps {
   selectedCommitDiffFile: string | null;
   showCommitFileDiff: (commitId: string, file: string) => void;
   selectedCommitFileDiff: DiffInfo | null;
+  onOpenCreateBranchFromCommit?: (commit: CommitInfo) => void;
+  onOpenPushToCommit?: (commit: CommitInfo) => void;
 }
 
 const HistoryView: React.FC<HistoryViewProps> = ({
@@ -42,8 +44,30 @@ const HistoryView: React.FC<HistoryViewProps> = ({
   selectedCommitDiffFiles,
   selectedCommitDiffFile,
   showCommitFileDiff,
-  selectedCommitFileDiff
+  selectedCommitFileDiff,
+  onOpenCreateBranchFromCommit,
+  onOpenPushToCommit
 }) => {
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    commit: CommitInfo;
+  } | null>(null);
+
+  useEffect(() => {
+    const handleCloseMenu = () => setContextMenu(null);
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setContextMenu(null);
+    };
+    if (contextMenu) {
+      window.addEventListener('click', handleCloseMenu);
+      window.addEventListener('keydown', handleKeyDown);
+    }
+    return () => {
+      window.removeEventListener('click', handleCloseMenu);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [contextMenu]);
   return (
     <div className="history-view">
       
@@ -117,6 +141,15 @@ const HistoryView: React.FC<HistoryViewProps> = ({
                       key={commit.id} 
                       className={`commit-row ${selectedCommit?.id === commit.id ? "selected" : ""}`}
                       onClick={() => selectCommitDetails(commit)}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        selectCommitDetails(commit);
+                        setContextMenu({
+                          x: e.clientX,
+                          y: e.clientY,
+                          commit
+                        });
+                      }}
                       draggable={true}
                       onDragStart={(e) => handleDragStartCommit(e, commit.id)}
                       style={{
@@ -193,9 +226,27 @@ const HistoryView: React.FC<HistoryViewProps> = ({
                           color: "var(--color-text-muted)", 
                           marginLeft: "auto", 
                           paddingRight: "16px",
-                          flexShrink: 0
+                          flexShrink: 0,
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "8px"
                         }}>
-                          {commit.author} • {new Date(commit.timestamp * 1000).toLocaleDateString()}
+                          <span>{commit.author} • {new Date(commit.timestamp * 1000).toLocaleDateString()}</span>
+                          {onOpenCreateBranchFromCommit && (
+                            <button
+                              type="button"
+                              className="commit-row-branch-btn"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                selectCommitDetails(commit);
+                                onOpenCreateBranchFromCommit(commit);
+                              }}
+                              title="Create branch from this commit"
+                            >
+                              <GitBranch size={11} />
+                              <span>Branch</span>
+                            </button>
+                          )}
                         </span>
                       </div>
                     </div>
@@ -221,7 +272,33 @@ const HistoryView: React.FC<HistoryViewProps> = ({
         {selectedCommit ? (
           <>
             <div className="details-header">
-              <div className="commit-sha-badge">{selectedCommit.id.substring(0, 10)}...</div>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", marginBottom: "8px" }}>
+                <div className="commit-sha-badge" style={{ marginBottom: 0 }}>{selectedCommit.id.substring(0, 10)}...</div>
+                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                  {onOpenPushToCommit && (
+                    <button
+                      type="button"
+                      className="commit-push-btn"
+                      onClick={() => onOpenPushToCommit(selectedCommit)}
+                      title={`Push to remote up to commit ${selectedCommit.id.substring(0, 8)}`}
+                    >
+                      <ArrowUpCircle size={13} />
+                      <span>Push to Here</span>
+                    </button>
+                  )}
+                  {onOpenCreateBranchFromCommit && (
+                    <button
+                      type="button"
+                      className="commit-branch-btn"
+                      onClick={() => onOpenCreateBranchFromCommit(selectedCommit)}
+                      title={`Create a new branch starting at commit ${selectedCommit.id.substring(0, 8)}`}
+                    >
+                      <GitBranch size={13} />
+                      <span>Create Branch</span>
+                    </button>
+                  )}
+                </div>
+              </div>
               <div className="commit-msg">{selectedCommit.message}</div>
               <div className="commit-meta">
                 <span><strong>Author:</strong> {selectedCommit.author} ({selectedCommit.email})</span>
@@ -292,6 +369,75 @@ const HistoryView: React.FC<HistoryViewProps> = ({
           </div>
         )}
       </div>
+
+      {/* Context Menu on Right Click */}
+      {contextMenu && (
+        <div 
+          className="commit-context-menu"
+          style={{
+            position: "fixed",
+            left: `${Math.min(contextMenu.x, window.innerWidth - 230)}px`,
+            top: `${Math.min(contextMenu.y, window.innerHeight - 150)}px`,
+            zIndex: 1000
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="context-menu-header">
+            <span className="commit-sha-badge" style={{ marginBottom: 0 }}>
+              {contextMenu.commit.short_id || contextMenu.commit.id.substring(0, 8)}
+            </span>
+          </div>
+          {onOpenPushToCommit && (
+            <button
+              type="button"
+              className="context-menu-item"
+              onClick={() => {
+                onOpenPushToCommit(contextMenu.commit);
+                setContextMenu(null);
+              }}
+            >
+              <ArrowUpCircle size={13} style={{ color: "var(--color-staged)" }} />
+              <span>Push up to this commit...</span>
+            </button>
+          )}
+          <button
+            type="button"
+            className="context-menu-item"
+            onClick={() => {
+              if (onOpenCreateBranchFromCommit) {
+                onOpenCreateBranchFromCommit(contextMenu.commit);
+              }
+              setContextMenu(null);
+            }}
+          >
+            <GitBranch size={13} style={{ color: "var(--accent-purple-bright)" }} />
+            <span>Create Branch from Commit...</span>
+          </button>
+          <div className="context-menu-divider" />
+          <button
+            type="button"
+            className="context-menu-item"
+            onClick={() => {
+              navigator.clipboard.writeText(contextMenu.commit.id);
+              setContextMenu(null);
+            }}
+          >
+            <Copy size={13} />
+            <span>Copy Commit SHA</span>
+          </button>
+          <button
+            type="button"
+            className="context-menu-item"
+            onClick={() => {
+              navigator.clipboard.writeText(contextMenu.commit.message);
+              setContextMenu(null);
+            }}
+          >
+            <FileText size={13} />
+            <span>Copy Commit Message</span>
+          </button>
+        </div>
+      )}
 
     </div>
   );

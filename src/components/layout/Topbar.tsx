@@ -1,5 +1,5 @@
 import React from 'react';
-import { ChevronRight, Layers, History, GitPullRequest, FolderSync, LogOut, Sparkles, Settings } from 'lucide-react';
+import { ChevronRight, Layers, History, GitPullRequest, FolderSync, LogOut, Sparkles, Settings, ArrowDown, ArrowUp } from 'lucide-react';
 import type { GitHubUser } from '../../types/git';
 
 interface TopbarProps {
@@ -9,6 +9,8 @@ interface TopbarProps {
   setActiveTab: (val: any) => void;
   currentBranch?: string;
   hasRepo?: boolean;
+  unpushedCount?: number;
+  behindCount?: number;
   githubToken: string | null;
   remoteUrl: string | null;
   setDialogType: (val: any) => void;
@@ -26,6 +28,8 @@ const Topbar: React.FC<TopbarProps> = ({
   setActiveTab,
   currentBranch,
   hasRepo,
+  unpushedCount = 0,
+  behindCount = 0,
   githubToken,
   remoteUrl,
   setDialogType,
@@ -65,9 +69,24 @@ const Topbar: React.FC<TopbarProps> = ({
         </div>
 
         {hasRepo && currentBranch && (
-          <div className="topbar-branch-pill" title={`Active Branch: ${currentBranch}`}>
+          <div 
+            className="topbar-branch-pill" 
+            title={`Active Branch: ${currentBranch}${behindCount > 0 ? ` • Origin is ahead by ${behindCount} commit(s)` : ""}${unpushedCount > 0 ? ` • ${unpushedCount} unpushed commit(s)` : ""}`}
+          >
             <div className="topbar-branch-dot" />
             <span className="topbar-branch-name">{currentBranch}</span>
+            {behindCount > 0 && (
+              <span className="topbar-sync-tag behind" title={`Remote origin is ahead by ${behindCount} commit(s). Pull to update.`}>
+                <ArrowDown size={10} />
+                <span>{behindCount} behind</span>
+              </span>
+            )}
+            {unpushedCount > 0 && (
+              <span className="topbar-sync-tag ahead" title={`${unpushedCount} unpushed commit(s) ready to push.`}>
+                <ArrowUp size={10} />
+                <span>{unpushedCount} ahead</span>
+              </span>
+            )}
           </div>
         )}
       </div>

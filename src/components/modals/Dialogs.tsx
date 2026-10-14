@@ -1,11 +1,20 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Archive, X, Eye, FileCode, RefreshCw, FolderSync, Trash2, RefreshCcw, FolderPlus, GitMerge, GitCommit, Globe, ChevronDown, GitBranch, Check, Search } from 'lucide-react';
-import type { GitHubRepo, DialogType, StashEntry } from '../../types/git';
+import { Archive, X, Eye, FileCode, RefreshCw, FolderSync, Trash2, RefreshCcw, FolderPlus, GitMerge, GitCommit, Globe, ChevronDown, GitBranch, Check, Search, ArrowUpCircle } from 'lucide-react';
+import type { GitHubRepo, DialogType, StashEntry, CommitInfo } from '../../types/git';
 import { invoke } from '@tauri-apps/api/core';
 
 interface DialogsProps {
   dialogType: DialogType;
   setDialogType: (type: DialogType) => void;
+  targetCommitForBranch?: CommitInfo | null;
+  setTargetCommitForBranch?: (commit: CommitInfo | null) => void;
+  targetCommitForPush?: CommitInfo | null;
+  setTargetCommitForPush?: (commit: CommitInfo | null) => void;
+  isPushingCommit?: boolean;
+  handleExecutePushCommit?: (commitSha: string, targetBranch: string, remote: string) => Promise<void>;
+  commits?: CommitInfo[];
+  checkoutNewBranch?: boolean;
+  setCheckoutNewBranch?: (val: boolean) => void;
   selectedStashIndex: number | null;
   stashes: StashEntry[];
   stashFiles: { path: string; status: string }[];
@@ -26,6 +35,7 @@ interface DialogsProps {
   currentBranch: string;
   pendingCheckoutBranch: string | null;
   setPendingCheckoutBranch: (val: string | null) => void;
+  setPendingCheckoutArgs?: (val: string[] | null) => void;
   handleCheckoutBringChanges: () => void;
   handleCheckoutStashChanges: () => void;
   pendingWorkspacePath: string;
@@ -65,6 +75,15 @@ interface DialogsProps {
 const Dialogs: React.FC<DialogsProps> = ({
   dialogType,
   setDialogType,
+  targetCommitForBranch = null,
+  setTargetCommitForBranch,
+  targetCommitForPush = null,
+  setTargetCommitForPush,
+  isPushingCommit = false,
+  handleExecutePushCommit,
+  commits = [],
+  checkoutNewBranch = true,
+  setCheckoutNewBranch,
   selectedStashIndex,
   stashes,
   stashFiles,
@@ -85,6 +104,7 @@ const Dialogs: React.FC<DialogsProps> = ({
   currentBranch,
   pendingCheckoutBranch,
   setPendingCheckoutBranch,
+  setPendingCheckoutArgs,
   handleCheckoutBringChanges,
   handleCheckoutStashChanges,
   pendingWorkspacePath,
@@ -123,8 +143,24 @@ const Dialogs: React.FC<DialogsProps> = ({
   const [isRestoreDropdownOpen, setIsRestoreDropdownOpen] = useState(false);
   const [isTargetBranchDropdownOpen, setIsTargetBranchDropdownOpen] = useState(false);
   const [targetBranchSearch, setTargetBranchSearch] = useState('');
+  const [pushTargetBranch, setPushTargetBranch] = useState(currentBranch || '');
   const targetBranchDropdownRef = useRef<HTMLDivElement>(null);
   const branchSearchInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (targetCommitForPush) {
+      const localWithCommit = targetCommitForPush.branches.filter(b => !b.includes("/") && !b.startsWith("tag:") && !b.startsWith("stash"));
+      if (localWithCommit.includes(currentBranch)) {
+        setPushTargetBranch(currentBranch);
+      } else if (localWithCommit.length > 0) {
+        setPushTargetBranch(localWithCommit[0]);
+      } else {
+        setPushTargetBranch(currentBranch);
+      }
+    } else {
+      setPushTargetBranch(currentBranch);
+    }
+  }, [targetCommitForPush, currentBranch]);
 
   useEffect(() => {
     if (!isTargetBranchDropdownOpen) return;
@@ -165,7 +201,7 @@ const Dialogs: React.FC<DialogsProps> = ({
       <div className={`dialog-content${dialogType === "stash-inspector" ? " dialog-content--wide" : ""}${dialogType === "merge-rebase" ? " dialog-content--visible-overflow" : ""}`}>
         <div className="dialog-title">
           <span>
-            {dialogType === "branch" && "Create Branch"}
+            {dialogType === "branch" && (targetCommitForBranch ? "Create Branch from Commit" : "Create Branch")}
             {dialogType === "checkout" && "Checkout Branch"}
             {dialogType === "clone" && "Clone Remote Repository"}
             {(dialogType === "publish" || dialogType === "set-remote") && "Set Remote Repository URL"}
@@ -178,6 +214,12 @@ const Dialogs: React.FC<DialogsProps> = ({
             {dialogType === "checkout-conflict" && "Uncommitted Changes"}
             {dialogType === "stash-name" && "Save Stash"}
             {dialogType === "merge-rebase" && "Merge / Rebase Branch"}
+            {dialogType === "push-commit" && (
+              <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <ArrowUpCircle size={16} style={{ color: "var(--color-staged)" }} />
+                <span>Push up to Selected Commit</span>
+              </span>
+            )}
             {dialogType === "stash-inspector" && (
               <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                 <Archive size={16} style={{ color: "var(--accent-purple-bright)" }} />
@@ -196,6 +238,10 @@ const Dialogs: React.FC<DialogsProps> = ({
               setDialogType(null);
               setDialogInput("");
               setDialogInput2("");
+              if (setTargetCommitForBranch) setTargetCommitForBranch(null);
+              if (setTargetCommitForPush) setTargetCommitForPush(null);
+              if (setPendingCheckoutBranch) setPendingCheckoutBranch(null);
+              if (setPendingCheckoutArgs) setPendingCheckoutArgs(null);
             }}
             title="Close"
             type="button"
@@ -521,7 +567,7 @@ const Dialogs: React.FC<DialogsProps> = ({
             </span>
             <div className="dialog-actions" style={{ marginTop: "8px" }}>
               <button className="dialog-button secondary" onClick={() => { setDialogType(null); setPendingDeleteBranch(null); }}>Cancel</button>
-              <button className="dialog-button" style={{ background: "var(--color-deleted)", color: "white" }} onClick={() => executeDeleteBranch(false)}>Delete Branch</button>
+              <button className="dialog-button" style={{ background: "var(--color-deleted)", color: "white" }} onClick={() => executeDeleteBranch(true)}>Delete Branch</button>
             </div>
           </div>
         )}
@@ -577,6 +623,7 @@ const Dialogs: React.FC<DialogsProps> = ({
                 onClick={() => {
                   setDialogType(null);
                   setPendingCheckoutBranch(null);
+                  if (setPendingCheckoutArgs) setPendingCheckoutArgs(null);
                 }}
               >
                 Cancel
@@ -842,14 +889,94 @@ const Dialogs: React.FC<DialogsProps> = ({
           </div>
         )}
 
-        {/* BASE BRANCH / CHECKOUT */}
-        {(dialogType === "branch" || dialogType === "checkout") && (
+        {/* CREATE BRANCH DIALOG */}
+        {dialogType === "branch" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+            {targetCommitForBranch && (
+              <div className="dialog-commit-summary-card">
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", marginBottom: "6px" }}>
+                  <span className="commit-sha-badge" style={{ display: "inline-flex", alignItems: "center", gap: "5px", marginBottom: 0 }}>
+                    <GitCommit size={12} style={{ color: "var(--accent-purple-bright)" }} />
+                    <span>{targetCommitForBranch.short_id || targetCommitForBranch.id.substring(0, 8)}</span>
+                  </span>
+                  <span style={{ fontSize: "0.74rem", color: "var(--color-text-muted)" }}>
+                    {targetCommitForBranch.author}
+                  </span>
+                </div>
+                <div style={{ fontSize: "0.82rem", color: "var(--color-text-bright)", fontWeight: 500, lineHeight: 1.4, wordBreak: "break-word" }}>
+                  {targetCommitForBranch.message}
+                </div>
+              </div>
+            )}
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+              <label style={{ fontSize: "0.76rem", color: "var(--color-text-muted)", fontWeight: 500 }}>
+                New Branch Name
+              </label>
+              <input 
+                className="dialog-input"
+                autoFocus
+                value={dialogInput}
+                onChange={(e) => setDialogInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && dialogInput.trim()) {
+                    handleDialogSubmit();
+                  }
+                }}
+                placeholder={targetCommitForBranch ? "e.g. feature/my-branch" : "new-branch-name"}
+              />
+            </div>
+
+            <label style={{ 
+              display: "flex", 
+              alignItems: "center", 
+              gap: "8px", 
+              fontSize: "0.78rem", 
+              color: "var(--color-text-main)", 
+              cursor: "pointer",
+              userSelect: "none"
+            }}>
+              <input 
+                type="checkbox"
+                checked={checkoutNewBranch}
+                onChange={(e) => setCheckoutNewBranch?.(e.target.checked)}
+                style={{ accentColor: "var(--accent-purple)", cursor: "pointer" }}
+              />
+              <span>Checkout branch after creating</span>
+            </label>
+
+            <div className="dialog-actions" style={{ marginTop: "4px" }}>
+              <button 
+                type="button"
+                className="dialog-button secondary" 
+                onClick={() => {
+                  setDialogType(null);
+                  if (setTargetCommitForBranch) setTargetCommitForBranch(null);
+                }}
+              >
+                Cancel
+              </button>
+              <button 
+                type="button"
+                className="dialog-button primary" 
+                onClick={handleDialogSubmit}
+                disabled={!dialogInput.trim()}
+              >
+                <GitBranch size={13} />
+                <span>Create Branch</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* CHECKOUT BRANCH DIALOG */}
+        {dialogType === "checkout" && (
           <>
             <input 
               className="dialog-input"
               value={dialogInput}
               onChange={(e) => setDialogInput(e.target.value)}
-              placeholder={dialogType === "branch" ? "new-branch-name" : "branch-to-checkout"}
+              placeholder="branch-to-checkout"
             />
             <div className="dialog-actions">
               <button className="dialog-button secondary" onClick={() => setDialogType(null)}>Cancel</button>
@@ -1142,6 +1269,202 @@ const Dialogs: React.FC<DialogsProps> = ({
             </div>
           </div>
         )}
+
+        {/* PUSH UP TO SELECTED COMMIT DIALOG */}
+        {dialogType === "push-commit" && targetCommitForPush && (() => {
+          const targetCommitIdx = commits ? commits.findIndex(c => c.id === targetCommitForPush.id) : -1;
+          const commitsRemainingLocal = targetCommitIdx > 0 ? commits.slice(0, targetCommitIdx) : [];
+          const isAlreadyRemote = targetCommitForPush.branches.some(b => b === `origin/${pushTargetBranch}` || b.startsWith("origin/"));
+          const isHead = targetCommitIdx === 0;
+
+          return (
+            <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+              <div style={{ fontSize: "0.8rem", color: "var(--color-text-muted)", lineHeight: 1.4 }}>
+                Push your repository history up to this selected commit to remote. Any commits made after this commit will remain purely local and unpushed.
+              </div>
+
+              {/* Target Commit Summary Card */}
+              <div className="dialog-commit-summary-card">
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "6px" }}>
+                  <span className="commit-sha-badge" style={{ marginBottom: 0 }}>
+                    {targetCommitForPush.short_id || targetCommitForPush.id.substring(0, 8)}
+                  </span>
+                  <span style={{ fontSize: "0.72rem", color: "var(--color-text-muted)" }}>
+                    {new Date(targetCommitForPush.timestamp * 1000).toLocaleString()}
+                  </span>
+                </div>
+                <div style={{ fontWeight: 600, fontSize: "0.85rem", color: "var(--color-text-bright)", marginBottom: "4px" }}>
+                  {targetCommitForPush.message}
+                </div>
+                <div style={{ fontSize: "0.74rem", color: "var(--color-text-muted)" }}>
+                  Author: <strong>{targetCommitForPush.author}</strong>
+                </div>
+              </div>
+
+              {/* Remote & Branch Selection */}
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--color-text-bright)" }}>
+                  Target Remote Branch:
+                </label>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <div style={{
+                    padding: "6px 10px",
+                    background: "var(--bg-panel-secondary)",
+                    border: "1px solid var(--border-color)",
+                    borderRadius: "6px",
+                    fontSize: "0.78rem",
+                    color: "var(--color-text-muted)",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px"
+                  }}>
+                    <Globe size={13} style={{ color: "var(--accent-blue)" }} />
+                    <span>origin /</span>
+                  </div>
+                  <select
+                    className="dialog-input"
+                    style={{ flex: 1, padding: "6px 10px" }}
+                    value={pushTargetBranch}
+                    onChange={(e) => setPushTargetBranch(e.target.value)}
+                  >
+                    {branchList.map(b => (
+                      <option key={b} value={b}>{b} {b === currentBranch ? "(current)" : ""}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Live Impact Breakdown */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                <div style={{
+                  padding: "10px",
+                  background: "rgba(16, 185, 129, 0.08)",
+                  border: "1px solid rgba(16, 185, 129, 0.25)",
+                  borderRadius: "8px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "4px"
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px", color: "var(--color-staged)", fontSize: "0.74rem", fontWeight: 600 }}>
+                    <ArrowUpCircle size={14} />
+                    <span>Pushed to Remote</span>
+                  </div>
+                  <div style={{ fontSize: "0.8rem", color: "var(--color-text-bright)", fontWeight: 500 }}>
+                    Up to {targetCommitForPush.short_id || targetCommitForPush.id.substring(0, 8)}
+                  </div>
+                  <div style={{ fontSize: "0.68rem", color: "var(--color-text-muted)" }}>
+                    {isHead ? "Includes all commits on this branch." : "Remote branch will update to this commit."}
+                  </div>
+                </div>
+
+                <div style={{
+                  padding: "10px",
+                  background: commitsRemainingLocal.length > 0 ? "rgba(245, 158, 11, 0.08)" : "rgba(255, 255, 255, 0.03)",
+                  border: commitsRemainingLocal.length > 0 ? "1px solid rgba(245, 158, 11, 0.25)" : "1px solid var(--border-color)",
+                  borderRadius: "8px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "4px"
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px", color: commitsRemainingLocal.length > 0 ? "var(--color-untracked)" : "var(--color-text-muted)", fontSize: "0.74rem", fontWeight: 600 }}>
+                    <Archive size={14} />
+                    <span>Remaining Local</span>
+                  </div>
+                  <div style={{ fontSize: "0.8rem", color: "var(--color-text-bright)", fontWeight: 500 }}>
+                    {commitsRemainingLocal.length} {commitsRemainingLocal.length === 1 ? "commit" : "commits"}
+                  </div>
+                  <div style={{ fontSize: "0.68rem", color: "var(--color-text-muted)" }}>
+                    {commitsRemainingLocal.length > 0 ? "Kept unpushed on your local branch." : "No subsequent commits."}
+                  </div>
+                </div>
+              </div>
+
+              {/* List remaining unpushed commits preview if any */}
+              {commitsRemainingLocal.length > 0 && (
+                <div style={{
+                  background: "var(--bg-app)",
+                  border: "1px solid var(--border-color)",
+                  borderRadius: "6px",
+                  padding: "8px 10px",
+                  fontSize: "0.72rem",
+                  maxHeight: "110px",
+                  overflowY: "auto",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "4px"
+                }}>
+                  <span style={{ color: "var(--color-text-muted)", fontWeight: 600, fontSize: "0.68rem", textTransform: "uppercase" }}>
+                    Commits that will stay local (not pushed):
+                  </span>
+                  {commitsRemainingLocal.map(c => (
+                    <div key={c.id} style={{ display: "flex", alignItems: "center", gap: "6px", color: "var(--color-text-main)" }}>
+                      <span style={{ fontFamily: "var(--font-mono)", color: "var(--accent-purple-bright)", fontSize: "0.68rem" }}>
+                        {c.short_id || c.id.substring(0, 7)}
+                      </span>
+                      <span style={{ textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
+                        {c.message}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {isAlreadyRemote && (
+                <div style={{
+                  padding: "8px 10px",
+                  background: "rgba(59, 130, 246, 0.1)",
+                  border: "1px solid rgba(59, 130, 246, 0.3)",
+                  borderRadius: "6px",
+                  fontSize: "0.74rem",
+                  color: "#60a5fa",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px"
+                }}>
+                  <Globe size={14} />
+                  <span>Notice: This commit already has a remote pointer pointing to it.</span>
+                </div>
+              )}
+
+              {/* Action buttons */}
+              <div className="dialog-actions" style={{ marginTop: "4px" }}>
+                <button 
+                  type="button" 
+                  className="dialog-button secondary" 
+                  onClick={() => {
+                    setDialogType(null);
+                    if (setTargetCommitForPush) setTargetCommitForPush(null);
+                  }}
+                  disabled={isPushingCommit}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="sync-button"
+                  style={{
+                    background: "var(--color-staged)",
+                    color: "#fff",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "6px",
+                    padding: "6px 14px"
+                  }}
+                  disabled={isPushingCommit || !pushTargetBranch}
+                  onClick={() => {
+                    if (handleExecutePushCommit && targetCommitForPush && pushTargetBranch) {
+                      handleExecutePushCommit(targetCommitForPush.id, pushTargetBranch, "origin");
+                    }
+                  }}
+                >
+                  <ArrowUpCircle size={14} className={isPushingCommit ? "spin-icon" : ""} />
+                  <span>{isPushingCommit ? "Pushing to Remote..." : `Push up to ${targetCommitForPush.short_id || targetCommitForPush.id.substring(0, 8)}`}</span>
+                </button>
+              </div>
+            </div>
+          );
+        })()}
 
 
       </div>

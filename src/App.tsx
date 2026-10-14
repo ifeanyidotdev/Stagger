@@ -7,7 +7,7 @@ import "./App.css";
 import type { 
   GitFileStatus, GitStatusResult, BranchInfo, CommitInfo, 
   DiffHunk, DiffInfo, GitCliResult, HunkNode, StashEntry,
-  GitHubUser, GitHubRepo, GitHubPR 
+  GitHubUser, GitHubRepo, GitHubPR, DialogType 
 } from "./types/git";
 import { isRealBranch } from "./utils/graphUtils";
 
@@ -120,6 +120,7 @@ function App() {
   const [pendingWorkspacePath, setPendingWorkspacePath] = useState("");
   const [pendingDeleteBranch, setPendingDeleteBranch] = useState<string | null>(null);
   const [pendingCheckoutBranch, setPendingCheckoutBranch] = useState<string | null>(null);
+  const [pendingCheckoutArgs, setPendingCheckoutArgs] = useState<string[] | null>(null);
 
   // --- COMMIT BUILDER STATE ---
   const [commitTitle, setCommitTitle] = useState("");
@@ -135,6 +136,7 @@ function App() {
   const [hasUpstream, setHasUpstream] = useState<boolean>(false);
   const [upstreamBranchName, setUpstreamBranchName] = useState<string | null>(null);
   const [unpushedCount, setUnpushedCount] = useState<number>(0);
+  const [behindCount, setBehindCount] = useState<number>(0);
   const [isFetchingRemote, setIsFetchingRemote] = useState<boolean>(false);
   const [isPushingRemote, setIsPushingRemote] = useState<boolean>(false);
   const [isPullingRemote, setIsPullingRemote] = useState<boolean>(false);
@@ -156,10 +158,59 @@ function App() {
       console.error("Git CLI error:", res.stderr || res.stdout);
     }
   };
-  const [dialogType, setDialogType] = useState<"branch" | "checkout" | "clone" | "publish" | "set-remote" | "pr-create" | "login" | "workspace-add" | "git-init-confirm" | "delete-branch-confirm" | "git-delete-force-confirm" | "checkout-conflict" | "stash-name" | "stash-inspector" | "merge-rebase" | null>(null);
+  const [dialogType, setDialogType] = useState<DialogType>(null);
   const [dialogInput, setDialogInput] = useState("");
   const [dialogInput2, setDialogInput2] = useState(""); 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [targetCommitForBranch, setTargetCommitForBranch] = useState<CommitInfo | null>(null);
+  const [checkoutNewBranch, setCheckoutNewBranch] = useState<boolean>(true);
+  const [targetCommitForPush, setTargetCommitForPush] = useState<CommitInfo | null>(null);
+  const [isPushingCommit, setIsPushingCommit] = useState<boolean>(false);
+
+  const handleOpenCreateBranchFromCommit = (commit: CommitInfo) => {
+    setTargetCommitForBranch(commit);
+    setCheckoutNewBranch(true);
+    setDialogInput("");
+    setDialogType("branch");
+  };
+
+  const handleOpenPushToCommit = (commit: CommitInfo) => {
+    setTargetCommitForPush(commit);
+    setDialogType("push-commit");
+  };
+
+  const handleExecutePushCommit = async (commitSha: string, targetBranch: string, remote: string = "origin") => {
+    if (!remoteUrl) {
+      setDialogInput("");
+      setDialogType("set-remote");
+      return;
+    }
+    if (isPushingCommit) return;
+    setIsPushingCommit(true);
+    try {
+      const res = await invoke<GitCliResult>("run_git_cli_cmd", {
+        repoPath,
+        args: ["push", remote, `${commitSha}:refs/heads/${targetBranch}`]
+      });
+      if (res.exit_code === 0) {
+        if (!hasUpstream) {
+          await invoke<GitCliResult>("run_git_cli_cmd", {
+            repoPath,
+            args: ["branch", `--set-upstream-to=${remote}/${targetBranch}`, targetBranch]
+          });
+        }
+        setDialogType(null);
+        setTargetCommitForPush(null);
+        await refreshRepository();
+      } else {
+        setErrorMessage(`Failed to push commit to ${remote}/${targetBranch}:\n${res.stderr || res.stdout}`);
+      }
+    } catch (err: any) {
+      setErrorMessage(err.toString());
+    } finally {
+      setIsPushingCommit(false);
+    }
+  };
 
   // --- REMOTE COLLABORATION STATE ---
   const [isCollabActive, setIsCollabActive] = useState(false);
@@ -432,37 +483,84 @@ function App() {
         branchesList = [statusRes.current_branch, ...branchesList];
       }
 
-      // Virtual branch tracker persistence for empty repositories
+      // Virtual branch tracker persistence ONLY for empty repositories with no commits/branches yet
       const storageKey = `sn_vbranches_${path}`;
-      let knownBranches: string[] = [];
-      try {
-        const saved = localStorage.getItem(storageKey);
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed)) {
-            knownBranches = parsed.filter(isRealBranch);
+      if (rawBranches.length === 0) {
+        let knownBranches: string[] = [];
+        try {
+          const saved = localStorage.getItem(storageKey);
+          if (saved) {
+            const parsed = JSON.parse(saved);
+            if (Array.isArray(parsed)) {
+              knownBranches = parsed.filter(isRealBranch);
+            }
           }
-        }
-      } catch (_) {}
+        } catch (_) {}
 
-      knownBranches.forEach(b => {
-        if (isRealBranch(b) && !branchesList.includes(b)) {
-          branchesList.push(b);
-        }
-      });
-      branchesList = branchesList.filter(isRealBranch);
-      localStorage.setItem(storageKey, JSON.stringify(branchesList));
+        knownBranches.forEach(b => {
+          if (isRealBranch(b) && !branchesList.includes(b)) {
+            branchesList.push(b);
+          }
+        });
+        branchesList = branchesList.filter(isRealBranch);
+        localStorage.setItem(storageKey, JSON.stringify(branchesList));
+      } else {
+        // When real branches exist in git, purge any stale virtual branch cache so deleted branches cannot resurrect
+        localStorage.removeItem(storageKey);
+      }
 
       setBranchList(branchesList);
 
       // Fetch all branches (local + remote) and upstream info
       try {
         const allBranchesInfo = await invoke<BranchInfo[]>("get_all_branches", { repoPath: path });
-        setAllBranches(allBranchesInfo);
-        const remotes = allBranchesInfo.filter(b => b.is_remote).map(b => b.name);
+        
+        // Query branch tracking information (ahead/behind counts for all local branches)
+        const trackingMap: Record<string, { upstream: string | null; ahead: number; behind: number; isGone: boolean }> = {};
+        try {
+          const trackRes = await invoke<GitCliResult>("run_git_cli_cmd", {
+            repoPath: path,
+            args: ["for-each-ref", "--format=%(refname:short)|%(upstream:short)|%(upstream:track,nobracket)", "refs/heads"]
+          });
+          if (trackRes.exit_code === 0 && trackRes.stdout.trim()) {
+            trackRes.stdout.split("\n").forEach(line => {
+              const parts = line.split("|");
+              const bName = parts[0]?.trim();
+              if (!bName) return;
+              const upstream = parts[1]?.trim() || null;
+              const track = parts[2]?.trim() || "";
+              let ahead = 0;
+              let behind = 0;
+              let isGone = false;
+              if (track) {
+                const aheadMatch = track.match(/ahead\s+(\d+)/);
+                if (aheadMatch) ahead = parseInt(aheadMatch[1], 10);
+                const behindMatch = track.match(/behind\s+(\d+)/);
+                if (behindMatch) behind = parseInt(behindMatch[1], 10);
+                if (track.includes("gone")) isGone = true;
+              }
+              trackingMap[bName] = { upstream, ahead, behind, isGone };
+            });
+          }
+        } catch (_) {}
+
+        const enrichedBranches: BranchInfo[] = allBranchesInfo.map(b => {
+          if (b.is_remote) return b;
+          const trk = trackingMap[b.name];
+          return {
+            ...b,
+            upstream: trk?.upstream ?? b.upstream,
+            ahead: trk?.ahead ?? 0,
+            behind: trk?.behind ?? 0,
+            is_gone: trk?.isGone ?? false
+          };
+        });
+
+        setAllBranches(enrichedBranches);
+        const remotes = enrichedBranches.filter(b => b.is_remote).map(b => b.name);
         setRemoteBranches(remotes);
 
-        const currentInfo = allBranchesInfo.find(b => !b.is_remote && b.name === statusRes.current_branch);
+        const currentInfo = enrichedBranches.find(b => !b.is_remote && b.name === statusRes.current_branch);
         if (currentInfo && currentInfo.upstream) {
           setHasUpstream(true);
           setUpstreamBranchName(currentInfo.upstream);
@@ -484,7 +582,7 @@ function App() {
         setUpstreamBranchName(null);
       }
 
-      // Check unpushed commits count
+      // Check unpushed (ahead) commits count for active branch
       try {
         const unpushedRes = await invoke<GitCliResult>("run_git_cli_cmd", {
           repoPath: path,
@@ -498,6 +596,22 @@ function App() {
         }
       } catch (_) {
         setUnpushedCount(0);
+      }
+
+      // Check incoming (behind) commits count for active branch (origin is ahead)
+      try {
+        const behindRes = await invoke<GitCliResult>("run_git_cli_cmd", {
+          repoPath: path,
+          args: ["rev-list", "HEAD..@{u}", "--count"]
+        });
+        if (behindRes.exit_code === 0) {
+          const count = parseInt(behindRes.stdout.trim(), 10);
+          setBehindCount(isNaN(count) ? 0 : count);
+        } else {
+          setBehindCount(0);
+        }
+      } catch (_) {
+        setBehindCount(0);
       }
 
       const remoteRes = await invoke<GitCliResult>("run_git_cli_cmd", {
@@ -625,6 +739,15 @@ function App() {
     }
     if (isPushingRemote) return;
 
+    // Guard against pushing if origin is ahead
+    if (!publish && hasUpstream && behindCount > 0) {
+      setErrorMessage(
+        `Cannot push to origin: The remote branch is ahead by ${behindCount} commit${behindCount > 1 ? "s" : ""}.\n\n` +
+        `Please pull and settle incoming commits from '${upstreamBranchName || "origin"}' before pushing local changes.`
+      );
+      return;
+    }
+
     setIsPushingRemote(true);
     // Guarantee loading indicator and button update render on screen immediately before CLI command
     await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
@@ -743,24 +866,26 @@ function App() {
   };
 
   const handleCheckoutRemoteBranch = async (remoteName: string) => {
-    const localName = remoteName.replace(/^[^/]+\//, "");
+    const localName = remoteName.includes("/") ? remoteName.replace(/^[^/]+\//, "") : remoteName;
+    const checkoutArgs = ["checkout", "-B", localName, remoteName];
+
+    if (files.length > 0) {
+      setPendingCheckoutBranch(localName);
+      setPendingCheckoutArgs(checkoutArgs);
+      setDialogType("checkout-conflict");
+      return;
+    }
+
     try {
       const res = await invoke<GitCliResult>("run_git_cli_cmd", {
         repoPath,
-        args: ["checkout", "-b", localName, remoteName]
+        args: checkoutArgs
       });
       if (res.exit_code === 0) {
+        setErrorMessage(null);
         await refreshRepository();
       } else {
-        const fallbackRes = await invoke<GitCliResult>("run_git_cli_cmd", {
-          repoPath,
-          args: ["checkout", localName]
-        });
-        if (fallbackRes.exit_code === 0) {
-          await refreshRepository();
-        } else {
-          setErrorMessage(`Failed to checkout remote branch:\n${res.stderr}`);
-        }
+        setErrorMessage(`Failed to checkout remote branch:\n${res.stderr || res.stdout}`);
       }
     } catch (err: any) {
       setErrorMessage(err.toString());
@@ -794,6 +919,7 @@ function App() {
     }
     if (files.length > 0) {
       setPendingCheckoutBranch(branchName);
+      setPendingCheckoutArgs(["checkout", branchName]);
       setDialogType("checkout-conflict");
     } else {
       handleCheckoutBranch(branchName);
@@ -823,57 +949,68 @@ function App() {
 
   const handleCheckoutBringChanges = async () => {
     if (!pendingCheckoutBranch) return;
+    const args = pendingCheckoutArgs || ["checkout", pendingCheckoutBranch];
     try {
       const res = await invoke<GitCliResult>("run_git_cli_cmd", {
         repoPath,
-        args: ["checkout", pendingCheckoutBranch]
+        args
       });
       if (res.exit_code === 0) {
         setDialogType(null);
         setPendingCheckoutBranch(null);
+        setPendingCheckoutArgs(null);
+        setErrorMessage(null);
         await refreshRepository();
       } else {
-        setErrorMessage(`Failed to switch branch:\n${res.stderr}`);
+        setErrorMessage(`Failed to switch branch:\n${res.stderr || res.stdout}`);
         setDialogType(null);
         setPendingCheckoutBranch(null);
+        setPendingCheckoutArgs(null);
       }
     } catch (err: any) {
       setErrorMessage(err.toString());
       setDialogType(null);
       setPendingCheckoutBranch(null);
+      setPendingCheckoutArgs(null);
     }
   };
 
   const handleCheckoutStashChanges = async () => {
     if (!pendingCheckoutBranch) return;
+    const args = pendingCheckoutArgs || ["checkout", pendingCheckoutBranch];
     try {
       const stashRes = await invoke<GitCliResult>("run_git_cli_cmd", {
         repoPath,
         args: ["stash", "push", "-m", `Auto-stashed from StageNode before switching to ${pendingCheckoutBranch}`]
       });
       if (stashRes.exit_code !== 0) {
-        setErrorMessage(`Failed to stash changes:\n${stashRes.stderr}`);
+        setErrorMessage(`Failed to stash changes:\n${stashRes.stderr || stashRes.stdout}`);
         setDialogType(null);
         setPendingCheckoutBranch(null);
+        setPendingCheckoutArgs(null);
         return;
       }
       const res = await invoke<GitCliResult>("run_git_cli_cmd", {
         repoPath,
-        args: ["checkout", pendingCheckoutBranch]
+        args
       });
       if (res.exit_code === 0) {
         setDialogType(null);
         setPendingCheckoutBranch(null);
+        setPendingCheckoutArgs(null);
+        setErrorMessage(null);
         await refreshRepository();
       } else {
-        setErrorMessage(`Failed to switch branch:\n${res.stderr}`);
+        setErrorMessage(`Failed to switch branch:\n${res.stderr || res.stdout}`);
         setDialogType(null);
         setPendingCheckoutBranch(null);
+        setPendingCheckoutArgs(null);
       }
     } catch (err: any) {
       setErrorMessage(err.toString());
       setDialogType(null);
       setPendingCheckoutBranch(null);
+      setPendingCheckoutArgs(null);
     }
   };
 
@@ -883,17 +1020,36 @@ function App() {
     setDialogType("delete-branch-confirm");
   };
 
-  const executeDeleteBranch = async (force: boolean = false) => {
+  const executeDeleteBranch = async (_force: boolean = true) => {
     if (!pendingDeleteBranch) return;
+    const branchToDelete = pendingDeleteBranch;
+    const storageKey = `sn_vbranches_${repoPath}`;
+
+    // 1. Immediately clean up localStorage so the branch can never be resurrected
+    try {
+      const saved = localStorage.getItem(storageKey);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          const updated = parsed.filter(b => b !== branchToDelete);
+          if (updated.length > 0) {
+            localStorage.setItem(storageKey, JSON.stringify(updated));
+          } else {
+            localStorage.removeItem(storageKey);
+          }
+        }
+      }
+    } catch (_) {}
+
+    // 2. Optimistically remove from state so UI updates immediately
+    setBranchList(prev => prev.filter(b => b !== branchToDelete));
+    setAllBranches(prev => prev.filter(b => b.is_remote || b.name !== branchToDelete));
+    if (targetMergeBranch === branchToDelete) {
+      setTargetMergeBranch("");
+    }
+
+    // 3. For empty repositories with 0 commits, virtual branch is already purged
     if (commits.length === 0) {
-      const storageKey = `sn_vbranches_${repoPath}`;
-      let knownBranches: string[] = [];
-      try {
-        const saved = localStorage.getItem(storageKey);
-        if (saved) knownBranches = JSON.parse(saved);
-      } catch (_) {}
-      const newList = knownBranches.filter(b => b !== pendingDeleteBranch);
-      localStorage.setItem(storageKey, JSON.stringify(newList));
       setDialogType(null);
       setPendingDeleteBranch(null);
       await refreshRepository();
@@ -901,28 +1057,27 @@ function App() {
     }
 
     try {
-      const args = force ? ["branch", "-D", pendingDeleteBranch] : ["branch", "-d", pendingDeleteBranch];
+      // 4. Always use -D to ensure branch is unconditionally deleted and removed
       const res = await invoke<GitCliResult>("run_git_cli_cmd", {
         repoPath,
-        args
+        args: ["branch", "-D", branchToDelete]
       });
       if (res.exit_code === 0) {
         setDialogType(null);
         setPendingDeleteBranch(null);
+        setErrorMessage(null);
         await refreshRepository();
       } else {
-        if (!force) {
-          setDialogType("git-delete-force-confirm");
-        } else {
-          setErrorMessage(`Failed to force delete branch:\n${res.stderr}`);
-          setDialogType(null);
-          setPendingDeleteBranch(null);
-        }
+        setErrorMessage(`Failed to delete branch:\n${res.stderr || res.stdout}`);
+        setDialogType(null);
+        setPendingDeleteBranch(null);
+        await refreshRepository();
       }
     } catch (err: any) {
       setErrorMessage(err.toString());
       setDialogType(null);
       setPendingDeleteBranch(null);
+      await refreshRepository();
     }
   };
 
@@ -1545,11 +1700,29 @@ function App() {
     if (!dialogInput) return;
     try {
       if (dialogType === "branch") {
+        const branchName = dialogInput.trim();
+        if (!branchName) return;
+
+        let args: string[];
+        if (targetCommitForBranch) {
+          if (checkoutNewBranch) {
+            args = ["checkout", "-b", branchName, targetCommitForBranch.id];
+          } else {
+            args = ["branch", branchName, targetCommitForBranch.id];
+          }
+        } else {
+          args = ["checkout", "-b", branchName];
+        }
+
         const res = await invoke<GitCliResult>("run_git_cli_cmd", {
           repoPath,
-          args: ["checkout", "-b", dialogInput]
+          args
         });
-        if (res.exit_code !== 0) setErrorMessage(res.stderr);
+        if (res.exit_code !== 0) {
+          setErrorMessage(res.stderr || "Failed to create branch");
+        } else {
+          setTargetCommitForBranch(null);
+        }
       } else if (dialogType === "checkout") {
         let args = ["checkout", dialogInput];
         if (commits.length === 0) {
@@ -1565,6 +1738,7 @@ function App() {
       }
       setDialogType(null);
       setDialogInput("");
+      setTargetCommitForBranch(null);
       await refreshRepository();
     } catch (err: any) {
       setErrorMessage(err.toString());
@@ -1791,6 +1965,8 @@ function App() {
         isCollabActive={isCollabActive}
         setIsCollabActive={setIsCollabActive}
         unpushedCount={unpushedCount}
+        behindCount={behindCount}
+        allBranches={allBranches}
       />
 
         {!sidebarCollapsed && (
@@ -1818,6 +1994,8 @@ function App() {
             setActiveTab={setActiveTab}
             currentBranch={currentBranch}
             hasRepo={hasRepo}
+            unpushedCount={unpushedCount}
+            behindCount={behindCount}
             githubToken={githubToken}
             remoteUrl={remoteUrl}
             setDialogType={setDialogType}
@@ -2011,6 +2189,8 @@ function App() {
                 selectedCommitDiffFile={selectedCommitDiffFile}
                 showCommitFileDiff={showCommitFileDiff}
                 selectedCommitFileDiff={selectedCommitFileDiff}
+                onOpenCreateBranchFromCommit={handleOpenCreateBranchFromCommit}
+                onOpenPushToCommit={handleOpenPushToCommit}
               />
             )}
           </div>
@@ -2019,6 +2199,15 @@ function App() {
       <Dialogs 
         dialogType={dialogType}
         setDialogType={setDialogType}
+        targetCommitForBranch={targetCommitForBranch}
+        setTargetCommitForBranch={setTargetCommitForBranch}
+        targetCommitForPush={targetCommitForPush}
+        setTargetCommitForPush={setTargetCommitForPush}
+        isPushingCommit={isPushingCommit}
+        handleExecutePushCommit={handleExecutePushCommit}
+        commits={commits}
+        checkoutNewBranch={checkoutNewBranch}
+        setCheckoutNewBranch={setCheckoutNewBranch}
         selectedStashIndex={selectedStashIndex}
         stashes={stashes}
         stashFiles={stashFiles}
@@ -2039,6 +2228,7 @@ function App() {
         currentBranch={currentBranch}
         pendingCheckoutBranch={pendingCheckoutBranch}
         setPendingCheckoutBranch={setPendingCheckoutBranch}
+        setPendingCheckoutArgs={setPendingCheckoutArgs}
         handleCheckoutBringChanges={handleCheckoutBringChanges}
         handleCheckoutStashChanges={handleCheckoutStashChanges}
         pendingWorkspacePath={pendingWorkspacePath}
