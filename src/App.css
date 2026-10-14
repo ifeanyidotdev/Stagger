@@ -1142,6 +1142,106 @@ button, input, textarea, select, a, .workspace-trigger-btn, .tab-button, .branch
 }
 
 /* ==========================================================================
+   WORKING TREE CLEAN & EMPTY STATE STYLING
+   ========================================================================== */
+
+.working-tree-clean {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 40px 16px 24px 16px;
+  gap: 8px;
+  user-select: none;
+  animation: fadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.clean-tree-icon-wrapper {
+  width: 50px;
+  height: 50px;
+  border-radius: 14px;
+  background: radial-gradient(circle at 50% 30%, rgba(139, 92, 246, 0.22) 0%, rgba(139, 92, 246, 0.05) 100%);
+  border: 1px solid rgba(139, 92, 246, 0.32);
+  box-shadow: 0 8px 24px rgba(139, 92, 246, 0.14), inset 0 1px 1px rgba(255, 255, 255, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent-purple-bright);
+  margin-bottom: 4px;
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s ease, border-color 0.25s ease;
+}
+
+.working-tree-clean:hover .clean-tree-icon-wrapper {
+  transform: translateY(-2px) scale(1.04);
+  box-shadow: 0 12px 28px rgba(139, 92, 246, 0.22), inset 0 1px 1px rgba(255, 255, 255, 0.18);
+  border-color: rgba(139, 92, 246, 0.48);
+}
+
+.clean-tree-title {
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--color-text-bright);
+  letter-spacing: -0.01em;
+}
+
+.clean-tree-desc {
+  font-size: 0.74rem;
+  color: var(--color-text-muted);
+  line-height: 1.4;
+  max-width: 200px;
+}
+
+.clean-tree-toggle-btn {
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  font-size: 0.7rem;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  margin-top: 10px;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.clean-tree-toggle-btn:hover {
+  color: var(--color-text-bright);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.empty-section-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 10px;
+  margin: 3px 2px 6px 2px;
+  font-size: 0.74rem;
+  color: var(--color-text-muted);
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px dashed rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  user-select: none;
+  transition: border-color 0.15s ease;
+}
+
+.empty-section-row:hover {
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.empty-section-icon {
+  color: var(--color-text-muted);
+  opacity: 0.65;
+  flex-shrink: 0;
+}
+
+.empty-section-text {
+  font-size: 0.74rem;
+  color: var(--color-text-muted);
+  padding: 6px 8px;
+  user-select: none;
+}
+
+/* ==========================================================================
    STAGING MESH PANE & CANVAS (THE MESH)
    ========================================================================== */
 
