@@ -753,6 +753,34 @@ function App() {
     await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
     try {
+      // Pre-flight check: proactively catch remote changes before attempting push
+      if (!publish && hasUpstream) {
+        try {
+          const preCheck = await invoke<GitCliResult>("run_git_cli_cmd", {
+            repoPath,
+            args: ["fetch", "--quiet", "origin"]
+          });
+          if (preCheck.exit_code === 0) {
+            const behindRes = await invoke<GitCliResult>("run_git_cli_cmd", {
+              repoPath,
+              args: ["rev-list", "HEAD..@{u}", "--count"]
+            });
+            if (behindRes.exit_code === 0) {
+              const count = parseInt(behindRes.stdout.trim(), 10);
+              if (!isNaN(count) && count > 0) {
+                setBehindCount(count);
+                await refreshRepository();
+                setErrorMessage(
+                  `Remote origin has ${count} incoming commit${count > 1 ? "s" : ""}.\n\n` +
+                  `The sync button has switched to 'Pull Origin'. Please pull and integrate changes before pushing.`
+                );
+                return;
+              }
+            }
+          }
+        } catch (_) {}
+      }
+
       let args = ["push", "origin", currentBranch];
       if (publish || !hasUpstream) {
         args = ["push", "-u", "origin", currentBranch];
@@ -764,7 +792,31 @@ function App() {
       if (res.exit_code === 0) {
         await refreshRepository();
       } else {
-        if (res.stderr.includes("does not appear to be a git repository") || res.stderr.includes("No such remote") || res.stderr.includes("destination specifier")) {
+        const errText = ((res.stderr || "") + " " + (res.stdout || "")).toLowerCase();
+        if (
+          errText.includes("fetch first") ||
+          errText.includes("non-fast-forward") ||
+          errText.includes("rejected") ||
+          errText.includes("remote contains work") ||
+          errText.includes("need to pull") ||
+          errText.includes("integrate the remote changes")
+        ) {
+          // Dynamically and instantly switch the sync button to Pull option with zero wait
+          setBehindCount(prev => (prev > 0 ? prev : 1));
+
+          // Run background fetch asynchronously without blocking or delaying the UI
+          invoke<GitCliResult>("run_git_cli_cmd", {
+            repoPath,
+            args: ["fetch", "origin"]
+          }).then(() => {
+            refreshRepository();
+          }).catch(() => {});
+
+          setErrorMessage(
+            `Origin has newer changes that must be integrated first.\n\n` +
+            `The sync button has switched to 'Pull Origin'. Click it to pull and merge the latest commits from origin.`
+          );
+        } else if (res.stderr.includes("does not appear to be a git repository") || res.stderr.includes("No such remote") || res.stderr.includes("destination specifier")) {
           setDialogInput("");
           setDialogType("set-remote");
         } else {
@@ -1885,6 +1937,52 @@ function App() {
     }, 2000);
     return () => clearInterval(interval);
   }, [repoPath]);
+
+  // Proactive background auto-fetch: catches remote changes even before user pushes
+  useEffect(() => {
+    if (!repoPath || !hasRepo || !remoteUrl) return;
+
+    let isMounted = true;
+    let isFetchingBg = false;
+
+    const checkRemoteChanges = async () => {
+      if (isFetchingBg || isPushingRemote || isPullingRemote || isFetchingRemote) return;
+      isFetchingBg = true;
+      try {
+        const res = await invoke<GitCliResult>("run_git_cli_cmd", {
+          repoPath,
+          args: ["fetch", "--quiet", "origin"]
+        });
+        if (isMounted && res.exit_code === 0) {
+          await refreshRepository();
+        }
+      } catch (_) {
+      } finally {
+        isFetchingBg = false;
+      }
+    };
+
+    // Auto-check 3 seconds after opening repository
+    const initialTimer = setTimeout(checkRemoteChanges, 3000);
+
+    // Auto-check periodically in background every 25 seconds
+    const interval = setInterval(checkRemoteChanges, 25000);
+
+    // Auto-check whenever user refocuses StageNode window
+    const handleFocus = () => {
+      if (document.visibilityState === "visible") {
+        checkRemoteChanges();
+      }
+    };
+    window.addEventListener("focus", handleFocus);
+
+    return () => {
+      isMounted = false;
+      clearTimeout(initialTimer);
+      clearInterval(interval);
+      window.removeEventListener("focus", handleFocus);
+    };
+  }, [repoPath, hasRepo, remoteUrl, isPushingRemote, isPullingRemote, isFetchingRemote]);
 
   const stagedFiles = files.filter(f => f.staged_status !== null);
   const unstagedFiles = files.filter(f => f.unstaged_status !== null);
