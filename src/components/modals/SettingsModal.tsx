@@ -21,7 +21,11 @@ import {
   Copy, 
   CheckCheck,
   CheckCircle2,
-  Zap
+  Zap,
+  GitMerge,
+  GitCommit,
+  GitPullRequest,
+  Workflow
 } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { openUrl, revealItemInDir } from '@tauri-apps/plugin-opener';
@@ -43,8 +47,8 @@ interface SettingsModalProps {
 }
 
 type ContextType = 'global' | 'workspace';
-type GlobalTab = 'global-git' | 'global-gitignore' | 'global-ai';
-type WorkspaceTab = 'workspace-remote' | 'workspace-identity' | 'workspace-overview';
+type GlobalTab = 'global-git' | 'global-pull' | 'global-gitignore' | 'global-ai';
+type WorkspaceTab = 'workspace-remote' | 'workspace-pull' | 'workspace-identity' | 'workspace-overview';
 
 const SettingsModal: React.FC<SettingsModalProps> = ({
   isOpen,
@@ -68,6 +72,14 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   const [userEmail, setUserEmail] = useState('');
   const [defaultBranch, setDefaultBranch] = useState('main');
   const [syncSystemGit, setSyncSystemGit] = useState(true);
+
+  // Pull & Integration Strategy Settings
+  const [defaultPullStrategy, setDefaultPullStrategy] = useState<'prompt' | 'merge' | 'rebase'>('prompt');
+  const [autoOpenPullDialog, setAutoOpenPullDialog] = useState<boolean>(true);
+  const [defaultPrMergeMethod, setDefaultPrMergeMethod] = useState<'merge' | 'squash' | 'rebase'>('merge');
+
+  // Workspace Pull Strategy
+  const [workspacePullStrategy, setWorkspacePullStrategy] = useState<'inherit' | 'prompt' | 'merge' | 'rebase'>('inherit');
 
   // Universal Gitignore
   const [globalGitignorePath, setGlobalGitignorePath] = useState('~/.gitignore_global');
@@ -160,6 +172,18 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         setOpenaiModel(settings.openai_model || 'gpt-4o');
         setOpenaiBaseUrl(settings.openai_base_url || '');
 
+        // Load Pull Strategy & PR Settings
+        const storedPull = localStorage.getItem('stagenode_pull_strategy');
+        const loadedPullStrategy = settings.default_pull_strategy || (storedPull as any) || (sysGit?.pull_rebase === 'true' ? 'rebase' : sysGit?.pull_rebase === 'false' ? 'merge' : 'prompt');
+        setDefaultPullStrategy(loadedPullStrategy);
+
+        const autoPromptStored = localStorage.getItem('stagenode_auto_open_pull_dialog');
+        setAutoOpenPullDialog(settings.auto_open_pull_dialog ?? (autoPromptStored !== null ? autoPromptStored === 'true' : true));
+
+        const storedPr = localStorage.getItem('stagenode_pr_merge_method');
+        const loadedPrMethod = settings.default_pr_merge_method || (storedPr as any) || 'merge';
+        setDefaultPrMergeMethod(loadedPrMethod);
+
         // Load universal gitignore content
         if (loadedGitignorePath) {
           try {
@@ -184,6 +208,31 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
               setWorkspaceUserName(ws.local_user_name || '');
               setWorkspaceUserEmail(ws.local_user_email || '');
             }
+
+            // Load workspace-specific pull strategy
+            const wsStratStored = localStorage.getItem('stagenode_pull_strategy_' + repoPath);
+            if (wsStratStored && (wsStratStored === 'inherit' || wsStratStored === 'prompt' || wsStratStored === 'merge' || wsStratStored === 'rebase')) {
+              if (mounted) setWorkspacePullStrategy(wsStratStored as any);
+            } else {
+              try {
+                const localRebaseRes = await invoke<GitCliResult>('run_git_cli_cmd', {
+                  repoPath,
+                  args: ['config', '--local', 'pull.rebase'],
+                });
+                if (mounted) {
+                  if (localRebaseRes.exit_code === 0) {
+                    const val = localRebaseRes.stdout.trim().toLowerCase();
+                    if (val === 'true') setWorkspacePullStrategy('rebase');
+                    else if (val === 'false') setWorkspacePullStrategy('merge');
+                    else setWorkspacePullStrategy('inherit');
+                  } else {
+                    setWorkspacePullStrategy('inherit');
+                  }
+                }
+              } catch {
+                if (mounted) setWorkspacePullStrategy('inherit');
+              }
+            }
           } catch (err) {
             console.warn('Could not load workspace settings:', err);
           }
@@ -194,6 +243,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
             setOverrideWorkspaceIdentity(false);
             setWorkspaceUserName('');
             setWorkspaceUserEmail('');
+            setWorkspacePullStrategy('inherit');
           }
         }
       } catch (err) {
@@ -394,7 +444,28 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         openai_api_key: openaiApiKey.trim() || null,
         openai_model: openaiModel.trim() || 'gpt-4o',
         openai_base_url: openaiBaseUrl.trim() || null,
+        default_pull_strategy: defaultPullStrategy,
+        auto_open_pull_dialog: autoOpenPullDialog,
+        default_pr_merge_method: defaultPrMergeMethod,
       };
+
+      localStorage.setItem('stagenode_pull_strategy', defaultPullStrategy);
+      localStorage.setItem('stagenode_auto_open_pull_dialog', JSON.stringify(autoOpenPullDialog));
+      localStorage.setItem('stagenode_pr_merge_method', defaultPrMergeMethod);
+
+      if (syncSystemGit) {
+        if (defaultPullStrategy === 'rebase') {
+          invoke<GitCliResult>('run_git_cli_cmd', {
+            repoPath: repoPath || '',
+            args: ['config', '--global', 'pull.rebase', 'true'],
+          }).catch(() => {});
+        } else if (defaultPullStrategy === 'merge') {
+          invoke<GitCliResult>('run_git_cli_cmd', {
+            repoPath: repoPath || '',
+            args: ['config', '--global', 'pull.rebase', 'false'],
+          }).catch(() => {});
+        }
+      }
 
       const savedGlobal = await invoke<GlobalSettings>('save_global_settings', {
         settings: updatedGlobal,
@@ -410,6 +481,33 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         });
 
         setWorkspaceData(savedWs);
+
+        // Save workspace pull strategy override
+        if (workspacePullStrategy === 'rebase') {
+          localStorage.setItem('stagenode_pull_strategy_' + repoPath, 'rebase');
+          invoke<GitCliResult>('run_git_cli_cmd', {
+            repoPath,
+            args: ['config', '--local', 'pull.rebase', 'true'],
+          }).catch(() => {});
+        } else if (workspacePullStrategy === 'merge') {
+          localStorage.setItem('stagenode_pull_strategy_' + repoPath, 'merge');
+          invoke<GitCliResult>('run_git_cli_cmd', {
+            repoPath,
+            args: ['config', '--local', 'pull.rebase', 'false'],
+          }).catch(() => {});
+        } else if (workspacePullStrategy === 'prompt') {
+          localStorage.setItem('stagenode_pull_strategy_' + repoPath, 'prompt');
+          invoke<GitCliResult>('run_git_cli_cmd', {
+            repoPath,
+            args: ['config', '--local', '--unset', 'pull.rebase'],
+          }).catch(() => {});
+        } else {
+          localStorage.removeItem('stagenode_pull_strategy_' + repoPath);
+          invoke<GitCliResult>('run_git_cli_cmd', {
+            repoPath,
+            args: ['config', '--local', '--unset', 'pull.rebase'],
+          }).catch(() => {});
+        }
 
         if (onRemoteUrlUpdated && workspaceRemoteUrl.trim()) {
           onRemoteUrlUpdated(workspaceRemoteUrl.trim());
@@ -535,6 +633,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
                 <button
                   type="button"
+                  className={`settings-nav-btn ${activeGlobalTab === 'global-pull' ? 'active' : ''}`}
+                  onClick={() => setActiveGlobalTab('global-pull')}
+                >
+                  <GitMerge size={15} className="settings-nav-icon" style={{ color: 'var(--accent-purple-bright)' }} />
+                  <span>Pull & Sync Strategy</span>
+                </button>
+
+                <button
+                  type="button"
                   className={`settings-nav-btn ${activeGlobalTab === 'global-gitignore' ? 'active' : ''}`}
                   onClick={() => setActiveGlobalTab('global-gitignore')}
                 >
@@ -565,6 +672,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 >
                   <Globe size={15} className="settings-nav-icon" />
                   <span>Remote & Origin URL</span>
+                </button>
+
+                <button
+                  type="button"
+                  className={`settings-nav-btn ${activeWorkspaceTab === 'workspace-pull' ? 'active' : ''}`}
+                  onClick={() => setActiveWorkspaceTab('workspace-pull')}
+                >
+                  <GitMerge size={15} className="settings-nav-icon" style={{ color: 'var(--accent-purple-bright)' }} />
+                  <span>Project Pull Strategy</span>
                 </button>
 
                 <button
@@ -691,7 +807,177 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                   </>
                 )}
 
-                {/* 2. UNIVERSAL GITIGNORE */}
+                {/* PULL & INTEGRATION STRATEGY */}
+                {activeContext === 'global' && activeGlobalTab === 'global-pull' && (
+                  <>
+                    <div>
+                      <h3 style={{ fontSize: '0.96rem', fontWeight: 600, color: 'var(--color-text-bright)' }}>
+                        Pull & Integration Strategy
+                      </h3>
+                      <p className="settings-field-hint">
+                        Configure how StageNode integrates remote commits when pulling changes, and set your default GitHub PR merge method.
+                      </p>
+                    </div>
+
+                    {/* Pull Integration Options */}
+                    <div className="settings-card">
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                        <label className="settings-field-label">
+                          <GitMerge size={13} />
+                          <span>Default Pull Integration Method</span>
+                        </label>
+                        <span className="settings-field-hint">
+                          How StageNode settles incoming commits when pulling or synchronizing with origin.
+                        </span>
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
+                        {/* Option 1: Always Prompt */}
+                        <div
+                          className={`settings-radio-row ${defaultPullStrategy === 'prompt' ? 'selected' : ''}`}
+                          onClick={() => setDefaultPullStrategy('prompt')}
+                        >
+                          <div className="settings-radio-row-icon" style={{ color: 'var(--accent-purple-bright)' }}>
+                            <Workflow size={16} />
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{ fontWeight: 600, fontSize: '0.84rem', color: 'var(--color-text-bright)' }}>
+                                Always Prompt (Interactive)
+                              </span>
+                              <span className="settings-tag-pill">Default</span>
+                            </div>
+                            <div style={{ fontSize: '0.74rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+                              Opens a dialog to choose between Merge or Rebase whenever remote commits are incoming.
+                            </div>
+                          </div>
+                          <div className="settings-radio-circle">
+                            {defaultPullStrategy === 'prompt' && <div className="settings-radio-dot" />}
+                          </div>
+                        </div>
+
+                        {/* Option 2: Fully Merge */}
+                        <div
+                          className={`settings-radio-row ${defaultPullStrategy === 'merge' ? 'selected' : ''}`}
+                          onClick={() => setDefaultPullStrategy('merge')}
+                        >
+                          <div className="settings-radio-row-icon" style={{ color: '#61afef' }}>
+                            <GitMerge size={16} />
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{ fontWeight: 600, fontSize: '0.84rem', color: 'var(--color-text-bright)' }}>
+                                Always Merge
+                              </span>
+                            </div>
+                            <div style={{ fontSize: '0.74rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+                              Creates a merge commit to join remote commits into your branch. Preserves full history.
+                            </div>
+                          </div>
+                          <div className="settings-radio-circle">
+                            {defaultPullStrategy === 'merge' && <div className="settings-radio-dot" />}
+                          </div>
+                        </div>
+
+                        {/* Option 3: Rebase */}
+                        <div
+                          className={`settings-radio-row ${defaultPullStrategy === 'rebase' ? 'selected' : ''}`}
+                          onClick={() => setDefaultPullStrategy('rebase')}
+                        >
+                          <div className="settings-radio-row-icon" style={{ color: 'var(--accent-purple-bright)' }}>
+                            <GitCommit size={16} />
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{ fontWeight: 600, fontSize: '0.84rem', color: 'var(--color-text-bright)' }}>
+                                Always Rebase
+                              </span>
+                            </div>
+                            <div style={{ fontSize: '0.74rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+                              Replays your local commits on top of incoming remote commits. Produces a clean linear history.
+                            </div>
+                          </div>
+                          <div className="settings-radio-circle">
+                            {defaultPullStrategy === 'rebase' && <div className="settings-radio-dot" />}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Auto-Prompt on Fetch Switch */}
+                    <div 
+                      className="settings-card"
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '16px',
+                        background: 'rgba(255, 255, 255, 0.02)',
+                        padding: '16px 20px',
+                      }}
+                    >
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--color-text-bright)' }}>
+                          Prompt automatically when new remote commits are fetched
+                        </div>
+                        <div className="settings-field-hint" style={{ marginTop: '2px' }}>
+                          When fetching detects that origin has newer commits, automatically open the integration options dialog.
+                        </div>
+                      </div>
+                      <label className="settings-switch" title="Toggle auto-prompt on fetch">
+                        <input
+                          type="checkbox"
+                          checked={autoOpenPullDialog}
+                          onChange={e => setAutoOpenPullDialog(e.target.checked)}
+                        />
+                        <span className="settings-switch-slider" />
+                      </label>
+                    </div>
+
+                    {/* GitHub Pull Request Merge Preference */}
+                    <div className="settings-card">
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                        <label className="settings-field-label">
+                          <GitPullRequest size={13} />
+                          <span>GitHub Pull Request Default Integration</span>
+                          <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}>(for completing PRs)</span>
+                        </label>
+                        <span className="settings-field-hint">
+                          Default merge behavior when closing and merging GitHub pull requests.
+                        </span>
+                      </div>
+
+                      <div className="settings-segmented-group">
+                        <button
+                          type="button"
+                          className={`settings-segmented-btn ${defaultPrMergeMethod === 'merge' ? 'selected' : ''}`}
+                          onClick={() => setDefaultPrMergeMethod('merge')}
+                        >
+                          <GitMerge size={14} />
+                          <span>Merge Commit</span>
+                        </button>
+                        <button
+                          type="button"
+                          className={`settings-segmented-btn ${defaultPrMergeMethod === 'squash' ? 'selected' : ''}`}
+                          onClick={() => setDefaultPrMergeMethod('squash')}
+                        >
+                          <GitCommit size={14} />
+                          <span>Squash & Merge</span>
+                        </button>
+                        <button
+                          type="button"
+                          className={`settings-segmented-btn ${defaultPrMergeMethod === 'rebase' ? 'selected' : ''}`}
+                          onClick={() => setDefaultPrMergeMethod('rebase')}
+                        >
+                          <Workflow size={14} />
+                          <span>Rebase & Merge</span>
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* 3. UNIVERSAL GITIGNORE */}
                 {activeContext === 'global' && activeGlobalTab === 'global-gitignore' && (
                   <>
                     <div>
@@ -1276,7 +1562,130 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                   </>
                 )}
 
-                {/* 2. WORKSPACE: PROJECT GIT AUTHOR */}
+                {/* WORKSPACE: PULL & INTEGRATION STRATEGY */}
+                {activeContext === 'workspace' && activeWorkspaceTab === 'workspace-pull' && (
+                  <>
+                    <div>
+                      <h3 style={{ fontSize: '0.96rem', fontWeight: 600, color: 'var(--color-text-bright)' }}>
+                        Project Pull & Integration Strategy
+                      </h3>
+                      <p className="settings-field-hint">
+                        Configure pull and rebase preferences specifically for <strong>{workspaceName}</strong> ({repoPath}).
+                      </p>
+                    </div>
+
+                    <div className="settings-card">
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                        <label className="settings-field-label">
+                          <GitMerge size={13} />
+                          <span>Project Pull Behavior</span>
+                        </label>
+                        <span className="settings-field-hint">
+                          Overrides machine-wide settings for this specific repository.
+                        </span>
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
+                        {/* Option: Inherit Global */}
+                        <div
+                          className={`settings-radio-row ${workspacePullStrategy === 'inherit' ? 'selected' : ''}`}
+                          onClick={() => setWorkspacePullStrategy('inherit')}
+                        >
+                          <div className="settings-radio-row-icon" style={{ color: 'var(--accent-purple-bright)' }}>
+                            <Globe size={16} />
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{ fontWeight: 600, fontSize: '0.84rem', color: 'var(--color-text-bright)' }}>
+                                Inherit Global Strategy
+                              </span>
+                              <span className="settings-tag-pill">
+                                Default: {defaultPullStrategy === 'prompt' ? 'Prompt' : defaultPullStrategy === 'merge' ? 'Merge' : 'Rebase'}
+                              </span>
+                            </div>
+                            <div style={{ fontSize: '0.74rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+                              Follows your machine-wide default configuration.
+                            </div>
+                          </div>
+                          <div className="settings-radio-circle">
+                            {workspacePullStrategy === 'inherit' && <div className="settings-radio-dot" />}
+                          </div>
+                        </div>
+
+                        {/* Option: Always Prompt */}
+                        <div
+                          className={`settings-radio-row ${workspacePullStrategy === 'prompt' ? 'selected' : ''}`}
+                          onClick={() => setWorkspacePullStrategy('prompt')}
+                        >
+                          <div className="settings-radio-row-icon" style={{ color: 'var(--accent-purple-bright)' }}>
+                            <Workflow size={16} />
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{ fontWeight: 600, fontSize: '0.84rem', color: 'var(--color-text-bright)' }}>
+                                Always Prompt for this project
+                              </span>
+                            </div>
+                            <div style={{ fontSize: '0.74rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+                              Always show the Integrate Remote Changes dialog when pulling in this repository.
+                            </div>
+                          </div>
+                          <div className="settings-radio-circle">
+                            {workspacePullStrategy === 'prompt' && <div className="settings-radio-dot" />}
+                          </div>
+                        </div>
+
+                        {/* Option: Force Merge */}
+                        <div
+                          className={`settings-radio-row ${workspacePullStrategy === 'merge' ? 'selected' : ''}`}
+                          onClick={() => setWorkspacePullStrategy('merge')}
+                        >
+                          <div className="settings-radio-row-icon" style={{ color: '#61afef' }}>
+                            <GitMerge size={16} />
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{ fontWeight: 600, fontSize: '0.84rem', color: 'var(--color-text-bright)' }}>
+                                Always Merge
+                              </span>
+                            </div>
+                            <div style={{ fontSize: '0.74rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+                              Always merge incoming remote commits into this repository.
+                            </div>
+                          </div>
+                          <div className="settings-radio-circle">
+                            {workspacePullStrategy === 'merge' && <div className="settings-radio-dot" />}
+                          </div>
+                        </div>
+
+                        {/* Option: Force Rebase */}
+                        <div
+                          className={`settings-radio-row ${workspacePullStrategy === 'rebase' ? 'selected' : ''}`}
+                          onClick={() => setWorkspacePullStrategy('rebase')}
+                        >
+                          <div className="settings-radio-row-icon" style={{ color: 'var(--accent-purple-bright)' }}>
+                            <GitCommit size={16} />
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{ fontWeight: 600, fontSize: '0.84rem', color: 'var(--color-text-bright)' }}>
+                                Always Rebase
+                              </span>
+                            </div>
+                            <div style={{ fontSize: '0.74rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+                              Always rebase unpushed commits on top of incoming remote commits.
+                            </div>
+                          </div>
+                          <div className="settings-radio-circle">
+                            {workspacePullStrategy === 'rebase' && <div className="settings-radio-dot" />}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* 3. WORKSPACE: PROJECT GIT AUTHOR */}
                 {activeContext === 'workspace' && activeWorkspaceTab === 'workspace-identity' && (
                   <>
                     <div>

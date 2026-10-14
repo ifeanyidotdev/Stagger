@@ -16,6 +16,9 @@ pub struct GlobalSettings {
     pub openai_api_key: Option<String>,
     pub openai_model: Option<String>,
     pub openai_base_url: Option<String>,
+    pub default_pull_strategy: Option<String>, // "prompt" | "merge" | "rebase"
+    pub auto_open_pull_dialog: Option<bool>,
+    pub default_pr_merge_method: Option<String>, // "merge" | "squash" | "rebase"
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
@@ -24,6 +27,7 @@ pub struct SystemGitConfig {
     pub user_email: Option<String>,
     pub default_branch: Option<String>,
     pub excludes_file: Option<String>,
+    pub pull_rebase: Option<String>,
 }
 
 pub fn expand_tilde(path: &str) -> PathBuf {
@@ -83,6 +87,7 @@ pub fn get_system_git_config_impl() -> SystemGitConfig {
         user_email: read_git_config_value("user.email"),
         default_branch: read_git_config_value("init.defaultBranch"),
         excludes_file: read_git_config_value("core.excludesfile"),
+        pull_rebase: read_git_config_value("pull.rebase"),
     }
 }
 
@@ -120,6 +125,19 @@ pub fn get_global_settings_impl() -> Result<GlobalSettings, String> {
         if settings.sync_git_global_config.is_none() {
             settings.sync_git_global_config = Some(true);
         }
+        if settings.default_pull_strategy.is_none() {
+            settings.default_pull_strategy = match sys.pull_rebase.as_deref() {
+                Some("true") => Some("rebase".to_string()),
+                Some("false") => Some("merge".to_string()),
+                _ => Some("prompt".to_string()),
+            };
+        }
+        if settings.auto_open_pull_dialog.is_none() {
+            settings.auto_open_pull_dialog = Some(true);
+        }
+        if settings.default_pr_merge_method.is_none() {
+            settings.default_pr_merge_method = Some("merge".to_string());
+        }
 
         Ok(settings)
     } else {
@@ -136,6 +154,13 @@ pub fn get_global_settings_impl() -> Result<GlobalSettings, String> {
             openai_api_key: None,
             openai_model: Some("gpt-4o".to_string()),
             openai_base_url: None,
+            default_pull_strategy: match sys.pull_rebase.as_deref() {
+                Some("true") => Some("rebase".to_string()),
+                Some("false") => Some("merge".to_string()),
+                _ => Some("prompt".to_string()),
+            },
+            auto_open_pull_dialog: Some(true),
+            default_pr_merge_method: Some("merge".to_string()),
         };
 
         // Attempt initial save
@@ -177,6 +202,17 @@ pub fn save_global_settings_impl(settings: &GlobalSettings) -> Result<GlobalSett
         if let Some(ref ignore_path) = settings.global_gitignore_path {
             if !ignore_path.trim().is_empty() {
                 let _ = set_git_config_value("core.excludesfile", ignore_path.trim());
+            }
+        }
+        if let Some(ref strat) = settings.default_pull_strategy {
+            match strat.as_str() {
+                "rebase" => {
+                    let _ = set_git_config_value("pull.rebase", "true");
+                }
+                "merge" => {
+                    let _ = set_git_config_value("pull.rebase", "false");
+                }
+                _ => {}
             }
         }
     }

@@ -708,7 +708,7 @@ function App() {
   };
 
   // --- GIT REMOTE & MERGE/REBASE ACTIONS ---
-  const handleGitFetch = async (allRemotes: boolean = false) => {
+  const handleGitFetch = async (allRemotes: boolean = false, autoOpenStrategy: boolean = true) => {
     if (isFetchingRemote) return;
     setIsFetchingRemote(true);
     // Guarantee loading indicator renders on screen immediately before CLI command
@@ -721,6 +721,26 @@ function App() {
       });
       if (res.exit_code === 0) {
         await refreshRepository();
+        // If fetching revealed that origin has incoming commits, prompt with merge/rebase options
+        if (autoOpenStrategy) {
+          try {
+            const behindRes = await invoke<GitCliResult>("run_git_cli_cmd", {
+              repoPath,
+              args: ["rev-list", "HEAD..@{u}", "--count"]
+            });
+            if (behindRes.exit_code === 0) {
+              const count = parseInt(behindRes.stdout.trim(), 10);
+              if (!isNaN(count) && count > 0) {
+                setBehindCount(count);
+                const autoPrompt = localStorage.getItem("stagenode_auto_open_pull_dialog") !== "false";
+                const strat = getEffectivePullStrategy();
+                if (autoPrompt && strat === "prompt") {
+                  setDialogType("pull-strategy");
+                }
+              }
+            }
+          } catch (_) {}
+        }
       } else {
         setErrorMessage(res.stderr || res.stdout);
       }
@@ -728,6 +748,31 @@ function App() {
       setErrorMessage(err.toString());
     } finally {
       setIsFetchingRemote(false);
+    }
+  };
+
+  const getEffectivePullStrategy = (): "prompt" | "merge" | "rebase" => {
+    if (repoPath) {
+      const wsStrategy = localStorage.getItem("stagenode_pull_strategy_" + repoPath);
+      if (wsStrategy && (wsStrategy === "prompt" || wsStrategy === "merge" || wsStrategy === "rebase")) {
+        return wsStrategy;
+      }
+    }
+    const globalStrategy = localStorage.getItem("stagenode_pull_strategy");
+    if (globalStrategy && (globalStrategy === "prompt" || globalStrategy === "merge" || globalStrategy === "rebase")) {
+      return globalStrategy;
+    }
+    return "prompt";
+  };
+
+  const handleFooterPullClick = async () => {
+    const strategy = getEffectivePullStrategy();
+    if (strategy === "rebase") {
+      await handleGitPull("rebase");
+    } else if (strategy === "merge") {
+      await handleGitPull("merge");
+    } else {
+      setDialogType("pull-strategy");
     }
   };
 
@@ -860,22 +905,24 @@ function App() {
     }
   };
 
-  const handleGitPull = async () => {
+  const handleGitPull = async (mode: "merge" | "rebase" = "merge") => {
     if (isPullingRemote) return;
     setIsPullingRemote(true);
     // Guarantee loading indicator renders on screen immediately before CLI command
     await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     try {
+      const args = ["pull", mode === "rebase" ? "--rebase" : "--no-rebase", "origin", currentBranch];
       const res = await invoke<GitCliResult>("run_git_cli_cmd", {
         repoPath,
-        args: ["pull", "origin", currentBranch]
+        args
       });
       setCliOutput(res);
       if (res.exit_code === 0) {
         setErrorMessage(null);
         await refreshRepository();
       } else {
-        setErrorMessage(`Pull failed:\n${res.stderr || res.stdout}`);
+        setErrorMessage(`Pull (${mode === "rebase" ? "rebase" : "merge"}) failed:\n${res.stderr || res.stdout}`);
+        await refreshRepository();
       }
     } catch (err: any) {
       setErrorMessage(err.toString());
@@ -2027,6 +2074,7 @@ function App() {
         handleGitFetch={handleGitFetch}
         isPullingRemote={isPullingRemote}
         handleGitPull={handleGitPull}
+        onOpenPullStrategy={handleFooterPullClick}
         hasUpstream={hasUpstream}
         handleGitPush={handleGitPush}
         isPushingRemote={isPushingRemote}
@@ -2361,6 +2409,11 @@ function App() {
         stashNameInput={stashNameInput}
         setStashNameInput={setStashNameInput}
         pushStash={pushStash}
+        behindCount={behindCount}
+        upstreamBranchName={upstreamBranchName}
+        handleGitPull={handleGitPull}
+        isPullingRemote={isPullingRemote}
+        onOpenSettings={() => setIsSettingsOpen(true)}
       />
 
       <SettingsModal 

@@ -10,6 +10,9 @@ export interface GlobalSettings {
   openai_api_key?: string | null;
   openai_model?: string | null;
   openai_base_url?: string | null;
+  default_pull_strategy?: 'prompt' | 'merge' | 'rebase' | null;
+  auto_open_pull_dialog?: boolean | null;
+  default_pr_merge_method?: 'merge' | 'squash' | 'rebase' | null;
 }
 
 export interface SystemGitConfig {
@@ -17,6 +20,7 @@ export interface SystemGitConfig {
   user_email?: string | null;
   default_branch?: string | null;
   excludes_file?: string | null;
+  pull_rebase?: string | null;
 }
 
 export interface WorkspaceSettings {
@@ -26,4 +30,5 @@ export interface WorkspaceSettings {
   local_user_email?: string | null;
   has_local_identity: boolean;
   gitignore_exists: boolean;
+  pull_strategy?: 'inherit' | 'prompt' | 'merge' | 'rebase' | null;
 }
