@@ -108,8 +108,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   const [workspaceRemoteUrl, setWorkspaceRemoteUrl] = useState('');
   const [isApplyingRemote, setIsApplyingRemote] = useState(false);
   const [remoteApplyNotice, setRemoteApplyNotice] = useState<{ success: boolean; message: string } | null>(null);
-  const [isTestingRemote, setIsTestingRemote] = useState(false);
-  const [remoteTestResult, setRemoteTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [overrideWorkspaceIdentity, setOverrideWorkspaceIdentity] = useState(false);
   const [workspaceUserName, setWorkspaceUserName] = useState('');
   const [workspaceUserEmail, setWorkspaceUserEmail] = useState('');
@@ -135,7 +133,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     setIsLoading(true);
     setSaveStatus(null);
     setAiTestResult(null);
-    setRemoteTestResult(null);
     setRemoteApplyNotice(null);
     setGlobalGitignoreNotice(null);
 
@@ -389,39 +386,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
       });
     } finally {
       setIsApplyingRemote(false);
-    }
-  };
-
-  // Test Remote URL access via git ls-remote
-  const handleTestRemoteConnection = async () => {
-    if (!repoPath || !workspaceRemoteUrl.trim()) return;
-    setIsTestingRemote(true);
-    setRemoteTestResult(null);
-
-    try {
-      const res = await invoke<GitCliResult>('run_git_cli_cmd', {
-        repoPath,
-        args: ['ls-remote', '--heads', workspaceRemoteUrl.trim()],
-      });
-
-      if (res.exit_code === 0) {
-        setRemoteTestResult({
-          success: true,
-          message: 'Origin connection verified! Remote is reachable and authenticated.',
-        });
-      } else {
-        setRemoteTestResult({
-          success: false,
-          message: res.stderr || res.stdout || 'Failed to authenticate with remote origin.',
-        });
-      }
-    } catch (err: any) {
-      setRemoteTestResult({
-        success: false,
-        message: err?.message || 'Failed to execute remote connection check.',
-      });
-    } finally {
-      setIsTestingRemote(false);
     }
   };
 
@@ -1515,49 +1479,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                           </div>
                         )}
                       </div>
-
-                      {/* Connection Test */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '6px', borderTop: '1px solid var(--border-color)', paddingTop: '12px' }}>
-                        <button
-                          type="button"
-                          onClick={handleTestRemoteConnection}
-                          disabled={isTestingRemote || !workspaceRemoteUrl.trim()}
-                          style={{
-                            background: 'rgba(255, 255, 255, 0.06)',
-                            border: '1px solid var(--border-color)',
-                            borderRadius: '8px',
-                            color: 'var(--color-text-bright)',
-                            padding: '6px 12px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '6px',
-                            cursor: 'pointer',
-                            fontSize: '0.78rem',
-                            opacity: workspaceRemoteUrl.trim() ? 1 : 0.5,
-                          }}
-                        >
-                          <RefreshCw size={13} className={isTestingRemote ? 'spin-icon' : ''} />
-                          <span>{isTestingRemote ? 'Verifying access...' : 'Test Connection (ls-remote)'}</span>
-                        </button>
-                        <span className="settings-field-hint">
-                          Tests SSH / HTTPS read access with the remote repository.
-                        </span>
-                      </div>
-
-                      {remoteTestResult && (
-                        <div
-                          style={{
-                            padding: '8px 12px',
-                            borderRadius: '8px',
-                            background: remoteTestResult.success ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
-                            border: remoteTestResult.success ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(239, 68, 68, 0.3)',
-                            fontSize: '0.76rem',
-                            color: remoteTestResult.success ? 'var(--color-added)' : 'var(--color-deleted)',
-                          }}
-                        >
-                          <div style={{ fontWeight: 600 }}>{remoteTestResult.message}</div>
-                        </div>
-                      )}
                     </div>
                   </>
                 )}

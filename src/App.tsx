@@ -168,6 +168,47 @@ function App() {
   const [isPushingCommit, setIsPushingCommit] = useState<boolean>(false);
   const [pendingDiscardFiles, setPendingDiscardFiles] = useState<string[] | null>(null);
 
+  // --- RESET WORKSPACE-SCOPED SELECTIONS & PREVIEWS ---
+  const resetWorkspaceScopedState = () => {
+    setSelectedCommit(null);
+    setSelectedCommitDiffFiles([]);
+    setSelectedCommitFileDiff(null);
+    setSelectedCommitDiffFile(null);
+    setHistorySearchQuery("");
+    setSelectedFile(null);
+    setCheckedUnstaged([]);
+    setCheckedStaged([]);
+    setActiveDetailHunk(null);
+    setCanvasNodes([]);
+    setCommitTitle("");
+    setCommitDesc("");
+    setAmendCommit(false);
+    setCoAuthors([]);
+    setShowCoAuthorInput(false);
+    setCoAuthorInput("");
+    setSelectedStashIndex(null);
+    setStashFiles([]);
+    setStashFileDiff(null);
+    setSelectedStashFile(null);
+    setCheckedStashFiles(new Set());
+    setConflictedFiles([]);
+    setConflictOursContent(null);
+    setConflictTheirsContent(null);
+    setConflictDiffInfo(null);
+    setIsLoadingConflict(false);
+    setTargetCommitForBranch(null);
+    setTargetCommitForPush(null);
+    setPendingDiscardFiles(null);
+  };
+
+  const activeRepoRef = useRef<string>(repoPath);
+  useEffect(() => {
+    if (activeRepoRef.current !== repoPath) {
+      activeRepoRef.current = repoPath;
+      resetWorkspaceScopedState();
+    }
+  }, [repoPath]);
+
   const handleOpenCreateBranchFromCommit = (commit: CommitInfo) => {
     setTargetCommitForBranch(commit);
     setCheckoutNewBranch(true);
@@ -375,6 +416,7 @@ function App() {
         }
         setWorkspaces(newList);
         localStorage.setItem("sn_workspaces", JSON.stringify(newList));
+        resetWorkspaceScopedState();
         setRepoPath(targetPath);
         localStorage.setItem("sn_current_repo", targetPath);
         await refreshRepository(targetPath);
@@ -388,6 +430,7 @@ function App() {
   };
 
   const selectWorkspace = (path: string) => {
+    resetWorkspaceScopedState();
     setRepoPath(path);
     setIsWorkspaceDropdownOpen(false);
     refreshRepository(path);
@@ -405,6 +448,7 @@ function App() {
       }
       setWorkspaces(newList);
       localStorage.setItem("sn_workspaces", JSON.stringify(newList));
+      resetWorkspaceScopedState();
       setRepoPath(targetPath);
       setDialogType(null);
       setDialogInput("");
@@ -431,6 +475,7 @@ function App() {
       }
       setWorkspaces(newList);
       localStorage.setItem("sn_workspaces", JSON.stringify(newList));
+      resetWorkspaceScopedState();
       setRepoPath(pendingWorkspacePath);
       setDialogType(null);
       setPendingWorkspacePath("");
@@ -461,7 +506,9 @@ function App() {
       setCommits([]);
       setBranchList([]);
       setRemoteUrl(null);
+      resetWorkspaceScopedState();
     } else if (repoPath === path) {
+      resetWorkspaceScopedState();
       setRepoPath(newList[0]);
       localStorage.setItem("sn_current_repo", newList[0]);
       refreshRepository(newList[0]);
@@ -477,6 +524,16 @@ function App() {
       setCurrentBranch(statusRes.current_branch);
       setHasRepo(true);
       setErrorMessage(null);
+
+      setSelectedFile(prev => {
+        if (!prev) return null;
+        const exists = statusRes.files.some(f => f.path === prev);
+        if (!exists) {
+          setCanvasNodes([]);
+          return null;
+        }
+        return prev;
+      });
 
       let rawBranches = await invoke<string[]>("get_branches", { repoPath: path });
       let branchesList = rawBranches.filter(isRealBranch);
@@ -658,6 +715,18 @@ function App() {
       const logRes = await invoke<CommitInfo[]>("get_git_log", { repoPath: path, limit: 2000 });
       setCommits(logRes);
 
+      setSelectedCommit(prev => {
+        if (!prev) return null;
+        const exists = logRes.some(c => c.id === prev.id);
+        if (!exists) {
+          setSelectedCommitDiffFiles([]);
+          setSelectedCommitFileDiff(null);
+          setSelectedCommitDiffFile(null);
+          return null;
+        }
+        return prev;
+      });
+
       const stashRes = await invoke<GitCliResult>("run_git_cli_cmd", {
         repoPath: path,
         args: ["stash", "list"]
@@ -705,6 +774,14 @@ function App() {
     } catch (err: any) {
       setErrorMessage(err.toString());
       setHasRepo(false);
+      setFiles([]);
+      setCommits([]);
+      setBranchList([]);
+      setAllBranches([]);
+      setRemoteBranches([]);
+      setStashes([]);
+      setConflictedFiles([]);
+      resetWorkspaceScopedState();
     }
   };
 
@@ -1001,6 +1078,7 @@ function App() {
       });
       if (res.exit_code === 0) {
         setErrorMessage(null);
+        resetWorkspaceScopedState();
         await refreshRepository();
       } else {
         setErrorMessage(res.stderr);
@@ -1505,6 +1583,7 @@ function App() {
         }
         setWorkspaces(newList);
         localStorage.setItem("sn_workspaces", JSON.stringify(newList));
+        resetWorkspaceScopedState();
         setRepoPath(fullClonedPath);
         setDialogType(null);
         setDialogInput("");

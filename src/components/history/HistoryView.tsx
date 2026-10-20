@@ -363,7 +363,19 @@ const HistoryView: React.FC<HistoryViewProps> = ({
         ) : (
           <div className="empty-canvas">
             <FileText size={36} className="empty-canvas-icon" />
-            <span style={{ textAlign: "center", padding: "12px", fontSize: "0.8rem" }}>Select commit.<br/>Drag commit onto active branch badge to cherry-pick.</span>
+            <span style={{ textAlign: "center", padding: "12px", fontSize: "0.8rem", color: "var(--color-text-muted)" }}>
+              {commits.length === 0 ? (
+                "No commits in this repository yet."
+              ) : (
+                <>
+                  Select a commit to view details and diff.
+                  <br />
+                  <span style={{ fontSize: "0.72rem", color: "var(--color-text-dark)" }}>
+                    Drag commit onto active branch badge to cherry-pick.
+                  </span>
+                </>
+              )}
+            </span>
           </div>
         )}
       </div>

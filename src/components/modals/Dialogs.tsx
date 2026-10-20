@@ -1304,7 +1304,6 @@ const Dialogs: React.FC<DialogsProps> = ({
                 <div className="pull-strategy-card-body">
                   <div className="pull-strategy-card-title-row">
                     <span className="pull-strategy-card-title">Fully Merge</span>
-                    <span className="pull-strategy-badge merge">git pull --no-rebase</span>
                   </div>
                   <span className="pull-strategy-card-desc">
                     Integrates remote commits with a merge commit. Preserves exact history, branch topology, and full commit context. Recommended for shared or public branches.
@@ -1323,7 +1322,6 @@ const Dialogs: React.FC<DialogsProps> = ({
                 <div className="pull-strategy-card-body">
                   <div className="pull-strategy-card-title-row">
                     <span className="pull-strategy-card-title">Rebase Local Commits</span>
-                    <span className="pull-strategy-badge linear">git pull --rebase</span>
                   </div>
                   <span className="pull-strategy-card-desc">
                     Replays your unpushed local commits on top of incoming remote commits. Keeps history clean, linear, and avoids redundant merge commits.
