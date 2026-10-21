@@ -27,9 +27,7 @@ import {
   GitPullRequest,
   Workflow,
   Palette,
-  Download,
-  DownloadCloud,
-  Radio,
+  ArrowDownToLine,
   ArrowUpCircle
 } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
@@ -782,7 +780,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                   className={`settings-nav-btn ${activeGlobalTab === 'global-updates' ? 'active' : ''}`}
                   onClick={() => setActiveGlobalTab('global-updates')}
                 >
-                  <DownloadCloud size={15} className="settings-nav-icon" style={{ color: 'var(--color-added)' }} />
+                  <ArrowDownToLine size={15} className="settings-nav-icon" style={{ color: 'var(--color-added)' }} />
                   <span>App Updates</span>
                 </button>
               </div>
@@ -1626,70 +1624,49 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                   <>
                     <div>
                       <h3 style={{ fontSize: '0.96rem', fontWeight: 600, color: 'var(--color-text-bright)' }}>
-                        Application Updates & Release Channels
+                        Application Updates
                       </h3>
                       <p className="settings-field-hint">
-                        Configure how StageNode receives remote updates, switch between Main (Stable) and Dev (Preview) streams, or check on demand.
+                        StageNode automatically checks for remote updates on startup and window focus.
                       </p>
                     </div>
 
-                    {/* Current Version & Edition Card */}
+                    {/* Current Version Card */}
                     <div className="settings-card">
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                           <div
                             style={{
-                              width: '40px',
-                              height: '40px',
-                              borderRadius: '10px',
-                              background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.25) 0%, rgba(59, 130, 246, 0.25) 100%)',
-                              border: '1px solid rgba(139, 92, 246, 0.4)',
+                              width: '42px',
+                              height: '42px',
+                              borderRadius: '12px',
+                              background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.22) 0%, rgba(59, 130, 246, 0.16) 100%)',
+                              border: '1px solid rgba(139, 92, 246, 0.35)',
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'center',
                               color: 'var(--accent-purple-bright)',
+                              boxShadow: '0 2px 10px rgba(139, 92, 246, 0.15)',
                             }}
                           >
-                            <DownloadCloud size={20} />
+                            <ArrowDownToLine size={20} strokeWidth={2.2} />
                           </div>
-                          <div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <span style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--color-text-bright)' }}>
-                                {appBuildInfo?.app_name || 'Stagger'}
-                              </span>
-                              <span
-                                className="settings-context-pill"
-                                style={{
-                                  background: 'rgba(139, 92, 246, 0.15)',
-                                  color: 'var(--accent-purple-bright)',
-                                  borderColor: 'rgba(139, 92, 246, 0.3)',
-                                  fontWeight: 600,
-                                  fontSize: '0.74rem',
-                                }}
-                              >
-                                v{appBuildInfo?.version || '0.1.1'}
-                              </span>
-                              <span
-                                className="settings-context-pill"
-                                style={{
-                                  background: (appBuildInfo?.default_channel === 'dev' || (appBuildInfo?.app_name && appBuildInfo.app_name.toLowerCase().includes('dev')))
-                                    ? 'rgba(234, 179, 8, 0.15)'
-                                    : 'rgba(16, 185, 129, 0.15)',
-                                  color: (appBuildInfo?.default_channel === 'dev' || (appBuildInfo?.app_name && appBuildInfo.app_name.toLowerCase().includes('dev')))
-                                    ? 'var(--color-modified)'
-                                    : 'var(--color-added)',
-                                  borderColor: (appBuildInfo?.default_channel === 'dev' || (appBuildInfo?.app_name && appBuildInfo.app_name.toLowerCase().includes('dev')))
-                                    ? 'rgba(234, 179, 8, 0.3)'
-                                    : 'rgba(16, 185, 129, 0.3)',
-                                  fontWeight: 600,
-                                }}
-                              >
-                                {(appBuildInfo?.default_channel === 'dev' || (appBuildInfo?.app_name && appBuildInfo.app_name.toLowerCase().includes('dev'))) ? 'Dev Preview Edition' : 'Main Stable Edition'}
-                              </span>
-                            </div>
-                            <div style={{ fontSize: '0.74rem', color: 'var(--color-text-muted)', marginTop: '3px' }}>
-                              Installed Desktop Binary • GitHub Releases Remote Host
-                            </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontSize: '1.05rem', fontWeight: 600, color: 'var(--color-text-bright)' }}>
+                              {appBuildInfo?.app_name || 'Stagger'}
+                            </span>
+                            <span
+                              className="settings-context-pill"
+                              style={{
+                                background: 'rgba(139, 92, 246, 0.15)',
+                                color: 'var(--accent-purple-bright)',
+                                borderColor: 'rgba(139, 92, 246, 0.3)',
+                                fontWeight: 600,
+                                fontSize: '0.74rem',
+                              }}
+                            >
+                              v{appBuildInfo?.version || '0.1.1'}
+                            </span>
                           </div>
                         </div>
 
@@ -1716,43 +1693,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                           <RefreshCw size={14} className={isCheckingUpdate ? 'spin-icon' : ''} />
                           <span>{isCheckingUpdate ? 'Checking Releases...' : 'Check for Updates'}</span>
                         </button>
-                      </div>
-                    </div>
-
-                    {/* Release Channel & Automated Checking Info Card */}
-                    <div className="settings-card">
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
-                        <div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <Radio size={14} style={{ color: 'var(--accent-purple-bright)' }} />
-                            <span style={{ fontSize: '0.86rem', fontWeight: 600, color: 'var(--color-text-bright)' }}>
-                              Release Stream: {(appBuildInfo?.default_channel === 'dev' || (appBuildInfo?.app_name && appBuildInfo.app_name.toLowerCase().includes('dev'))) ? 'Dev (Pre-release)' : 'Main (Stable)'}
-                            </span>
-                            <span
-                              className="settings-context-pill"
-                              style={{
-                                background: 'rgba(16, 185, 129, 0.12)',
-                                color: 'var(--color-added)',
-                                borderColor: 'rgba(16, 185, 129, 0.3)',
-                                fontSize: '0.7rem',
-                                fontWeight: 600,
-                              }}
-                            >
-                              Auto-Update Active
-                            </span>
-                          </div>
-                          <p className="settings-field-hint" style={{ marginTop: '4px', marginBottom: 0 }}>
-                            {(appBuildInfo?.default_channel === 'dev' || (appBuildInfo?.app_name && appBuildInfo.app_name.toLowerCase().includes('dev')))
-                              ? 'This build automatically tracks preview releases from the Dev channel. Updates are checked on startup and window focus.'
-                              : 'This build automatically tracks official stable releases from the Main channel. Updates are checked on startup and window focus.'}
-                          </p>
-                        </div>
-
-                        <div style={{ fontSize: '0.72rem', fontFamily: 'var(--font-mono)', color: 'var(--color-text-muted)', background: 'var(--bg-active)', padding: '6px 12px', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
-                          {(appBuildInfo?.default_channel === 'dev' || (appBuildInfo?.app_name && appBuildInfo.app_name.toLowerCase().includes('dev')))
-                            ? 'Endpoint: releases/download/dev/latest.json'
-                            : 'Endpoint: releases/latest/download/latest.json'}
-                        </div>
                       </div>
                     </div>
 
@@ -1786,7 +1726,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                   )}
                                 </div>
                                 <div style={{ fontSize: '0.74rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
-                                  Current: v{updateInfo.current_version} • Target Channel: {((appBuildInfo?.default_channel === 'dev' || (appBuildInfo?.app_name && appBuildInfo.app_name.toLowerCase().includes('dev'))) ? 'DEV' : 'MAIN')}
+                                  Currently installed: v{updateInfo.current_version}
                                 </div>
                               </div>
 
@@ -1832,7 +1772,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                     gap: '8px',
                                   }}
                                 >
-                                  <Download size={14} />
+                                  <ArrowDownToLine size={14} strokeWidth={2.2} />
                                   <span>{isInstallingUpdate ? 'Downloading & Installing...' : 'Download & Install Update'}</span>
                                 </button>
                               )}
@@ -1891,7 +1831,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                 You&apos;re up to date!
                               </div>
                               <div style={{ fontSize: '0.74rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
-                                Version {updateInfo?.current_version || appBuildInfo?.version} is the latest available on the {((appBuildInfo?.default_channel === 'dev' || (appBuildInfo?.app_name && appBuildInfo.app_name.toLowerCase().includes('dev'))) ? 'DEV' : 'MAIN')} channel.
+                                Version {updateInfo?.current_version || appBuildInfo?.version} is the latest release.
                               </div>
                             </div>
                           </div>
