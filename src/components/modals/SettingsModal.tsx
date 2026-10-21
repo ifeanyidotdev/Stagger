@@ -25,11 +25,25 @@ import {
   GitMerge,
   GitCommit,
   GitPullRequest,
-  Workflow
+  Workflow,
+  Palette,
+  Download,
+  DownloadCloud,
+  Radio,
+  ArrowUpCircle
 } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { openUrl, revealItemInDir } from '@tauri-apps/plugin-opener';
-import type { GlobalSettings, SystemGitConfig, WorkspaceSettings } from '../../types/settings';
+import type { 
+  GlobalSettings, 
+  SystemGitConfig, 
+  WorkspaceSettings, 
+  AppTheme,
+  AppBuildInfo,
+  AppUpdateInfo,
+  UpdateDownloadProgress
+} from '../../types/settings';
 import type { GitCliResult } from '../../types/git';
 import { 
   GEMINI_MODELS, 
@@ -47,7 +61,7 @@ interface SettingsModalProps {
 }
 
 type ContextType = 'global' | 'workspace';
-type GlobalTab = 'global-git' | 'global-pull' | 'global-gitignore' | 'global-ai';
+type GlobalTab = 'global-git' | 'global-appearance' | 'global-pull' | 'global-gitignore' | 'global-ai' | 'global-updates';
 type WorkspaceTab = 'workspace-remote' | 'workspace-pull' | 'workspace-identity' | 'workspace-overview';
 
 const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -66,6 +80,20 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<{ success?: boolean; message?: string } | null>(null);
+
+  // Appearance & Theme Settings
+  const [theme, setTheme] = useState<AppTheme>(() => {
+    return (localStorage.getItem('stagenode_theme') as AppTheme) || 'catppuccin-mocha';
+  });
+
+  const handleThemeChange = (newTheme: AppTheme) => {
+    setTheme(newTheme);
+    document.documentElement.setAttribute('data-theme', newTheme);
+    if (document.body) {
+      document.body.setAttribute('data-theme', newTheme);
+    }
+    localStorage.setItem('stagenode_theme', newTheme);
+  };
 
   // Global Git Settings
   const [userName, setUserName] = useState('');
@@ -103,13 +131,23 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   const [isTestingAI, setIsTestingAI] = useState(false);
   const [aiTestResult, setAiTestResult] = useState<{ success: boolean; message: string; response?: string } | null>(null);
 
+  // App Updates & Version Channel
+  const [appBuildInfo, setAppBuildInfo] = useState<AppBuildInfo | null>(null);
+  const [updateChannel, setUpdateChannel] = useState<'main' | 'dev'>('main');
+  const [autoCheckUpdates, setAutoCheckUpdates] = useState(true);
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState<AppUpdateInfo | null>(null);
+  const [updateCheckError, setUpdateCheckError] = useState<string | null>(null);
+  const [isInstallingUpdate, setIsInstallingUpdate] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState<UpdateDownloadProgress | null>(null);
+  const [updateInstalledReady, setUpdateInstalledReady] = useState(false);
+  const [installError, setInstallError] = useState<string | null>(null);
+
   // Workspace Specific Settings
   const [workspaceData, setWorkspaceData] = useState<WorkspaceSettings | null>(null);
   const [workspaceRemoteUrl, setWorkspaceRemoteUrl] = useState('');
   const [isApplyingRemote, setIsApplyingRemote] = useState(false);
   const [remoteApplyNotice, setRemoteApplyNotice] = useState<{ success: boolean; message: string } | null>(null);
-  const [isTestingRemote, setIsTestingRemote] = useState(false);
-  const [remoteTestResult, setRemoteTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [overrideWorkspaceIdentity, setOverrideWorkspaceIdentity] = useState(false);
   const [workspaceUserName, setWorkspaceUserName] = useState('');
   const [workspaceUserEmail, setWorkspaceUserEmail] = useState('');
@@ -135,7 +173,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     setIsLoading(true);
     setSaveStatus(null);
     setAiTestResult(null);
-    setRemoteTestResult(null);
     setRemoteApplyNotice(null);
     setGlobalGitignoreNotice(null);
 
@@ -183,6 +220,27 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         const storedPr = localStorage.getItem('stagenode_pr_merge_method');
         const loadedPrMethod = settings.default_pr_merge_method || (storedPr as any) || 'merge';
         setDefaultPrMergeMethod(loadedPrMethod);
+
+        // Load Theme
+        const storedTheme = (localStorage.getItem('stagenode_theme') as AppTheme) || settings.theme || 'catppuccin-mocha';
+        setTheme(storedTheme);
+        document.documentElement.setAttribute('data-theme', storedTheme);
+        if (document.body) {
+          document.body.setAttribute('data-theme', storedTheme);
+        }
+
+        // Load App Build & Updater Configuration
+        try {
+          const bInfo = await invoke<AppBuildInfo>('get_app_build_info').catch(() => null);
+          if (mounted && bInfo) {
+            setAppBuildInfo(bInfo);
+          }
+          const chosenChan = (settings.update_channel as 'main' | 'dev') || (bInfo?.default_channel as 'main' | 'dev') || 'main';
+          setUpdateChannel(chosenChan);
+          setAutoCheckUpdates(settings.auto_check_updates ?? true);
+        } catch (e) {
+          console.warn('Failed to fetch build info:', e);
+        }
 
         // Load universal gitignore content
         if (loadedGitignorePath) {
@@ -356,6 +414,72 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     }
   };
 
+  // Listen to background download progress events
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    listen<UpdateDownloadProgress>('update-progress', (event) => {
+      setDownloadProgress(event.payload);
+    }).then((fn) => {
+      unlisten = fn;
+    }).catch(err => {
+      console.warn('Could not register update-progress listener:', err);
+    });
+
+    return () => {
+      if (unlisten) unlisten();
+    };
+  }, []);
+
+  // Check for updates against selected or overridden channel
+  const handleCheckForUpdates = async (channelOverride?: 'main' | 'dev') => {
+    setIsCheckingUpdate(true);
+    setUpdateCheckError(null);
+    setUpdateInstalledReady(false);
+    setInstallError(null);
+    setDownloadProgress(null);
+
+    const targetChan = channelOverride || updateChannel;
+    try {
+      const result = await invoke<AppUpdateInfo>('check_app_update', {
+        channel: targetChan,
+      });
+      setUpdateInfo(result);
+    } catch (err: any) {
+      setUpdateCheckError(err?.message || String(err));
+      setUpdateInfo(null);
+    } finally {
+      setIsCheckingUpdate(false);
+    }
+  };
+
+  // Download and install available update
+  const handleInstallUpdate = async () => {
+    if (!updateInfo?.available) return;
+    setIsInstallingUpdate(true);
+    setInstallError(null);
+    setUpdateInstalledReady(false);
+
+    try {
+      await invoke('download_and_install_update', {
+        channel: updateChannel,
+      });
+      setUpdateInstalledReady(true);
+    } catch (err: any) {
+      setInstallError(err?.message || String(err));
+    } finally {
+      setIsInstallingUpdate(false);
+    }
+  };
+
+  // Relaunch the app to apply the installed update
+  const handleRestartApp = async () => {
+    try {
+      await invoke('restart_app');
+    } catch (err) {
+      console.error('Failed to restart app:', err);
+    }
+  };
+
   // Apply & Update Remote Origin URL
   const handleApplyRemoteUrl = async () => {
     if (!repoPath || !workspaceRemoteUrl.trim()) return;
@@ -392,39 +516,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     }
   };
 
-  // Test Remote URL access via git ls-remote
-  const handleTestRemoteConnection = async () => {
-    if (!repoPath || !workspaceRemoteUrl.trim()) return;
-    setIsTestingRemote(true);
-    setRemoteTestResult(null);
-
-    try {
-      const res = await invoke<GitCliResult>('run_git_cli_cmd', {
-        repoPath,
-        args: ['ls-remote', '--heads', workspaceRemoteUrl.trim()],
-      });
-
-      if (res.exit_code === 0) {
-        setRemoteTestResult({
-          success: true,
-          message: 'Origin connection verified! Remote is reachable and authenticated.',
-        });
-      } else {
-        setRemoteTestResult({
-          success: false,
-          message: res.stderr || res.stdout || 'Failed to authenticate with remote origin.',
-        });
-      }
-    } catch (err: any) {
-      setRemoteTestResult({
-        success: false,
-        message: err?.message || 'Failed to execute remote connection check.',
-      });
-    } finally {
-      setIsTestingRemote(false);
-    }
-  };
-
   // Save all settings (Global and Workspace)
   const handleSaveAll = async () => {
     setIsSaving(true);
@@ -447,8 +538,16 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         default_pull_strategy: defaultPullStrategy,
         auto_open_pull_dialog: autoOpenPullDialog,
         default_pr_merge_method: defaultPrMergeMethod,
+        theme: theme,
+        update_channel: updateChannel,
+        auto_check_updates: autoCheckUpdates,
       };
 
+      localStorage.setItem('stagenode_theme', theme);
+      document.documentElement.setAttribute('data-theme', theme);
+      if (document.body) {
+        document.body.setAttribute('data-theme', theme);
+      }
       localStorage.setItem('stagenode_pull_strategy', defaultPullStrategy);
       localStorage.setItem('stagenode_auto_open_pull_dialog', JSON.stringify(autoOpenPullDialog));
       localStorage.setItem('stagenode_pr_merge_method', defaultPrMergeMethod);
@@ -539,8 +638,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="settings-window-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="settings-window">
+    <div className="settings-window-overlay" data-theme={theme} onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="settings-window" data-theme={theme}>
         {/* Top Header with Context Switcher */}
         <div className="settings-topbar">
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -549,12 +648,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 width: '32px',
                 height: '32px',
                 borderRadius: '8px',
-                background: 'rgba(139, 92, 246, 0.15)',
+                background: 'var(--bg-active)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 color: 'var(--accent-purple-bright)',
-                border: '1px solid rgba(139, 92, 246, 0.3)',
+                border: '1px solid var(--border-color)',
               }}
             >
               <Settings size={16} />
@@ -633,6 +732,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
                 <button
                   type="button"
+                  className={`settings-nav-btn ${activeGlobalTab === 'global-appearance' ? 'active' : ''}`}
+                  onClick={() => setActiveGlobalTab('global-appearance')}
+                >
+                  <Palette size={15} className="settings-nav-icon" style={{ color: 'var(--accent-purple-bright)' }} />
+                  <span>Appearance</span>
+                </button>
+
+                <button
+                  type="button"
                   className={`settings-nav-btn ${activeGlobalTab === 'global-pull' ? 'active' : ''}`}
                   onClick={() => setActiveGlobalTab('global-pull')}
                 >
@@ -655,7 +763,16 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                   onClick={() => setActiveGlobalTab('global-ai')}
                 >
                   <Sparkles size={15} className="settings-nav-icon" style={{ color: 'var(--color-modified)' }} />
-                  <span>AI Models & BYOK</span>
+                  <span>AI Settings</span>
+                </button>
+
+                <button
+                  type="button"
+                  className={`settings-nav-btn ${activeGlobalTab === 'global-updates' ? 'active' : ''}`}
+                  onClick={() => setActiveGlobalTab('global-updates')}
+                >
+                  <DownloadCloud size={15} className="settings-nav-icon" style={{ color: 'var(--color-added)' }} />
+                  <span>App Updates</span>
                 </button>
               </div>
             ) : (
@@ -783,7 +900,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         alignItems: 'center',
                         justifyContent: 'space-between',
                         gap: '16px',
-                        background: 'rgba(255, 255, 255, 0.02)',
+                        background: 'var(--bg-panel-secondary)',
                         padding: '16px 20px',
                       }}
                     >
@@ -803,6 +920,118 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         />
                         <span className="settings-switch-slider" />
                       </label>
+                    </div>
+                  </>
+                )}
+
+                {/* APPEARANCE & THEME */}
+                {activeContext === 'global' && activeGlobalTab === 'global-appearance' && (
+                  <>
+                    <div>
+                      <h3 style={{ fontSize: '0.96rem', fontWeight: 600, color: 'var(--color-text-bright)' }}>
+                        Appearance
+                      </h3>
+                      <p className="settings-field-hint">
+                        Choose the color theme and visual style for StageNode. Changes apply immediately.
+                      </p>
+                    </div>
+
+                    <div className="settings-card" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <div>
+                          <div style={{ fontSize: '0.86rem', fontWeight: 600, color: 'var(--color-text-bright)' }}>
+                            Active Theme
+                          </div>
+                          <div style={{ fontSize: '0.74rem', color: 'var(--color-text-muted)' }}>
+                            Configures background surfaces, borders, git staging status colors, and accent highlights.
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="settings-theme-grid">
+                        
+                        {/* Option 1: Catppuccin Mocha (Default) */}
+                        <div 
+                          onClick={() => handleThemeChange('catppuccin-mocha')}
+                          className={`settings-theme-card ${theme === 'catppuccin-mocha' ? 'active' : ''}`}
+                        >
+                          <div className="settings-theme-card-header">
+                            <span className="settings-theme-card-title">
+                              Catppuccin Mocha
+                            </span>
+                            {theme === 'catppuccin-mocha' && (
+                              <span className="settings-theme-card-check">
+                                <CheckCircle2 size={16} />
+                              </span>
+                            )}
+                          </div>
+                          <p className="settings-theme-card-desc">
+                            Official soothing cool-dark palette with mauve, lavender, and mint accents on comfortable navy-slate surfaces.
+                          </p>
+                          <div className="settings-theme-swatches">
+                            <span className="settings-swatch" style={{ background: '#1e1e2e' }} title="Base #1e1e2e" />
+                            <span className="settings-swatch" style={{ background: '#181825' }} title="Mantle #181825" />
+                            <span className="settings-swatch" style={{ background: '#cba6f7' }} title="Mauve #cba6f7" />
+                            <span className="settings-swatch" style={{ background: '#a6e3a1' }} title="Green #a6e3a1" />
+                            <span className="settings-swatch" style={{ background: '#fab387' }} title="Peach #fab387" />
+                          </div>
+                        </div>
+
+                        {/* Option 2: Catppuccin Latte */}
+                        <div 
+                          onClick={() => handleThemeChange('catppuccin-latte')}
+                          className={`settings-theme-card ${theme === 'catppuccin-latte' ? 'active' : ''}`}
+                        >
+                          <div className="settings-theme-card-header">
+                            <span className="settings-theme-card-title">
+                              Catppuccin Latte
+                            </span>
+                            {theme === 'catppuccin-latte' && (
+                              <span className="settings-theme-card-check">
+                                <CheckCircle2 size={16} />
+                              </span>
+                            )}
+                          </div>
+                          <p className="settings-theme-card-desc">
+                            Official crisp and light flavor with soothing pastel accents on clean paper surfaces.
+                          </p>
+                          <div className="settings-theme-swatches">
+                            <span className="settings-swatch" style={{ background: '#eff1f5' }} title="Base #eff1f5" />
+                            <span className="settings-swatch" style={{ background: '#ccd0da' }} title="Surface #ccd0da" />
+                            <span className="settings-swatch" style={{ background: '#8839ef' }} title="Mauve #8839ef" />
+                            <span className="settings-swatch" style={{ background: '#40a02b' }} title="Green #40a02b" />
+                            <span className="settings-swatch" style={{ background: '#1e66f5' }} title="Blue #1e66f5" />
+                          </div>
+                        </div>
+
+                        {/* Option 3: Cosmic Charcoal */}
+                        <div 
+                          onClick={() => handleThemeChange('cosmic-dark')}
+                          className={`settings-theme-card ${theme === 'cosmic-dark' ? 'active' : ''}`}
+                        >
+                          <div className="settings-theme-card-header">
+                            <span className="settings-theme-card-title">
+                              Cosmic Charcoal
+                            </span>
+                            {theme === 'cosmic-dark' && (
+                              <span className="settings-theme-card-check">
+                                <CheckCircle2 size={16} />
+                              </span>
+                            )}
+                          </div>
+                          <p className="settings-theme-card-desc">
+                            Legacy high-contrast cold charcoal background with vivid violet accents and emerald diff lines.
+                          </p>
+                          <div className="settings-theme-swatches">
+                            <span className="settings-swatch" style={{ background: '#0c0d12' }} title="Charcoal #0c0d12" />
+                            <span className="settings-swatch" style={{ background: '#15161f' }} title="Panel #15161f" />
+                            <span className="settings-swatch" style={{ background: '#7c3aed' }} title="Violet #7c3aed" />
+                            <span className="settings-swatch" style={{ background: '#22c55e' }} title="Emerald #22c55e" />
+                            <span className="settings-swatch" style={{ background: '#60a5fa' }} title="Blue #60a5fa" />
+                          </div>
+                        </div>
+
+                      </div>
                     </div>
                   </>
                 )}
@@ -912,7 +1141,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         alignItems: 'center',
                         justifyContent: 'space-between',
                         gap: '16px',
-                        background: 'rgba(255, 255, 255, 0.02)',
+                        background: 'var(--bg-panel-secondary)',
                         padding: '16px 20px',
                       }}
                     >
@@ -1128,15 +1357,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                   </>
                 )}
 
-                {/* 3. AI MODELS & BYOK (VERCEL AI SDK) */}
+                {/* 3. AI SETTINGS */}
                 {activeContext === 'global' && activeGlobalTab === 'global-ai' && (
                   <>
                     <div>
                       <h3 style={{ fontSize: '0.96rem', fontWeight: 600, color: 'var(--color-text-bright)' }}>
-                        AI Models & Bring-Your-Own-Key (BYOK)
+                        AI Settings
                       </h3>
                       <p className="settings-field-hint">
-                        Powered by <strong>Vercel AI SDK</strong>. Keys are stored locally on your device in <code style={{ fontFamily: 'var(--font-mono)' }}>~/.stagenode/settings.json</code>.
+                        Configure your AI providers and API keys for smart commit messages and assistance.
                       </p>
                     </div>
 
@@ -1381,6 +1610,362 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                   </>
                 )}
 
+                {/* 6. APP UPDATES & CHANNELS */}
+                {activeContext === 'global' && activeGlobalTab === 'global-updates' && (
+                  <>
+                    <div>
+                      <h3 style={{ fontSize: '0.96rem', fontWeight: 600, color: 'var(--color-text-bright)' }}>
+                        Application Updates & Release Channels
+                      </h3>
+                      <p className="settings-field-hint">
+                        Configure how StageNode receives remote updates, switch between Main (Stable) and Dev (Preview) streams, or check on demand.
+                      </p>
+                    </div>
+
+                    {/* Current Version & Edition Card */}
+                    <div className="settings-card">
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <div
+                            style={{
+                              width: '40px',
+                              height: '40px',
+                              borderRadius: '10px',
+                              background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.25) 0%, rgba(59, 130, 246, 0.25) 100%)',
+                              border: '1px solid rgba(139, 92, 246, 0.4)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              color: 'var(--accent-purple-bright)',
+                            }}
+                          >
+                            <DownloadCloud size={20} />
+                          </div>
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--color-text-bright)' }}>
+                                {appBuildInfo?.app_name || 'Stagger'}
+                              </span>
+                              <span
+                                className="settings-context-pill"
+                                style={{
+                                  background: 'rgba(139, 92, 246, 0.15)',
+                                  color: 'var(--accent-purple-bright)',
+                                  borderColor: 'rgba(139, 92, 246, 0.3)',
+                                  fontWeight: 600,
+                                  fontSize: '0.74rem',
+                                }}
+                              >
+                                v{appBuildInfo?.version || '0.1.1'}
+                              </span>
+                              <span
+                                className="settings-context-pill"
+                                style={{
+                                  background: (appBuildInfo?.default_channel === 'dev' || (appBuildInfo?.app_name && appBuildInfo.app_name.toLowerCase().includes('dev')))
+                                    ? 'rgba(234, 179, 8, 0.15)'
+                                    : 'rgba(16, 185, 129, 0.15)',
+                                  color: (appBuildInfo?.default_channel === 'dev' || (appBuildInfo?.app_name && appBuildInfo.app_name.toLowerCase().includes('dev')))
+                                    ? 'var(--color-modified)'
+                                    : 'var(--color-added)',
+                                  borderColor: (appBuildInfo?.default_channel === 'dev' || (appBuildInfo?.app_name && appBuildInfo.app_name.toLowerCase().includes('dev')))
+                                    ? 'rgba(234, 179, 8, 0.3)'
+                                    : 'rgba(16, 185, 129, 0.3)',
+                                  fontWeight: 600,
+                                }}
+                              >
+                                {(appBuildInfo?.default_channel === 'dev' || (appBuildInfo?.app_name && appBuildInfo.app_name.toLowerCase().includes('dev'))) ? 'Dev Preview Edition' : 'Main Stable Edition'}
+                              </span>
+                            </div>
+                            <div style={{ fontSize: '0.74rem', color: 'var(--color-text-muted)', marginTop: '3px' }}>
+                              Installed Desktop Binary • GitHub Releases Remote Host
+                            </div>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleCheckForUpdates()}
+                          disabled={isCheckingUpdate || isInstallingUpdate}
+                          style={{
+                            background: 'var(--accent-purple-bright)',
+                            color: '#fff',
+                            border: 'none',
+                            borderRadius: '8px',
+                            padding: '8px 16px',
+                            fontSize: '0.8rem',
+                            fontWeight: 600,
+                            cursor: isCheckingUpdate || isInstallingUpdate ? 'not-allowed' : 'pointer',
+                            opacity: isCheckingUpdate || isInstallingUpdate ? 0.7 : 1,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            boxShadow: '0 2px 10px rgba(139, 92, 246, 0.3)',
+                          }}
+                        >
+                          <RefreshCw size={14} className={isCheckingUpdate ? 'spin-icon' : ''} />
+                          <span>{isCheckingUpdate ? 'Checking Releases...' : 'Check for Updates'}</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Channel Selection Card */}
+                    <div className="settings-card">
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                        <div>
+                          <label className="settings-field-label">
+                            <Radio size={14} />
+                            <span>Update Channel</span>
+                          </label>
+                          <p className="settings-field-hint" style={{ marginTop: '2px' }}>
+                            Choose which release stream this app receives updates from. By default, your channel matches whether you installed the Main or Dev build.
+                          </p>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '12px' }}>
+                          {/* Main Option */}
+                          <div
+                            onClick={() => {
+                              setUpdateChannel('main');
+                              if (updateInfo) handleCheckForUpdates('main');
+                            }}
+                            style={{
+                              padding: '14px',
+                              borderRadius: '10px',
+                              border: updateChannel === 'main' 
+                                ? '2px solid var(--accent-purple-bright)' 
+                                : '1px solid var(--border-color)',
+                              background: updateChannel === 'main' 
+                                ? 'rgba(139, 92, 246, 0.08)' 
+                                : 'var(--bg-active)',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '6px',
+                              transition: 'all 0.2s ease',
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600, color: 'var(--color-text-bright)', fontSize: '0.86rem' }}>
+                                <CheckCircle2 size={15} style={{ color: updateChannel === 'main' ? 'var(--color-added)' : 'var(--color-text-muted)' }} />
+                                <span>Main (Stable)</span>
+                              </div>
+                              <span className="settings-context-pill" style={{ background: 'rgba(16, 185, 129, 0.1)', color: 'var(--color-added)', borderColor: 'rgba(16, 185, 129, 0.25)' }}>
+                                Recommended
+                              </span>
+                            </div>
+                            <p style={{ fontSize: '0.74rem', color: 'var(--color-text-muted)', margin: 0, lineHeight: 1.4 }}>
+                              Production-ready builds vetted for stability. Updates are fetched from the latest official GitHub release.
+                            </p>
+                            <div style={{ fontSize: '0.68rem', fontFamily: 'var(--font-mono)', color: 'var(--color-text-muted)', opacity: 0.8, marginTop: '4px' }}>
+                              Endpoint: releases/latest/download/latest.json
+                            </div>
+                          </div>
+
+                          {/* Dev Option */}
+                          <div
+                            onClick={() => {
+                              setUpdateChannel('dev');
+                              if (updateInfo) handleCheckForUpdates('dev');
+                            }}
+                            style={{
+                              padding: '14px',
+                              borderRadius: '10px',
+                              border: updateChannel === 'dev' 
+                                ? '2px solid var(--accent-purple-bright)' 
+                                : '1px solid var(--border-color)',
+                              background: updateChannel === 'dev' 
+                                ? 'rgba(139, 92, 246, 0.08)' 
+                                : 'var(--bg-active)',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '6px',
+                              transition: 'all 0.2s ease',
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600, color: 'var(--color-text-bright)', fontSize: '0.86rem' }}>
+                                <CheckCircle2 size={15} style={{ color: updateChannel === 'dev' ? 'var(--color-modified)' : 'var(--color-text-muted)' }} />
+                                <span>Dev (Pre-release)</span>
+                              </div>
+                              <span className="settings-context-pill" style={{ background: 'rgba(234, 179, 8, 0.1)', color: 'var(--color-modified)', borderColor: 'rgba(234, 179, 8, 0.25)' }}>
+                                Preview
+                              </span>
+                            </div>
+                            <p style={{ fontSize: '0.74rem', color: 'var(--color-text-muted)', margin: 0, lineHeight: 1.4 }}>
+                              Early access builds with new features before stable release. Updates are fetched from the rolling Dev pre-release.
+                            </p>
+                            <div style={{ fontSize: '0.68rem', fontFamily: 'var(--font-mono)', color: 'var(--color-text-muted)', opacity: 0.8, marginTop: '4px' }}>
+                              Endpoint: releases/download/dev/latest.json
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Auto-check toggle */}
+                        <div style={{ paddingTop: '8px', borderTop: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <div>
+                            <div style={{ fontSize: '0.82rem', fontWeight: 500, color: 'var(--color-text-bright)' }}>
+                              Automatic Startup Check
+                            </div>
+                            <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
+                              Silently check for new versions on the selected channel when StageNode opens.
+                            </div>
+                          </div>
+                          <input
+                            type="checkbox"
+                            className="settings-checkbox"
+                            checked={autoCheckUpdates}
+                            onChange={e => setAutoCheckUpdates(e.target.checked)}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Update Result / Download Status Card */}
+                    {(updateCheckError || updateInfo || isInstallingUpdate || updateInstalledReady) && (
+                      <div className="settings-card" style={{ borderLeft: updateCheckError ? '3px solid var(--color-deleted)' : updateInfo?.available ? '3px solid var(--accent-purple-bright)' : '3px solid var(--color-added)' }}>
+                        {updateCheckError ? (
+                          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', color: 'var(--color-deleted)' }}>
+                            <AlertCircle size={18} style={{ flexShrink: 0, marginTop: '2px' }} />
+                            <div>
+                              <div style={{ fontSize: '0.84rem', fontWeight: 600 }}>Update Check Notice</div>
+                              <div style={{ fontSize: '0.76rem', marginTop: '2px', opacity: 0.9 }}>{updateCheckError}</div>
+                              <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: '4px' }}>
+                                This usually indicates no releases have been published to this channel yet, or the network is unavailable.
+                              </div>
+                            </div>
+                          </div>
+                        ) : updateInfo?.available ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+                              <div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <ArrowUpCircle size={18} style={{ color: 'var(--color-added)' }} />
+                                  <span style={{ fontSize: '0.94rem', fontWeight: 600, color: 'var(--color-text-bright)' }}>
+                                    New Version Available: v{updateInfo.version}
+                                  </span>
+                                  {updateInfo.date && (
+                                    <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
+                                      ({updateInfo.date.split('T')[0]})
+                                    </span>
+                                  )}
+                                </div>
+                                <div style={{ fontSize: '0.74rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+                                  Current: v{updateInfo.current_version} • Target Channel: {updateChannel.toUpperCase()}
+                                </div>
+                              </div>
+
+                              {updateInstalledReady ? (
+                                <button
+                                  type="button"
+                                  onClick={handleRestartApp}
+                                  style={{
+                                    background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                                    color: '#fff',
+                                    border: 'none',
+                                    borderRadius: '8px',
+                                    padding: '8px 16px',
+                                    fontSize: '0.82rem',
+                                    fontWeight: 600,
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px',
+                                    boxShadow: '0 2px 10px rgba(16, 185, 129, 0.3)',
+                                  }}
+                                >
+                                  <RefreshCw size={14} />
+                                  <span>Restart App to Apply</span>
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={handleInstallUpdate}
+                                  disabled={isInstallingUpdate}
+                                  style={{
+                                    background: 'var(--accent-purple-bright)',
+                                    color: '#fff',
+                                    border: 'none',
+                                    borderRadius: '8px',
+                                    padding: '8px 16px',
+                                    fontSize: '0.82rem',
+                                    fontWeight: 600,
+                                    cursor: isInstallingUpdate ? 'not-allowed' : 'pointer',
+                                    opacity: isInstallingUpdate ? 0.7 : 1,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px',
+                                  }}
+                                >
+                                  <Download size={14} />
+                                  <span>{isInstallingUpdate ? 'Downloading & Installing...' : 'Download & Install Update'}</span>
+                                </button>
+                              )}
+                            </div>
+
+                            {/* Release notes if available */}
+                            {updateInfo.body && (
+                              <div style={{ background: 'var(--bg-active)', borderRadius: '8px', padding: '10px 14px', border: '1px solid var(--border-color)', maxHeight: '160px', overflowY: 'auto' }}>
+                                <div style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--color-text-muted)', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                  Release Notes
+                                </div>
+                                <div style={{ fontSize: '0.78rem', color: 'var(--color-text-bright)', whiteSpace: 'pre-wrap', lineHeight: 1.5, fontFamily: 'var(--font-mono)' }}>
+                                  {updateInfo.body}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Download Progress Bar */}
+                            {isInstallingUpdate && (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
+                                  <span>Downloading package and verifying signature...</span>
+                                  <span>{downloadProgress?.percentage ? `${downloadProgress.percentage}%` : `${((downloadProgress?.downloaded || 0) / 1048576).toFixed(1)} MB`}</span>
+                                </div>
+                                <div style={{ width: '100%', height: '6px', borderRadius: '3px', background: 'var(--bg-active)', overflow: 'hidden' }}>
+                                  <div
+                                    style={{
+                                      height: '100%',
+                                      background: 'var(--accent-purple-bright)',
+                                      width: `${downloadProgress?.percentage || 30}%`,
+                                      transition: 'width 0.2s ease',
+                                    }}
+                                  />
+                                </div>
+                              </div>
+                            )}
+
+                            {installError && (
+                              <div style={{ color: 'var(--color-deleted)', fontSize: '0.76rem' }}>
+                                Installation error: {installError}
+                              </div>
+                            )}
+
+                            {updateInstalledReady && (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-added)', fontSize: '0.78rem', fontWeight: 500 }}>
+                                <CheckCircle2 size={16} />
+                                <span>Update downloaded and verified successfully! Click &quot;Restart App to Apply&quot; to finish updating.</span>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <CheckCircle2 size={18} style={{ color: 'var(--color-added)', flexShrink: 0 }} />
+                            <div>
+                              <div style={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--color-text-bright)' }}>
+                                You&apos;re up to date!
+                              </div>
+                              <div style={{ fontSize: '0.74rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+                                Version {updateInfo?.current_version || appBuildInfo?.version} is the latest available on the {updateChannel.toUpperCase()} channel.
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
+
                 {/* ========================================================
                     WORKSPACE CONTEXT TABS (NO AI & NO GITIGNORE AS REQUESTED)
                    ======================================================== */}
@@ -1515,49 +2100,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                           </div>
                         )}
                       </div>
-
-                      {/* Connection Test */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '6px', borderTop: '1px solid var(--border-color)', paddingTop: '12px' }}>
-                        <button
-                          type="button"
-                          onClick={handleTestRemoteConnection}
-                          disabled={isTestingRemote || !workspaceRemoteUrl.trim()}
-                          style={{
-                            background: 'rgba(255, 255, 255, 0.06)',
-                            border: '1px solid var(--border-color)',
-                            borderRadius: '8px',
-                            color: 'var(--color-text-bright)',
-                            padding: '6px 12px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '6px',
-                            cursor: 'pointer',
-                            fontSize: '0.78rem',
-                            opacity: workspaceRemoteUrl.trim() ? 1 : 0.5,
-                          }}
-                        >
-                          <RefreshCw size={13} className={isTestingRemote ? 'spin-icon' : ''} />
-                          <span>{isTestingRemote ? 'Verifying access...' : 'Test Connection (ls-remote)'}</span>
-                        </button>
-                        <span className="settings-field-hint">
-                          Tests SSH / HTTPS read access with the remote repository.
-                        </span>
-                      </div>
-
-                      {remoteTestResult && (
-                        <div
-                          style={{
-                            padding: '8px 12px',
-                            borderRadius: '8px',
-                            background: remoteTestResult.success ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
-                            border: remoteTestResult.success ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(239, 68, 68, 0.3)',
-                            fontSize: '0.76rem',
-                            color: remoteTestResult.success ? 'var(--color-added)' : 'var(--color-deleted)',
-                          }}
-                        >
-                          <div style={{ fontWeight: 600 }}>{remoteTestResult.message}</div>
-                        </div>
-                      )}
                     </div>
                   </>
                 )}
@@ -1722,7 +2264,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                           style={{
                             padding: '12px 14px',
                             borderRadius: '8px',
-                            background: 'rgba(255, 255, 255, 0.02)',
+                            background: 'var(--bg-panel-secondary)',
                             border: '1px solid var(--border-color)',
                             display: 'flex',
                             alignItems: 'center',
@@ -1837,7 +2379,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 {/* Empty Workspace Fallback */}
                 {!hasWorkspace && activeContext === 'workspace' && (
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', textAlign: 'center', padding: '40px 20px' }}>
-                    <div style={{ width: 48, height: 48, borderRadius: '12px', background: 'rgba(255, 255, 255, 0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px', color: 'var(--color-text-muted)' }}>
+                    <div style={{ width: 48, height: 48, borderRadius: '12px', background: 'var(--bg-active)', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px', color: 'var(--color-text-muted)' }}>
                       <Folder size={24} />
                     </div>
                     <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--color-text-bright)', marginBottom: '8px' }}>

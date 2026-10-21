@@ -91,6 +91,16 @@ pub fn unstage_files(repo_path: String, file_paths: Vec<String>) -> Result<(), S
 }
 
 #[tauri::command]
+pub fn discard_file_changes(repo_path: String, file_path: String) -> Result<(), String> {
+    git::discard_file_changes_impl(&repo_path, &file_path)
+}
+
+#[tauri::command]
+pub fn discard_files_changes(repo_path: String, file_paths: Vec<String>) -> Result<(), String> {
+    git::discard_files_changes_impl(&repo_path, file_paths)
+}
+
+#[tauri::command]
 pub async fn select_folder() -> Option<String> {
     tauri::async_runtime::spawn_blocking(move || {
         rfd::FileDialog::new()

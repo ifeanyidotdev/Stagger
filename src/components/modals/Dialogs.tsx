@@ -75,6 +75,9 @@ interface DialogsProps {
   handleGitPull?: (mode?: 'merge' | 'rebase') => Promise<void>;
   isPullingRemote?: boolean;
   onOpenSettings?: () => void;
+  pendingDiscardFiles?: string[] | null;
+  setPendingDiscardFiles?: (files: string[] | null) => void;
+  handleExecuteDiscardChanges?: () => void;
 }
 
 const Dialogs: React.FC<DialogsProps> = ({
@@ -148,7 +151,10 @@ const Dialogs: React.FC<DialogsProps> = ({
   upstreamBranchName = null,
   handleGitPull,
   isPullingRemote = false,
-  onOpenSettings
+  onOpenSettings,
+  pendingDiscardFiles = null,
+  setPendingDiscardFiles,
+  handleExecuteDiscardChanges
 }) => {
   const [rememberPullChoice, setRememberPullChoice] = useState(false);
   const [isRestoreDropdownOpen, setIsRestoreDropdownOpen] = useState(false);
@@ -222,6 +228,7 @@ const Dialogs: React.FC<DialogsProps> = ({
             {dialogType === "git-init-confirm" && "Initialize Git Repository?"}
             {dialogType === "delete-branch-confirm" && "Delete Branch?"}
             {dialogType === "git-delete-force-confirm" && "Force Delete Branch?"}
+            {dialogType === "discard-changes-confirm" && "Discard Unstaged Changes?"}
             {dialogType === "checkout-conflict" && "Uncommitted Changes"}
             {dialogType === "stash-name" && "Save Stash"}
             {dialogType === "merge-rebase" && "Merge / Rebase Branch"}
@@ -602,6 +609,45 @@ const Dialogs: React.FC<DialogsProps> = ({
           </div>
         )}
 
+        {/* DISCARD CHANGES CONFIRM DIALOG */}
+        {dialogType === "discard-changes-confirm" && pendingDiscardFiles && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+            <span style={{ fontSize: "0.85rem", color: "var(--color-text-main)", lineHeight: 1.45 }}>
+              Are you sure you want to discard changes in {pendingDiscardFiles.length === 1 ? (
+                <><strong>{pendingDiscardFiles[0]}</strong></>
+              ) : (
+                <><strong>{pendingDiscardFiles.length} files</strong></>
+              )}? This will revert modified files to the index and permanently delete untracked files from disk. This action cannot be undone.
+            </span>
+            {pendingDiscardFiles.length > 1 && (
+              <div style={{ maxHeight: "140px", overflowY: "auto", background: "rgba(0, 0, 0, 0.25)", borderRadius: "6px", padding: "8px 10px", display: "flex", flexDirection: "column", gap: "4px", border: "1px solid var(--border-color)" }}>
+                {pendingDiscardFiles.map(path => (
+                  <span key={path} style={{ fontSize: "0.74rem", fontFamily: "var(--font-mono)", color: "var(--color-text-muted)" }}>
+                    {path}
+                  </span>
+                ))}
+              </div>
+            )}
+            <div className="dialog-actions" style={{ marginTop: "8px" }}>
+              <button 
+                type="button" 
+                className="dialog-button secondary" 
+                onClick={() => { setDialogType(null); if (setPendingDiscardFiles) setPendingDiscardFiles(null); }}
+              >
+                Cancel
+              </button>
+              <button 
+                type="button" 
+                className="dialog-button" 
+                style={{ background: "var(--color-deleted)", color: "white" }} 
+                onClick={handleExecuteDiscardChanges}
+              >
+                Discard Changes
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* CHECKOUT CONFLICT DIALOG */}
         {dialogType === "checkout-conflict" && (
           <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
@@ -666,7 +712,7 @@ const Dialogs: React.FC<DialogsProps> = ({
             
             <button 
               className="sync-button" 
-              style={{ background: "rgba(255,255,255,0.06)", border: "1px solid var(--border-color)" }}
+              style={{ background: "var(--bg-active)", border: "1px solid var(--border-color)" }}
               onClick={handleCloneOptionWorkspace}
             >
               Clone a remote Git repository into this folder
@@ -766,7 +812,7 @@ const Dialogs: React.FC<DialogsProps> = ({
               
               <button 
                 className="sync-button" 
-                style={{ flex: 1, background: "rgba(255,255,255,0.06)", border: "1px solid var(--border-color)", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
+                style={{ flex: 1, background: "var(--bg-active)", border: "1px solid var(--border-color)", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
                 onClick={() => {
                   setDialogInput2(dialogInput);
                   setDialogInput("");
@@ -1258,7 +1304,6 @@ const Dialogs: React.FC<DialogsProps> = ({
                 <div className="pull-strategy-card-body">
                   <div className="pull-strategy-card-title-row">
                     <span className="pull-strategy-card-title">Fully Merge</span>
-                    <span className="pull-strategy-badge merge">git pull --no-rebase</span>
                   </div>
                   <span className="pull-strategy-card-desc">
                     Integrates remote commits with a merge commit. Preserves exact history, branch topology, and full commit context. Recommended for shared or public branches.
@@ -1277,7 +1322,6 @@ const Dialogs: React.FC<DialogsProps> = ({
                 <div className="pull-strategy-card-body">
                   <div className="pull-strategy-card-title-row">
                     <span className="pull-strategy-card-title">Rebase Local Commits</span>
-                    <span className="pull-strategy-badge linear">git pull --rebase</span>
                   </div>
                   <span className="pull-strategy-card-desc">
                     Replays your unpushed local commits on top of incoming remote commits. Keeps history clean, linear, and avoids redundant merge commits.

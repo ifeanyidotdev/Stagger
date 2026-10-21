@@ -1,0 +1,11 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Stagger (Dev)",
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/ifeanyidotdev/Stagger/releases/download/dev/latest.json"
+      ]
+    }
+  }
+}
