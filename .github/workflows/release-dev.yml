@@ -1,0 +1,92 @@
+name: 'Publish Dev Preview Release'
+
+on:
+  push:
+    branches:
+      - dev
+    tags:
+      - 'v*-dev*'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  publish-tauri-dev:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: 'macos-latest'
+            target: 'aarch64-apple-darwin'
+            arch_name: 'macOS Apple Silicon (M-series)'
+          - platform: 'macos-latest'
+            target: 'x86_64-apple-darwin'
+            arch_name: 'macOS Intel'
+          - platform: 'ubuntu-22.04'
+            target: 'x86_64-unknown-linux-gnu'
+            arch_name: 'Linux x64'
+          - platform: 'windows-latest'
+            target: 'x86_64-pc-windows-msvc'
+            arch_name: 'Windows x64'
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Setup Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+
+      - name: Install frontend dependencies
+        run: bun install
+
+      - name: Build and Publish Tauri App (Dev Channel)
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: 'dev'
+          releaseName: 'Stagger (Dev Preview)'
+          releaseBody: |
+            ### 🧪 StageNode (Stagger) Developer Preview Release
+            This is an automated cutting-edge preview build on the **Dev** update channel.
+
+            ### Assets
+            Download the appropriate preview binary for your platform below.
+
+            ### 🍎 Note for macOS
+            If macOS displays *"Stagger (Dev) is damaged and can't be opened"*, run this in Terminal:
+            ```bash
+            xattr -cr "/Applications/Stagger (Dev).app"
+            ```
+            Or navigate to **System Settings > Privacy & Security** and click **Open Anyway**.
+          releaseDraft: false
+          prerelease: true
+          args: '--config tauri.dev.conf.json --target ${{ matrix.target }}'

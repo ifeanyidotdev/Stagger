@@ -2,11 +2,14 @@ mod git;
 mod github;
 mod settings;
 mod commands;
+mod updater;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             commands::get_git_status,
             commands::get_git_log,
@@ -32,7 +35,12 @@ pub fn run() {
             commands::write_file_content,
             commands::select_file,
             commands::get_workspace_settings,
-            commands::save_workspace_settings
+            commands::save_workspace_settings,
+            updater::get_app_build_info,
+            updater::check_app_update,
+            updater::download_and_install_update,
+            updater::restart_app
+        ])
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

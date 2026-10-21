@@ -19,6 +19,8 @@ pub struct GlobalSettings {
     pub default_pull_strategy: Option<String>, // "prompt" | "merge" | "rebase"
     pub auto_open_pull_dialog: Option<bool>,
     pub default_pr_merge_method: Option<String>, // "merge" | "squash" | "rebase"
+    pub update_channel: Option<String>, // "main" | "dev"
+    pub auto_check_updates: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]

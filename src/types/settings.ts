@@ -16,6 +16,28 @@ export interface GlobalSettings {
   auto_open_pull_dialog?: boolean | null;
   default_pr_merge_method?: 'merge' | 'squash' | 'rebase' | null;
   theme?: AppTheme | null;
+  update_channel?: 'main' | 'dev' | null;
+  auto_check_updates?: boolean | null;
+}
+
+export interface AppBuildInfo {
+  version: string;
+  app_name: string;
+  default_channel: 'main' | 'dev';
+}
+
+export interface AppUpdateInfo {
+  available: boolean;
+  current_version: string;
+  version?: string | null;
+  date?: string | null;
+  body?: string | null;
+}
+
+export interface UpdateDownloadProgress {
+  downloaded: number;
+  total?: number | null;
+  percentage?: number | null;
 }
 
 export interface SystemGitConfig {

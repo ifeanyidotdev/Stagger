@@ -26,11 +26,24 @@ import {
   GitCommit,
   GitPullRequest,
   Workflow,
-  Palette
+  Palette,
+  Download,
+  DownloadCloud,
+  Radio,
+  ArrowUpCircle
 } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { openUrl, revealItemInDir } from '@tauri-apps/plugin-opener';
-import type { GlobalSettings, SystemGitConfig, WorkspaceSettings, AppTheme } from '../../types/settings';
+import type { 
+  GlobalSettings, 
+  SystemGitConfig, 
+  WorkspaceSettings, 
+  AppTheme,
+  AppBuildInfo,
+  AppUpdateInfo,
+  UpdateDownloadProgress
+} from '../../types/settings';
 import type { GitCliResult } from '../../types/git';
 import { 
   GEMINI_MODELS, 
@@ -48,7 +61,7 @@ interface SettingsModalProps {
 }
 
 type ContextType = 'global' | 'workspace';
-type GlobalTab = 'global-git' | 'global-appearance' | 'global-pull' | 'global-gitignore' | 'global-ai';
+type GlobalTab = 'global-git' | 'global-appearance' | 'global-pull' | 'global-gitignore' | 'global-ai' | 'global-updates';
 type WorkspaceTab = 'workspace-remote' | 'workspace-pull' | 'workspace-identity' | 'workspace-overview';
 
 const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -117,6 +130,18 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   // AI Connection Test
   const [isTestingAI, setIsTestingAI] = useState(false);
   const [aiTestResult, setAiTestResult] = useState<{ success: boolean; message: string; response?: string } | null>(null);
+
+  // App Updates & Version Channel
+  const [appBuildInfo, setAppBuildInfo] = useState<AppBuildInfo | null>(null);
+  const [updateChannel, setUpdateChannel] = useState<'main' | 'dev'>('main');
+  const [autoCheckUpdates, setAutoCheckUpdates] = useState(true);
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState<AppUpdateInfo | null>(null);
+  const [updateCheckError, setUpdateCheckError] = useState<string | null>(null);
+  const [isInstallingUpdate, setIsInstallingUpdate] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState<UpdateDownloadProgress | null>(null);
+  const [updateInstalledReady, setUpdateInstalledReady] = useState(false);
+  const [installError, setInstallError] = useState<string | null>(null);
 
   // Workspace Specific Settings
   const [workspaceData, setWorkspaceData] = useState<WorkspaceSettings | null>(null);
@@ -202,6 +227,19 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         document.documentElement.setAttribute('data-theme', storedTheme);
         if (document.body) {
           document.body.setAttribute('data-theme', storedTheme);
+        }
+
+        // Load App Build & Updater Configuration
+        try {
+          const bInfo = await invoke<AppBuildInfo>('get_app_build_info').catch(() => null);
+          if (mounted && bInfo) {
+            setAppBuildInfo(bInfo);
+          }
+          const chosenChan = (settings.update_channel as 'main' | 'dev') || (bInfo?.default_channel as 'main' | 'dev') || 'main';
+          setUpdateChannel(chosenChan);
+          setAutoCheckUpdates(settings.auto_check_updates ?? true);
+        } catch (e) {
+          console.warn('Failed to fetch build info:', e);
         }
 
         // Load universal gitignore content
@@ -376,6 +414,72 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     }
   };
 
+  // Listen to background download progress events
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    listen<UpdateDownloadProgress>('update-progress', (event) => {
+      setDownloadProgress(event.payload);
+    }).then((fn) => {
+      unlisten = fn;
+    }).catch(err => {
+      console.warn('Could not register update-progress listener:', err);
+    });
+
+    return () => {
+      if (unlisten) unlisten();
+    };
+  }, []);
+
+  // Check for updates against selected or overridden channel
+  const handleCheckForUpdates = async (channelOverride?: 'main' | 'dev') => {
+    setIsCheckingUpdate(true);
+    setUpdateCheckError(null);
+    setUpdateInstalledReady(false);
+    setInstallError(null);
+    setDownloadProgress(null);
+
+    const targetChan = channelOverride || updateChannel;
+    try {
+      const result = await invoke<AppUpdateInfo>('check_app_update', {
+        channel: targetChan,
+      });
+      setUpdateInfo(result);
+    } catch (err: any) {
+      setUpdateCheckError(err?.message || String(err));
+      setUpdateInfo(null);
+    } finally {
+      setIsCheckingUpdate(false);
+    }
+  };
+
+  // Download and install available update
+  const handleInstallUpdate = async () => {
+    if (!updateInfo?.available) return;
+    setIsInstallingUpdate(true);
+    setInstallError(null);
+    setUpdateInstalledReady(false);
+
+    try {
+      await invoke('download_and_install_update', {
+        channel: updateChannel,
+      });
+      setUpdateInstalledReady(true);
+    } catch (err: any) {
+      setInstallError(err?.message || String(err));
+    } finally {
+      setIsInstallingUpdate(false);
+    }
+  };
+
+  // Relaunch the app to apply the installed update
+  const handleRestartApp = async () => {
+    try {
+      await invoke('restart_app');
+    } catch (err) {
+      console.error('Failed to restart app:', err);
+    }
+  };
+
   // Apply & Update Remote Origin URL
   const handleApplyRemoteUrl = async () => {
     if (!repoPath || !workspaceRemoteUrl.trim()) return;
@@ -435,6 +539,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         auto_open_pull_dialog: autoOpenPullDialog,
         default_pr_merge_method: defaultPrMergeMethod,
         theme: theme,
+        update_channel: updateChannel,
+        auto_check_updates: autoCheckUpdates,
       };
 
       localStorage.setItem('stagenode_theme', theme);
@@ -658,6 +764,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 >
                   <Sparkles size={15} className="settings-nav-icon" style={{ color: 'var(--color-modified)' }} />
                   <span>AI Settings</span>
+                </button>
+
+                <button
+                  type="button"
+                  className={`settings-nav-btn ${activeGlobalTab === 'global-updates' ? 'active' : ''}`}
+                  onClick={() => setActiveGlobalTab('global-updates')}
+                >
+                  <DownloadCloud size={15} className="settings-nav-icon" style={{ color: 'var(--color-added)' }} />
+                  <span>App Updates</span>
                 </button>
               </div>
             ) : (
@@ -1492,6 +1607,362 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         </div>
                       )}
                     </div>
+                  </>
+                )}
+
+                {/* 6. APP UPDATES & CHANNELS */}
+                {activeContext === 'global' && activeGlobalTab === 'global-updates' && (
+                  <>
+                    <div>
+                      <h3 style={{ fontSize: '0.96rem', fontWeight: 600, color: 'var(--color-text-bright)' }}>
+                        Application Updates & Release Channels
+                      </h3>
+                      <p className="settings-field-hint">
+                        Configure how StageNode receives remote updates, switch between Main (Stable) and Dev (Preview) streams, or check on demand.
+                      </p>
+                    </div>
+
+                    {/* Current Version & Edition Card */}
+                    <div className="settings-card">
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <div
+                            style={{
+                              width: '40px',
+                              height: '40px',
+                              borderRadius: '10px',
+                              background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.25) 0%, rgba(59, 130, 246, 0.25) 100%)',
+                              border: '1px solid rgba(139, 92, 246, 0.4)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              color: 'var(--accent-purple-bright)',
+                            }}
+                          >
+                            <DownloadCloud size={20} />
+                          </div>
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--color-text-bright)' }}>
+                                {appBuildInfo?.app_name || 'Stagger'}
+                              </span>
+                              <span
+                                className="settings-context-pill"
+                                style={{
+                                  background: 'rgba(139, 92, 246, 0.15)',
+                                  color: 'var(--accent-purple-bright)',
+                                  borderColor: 'rgba(139, 92, 246, 0.3)',
+                                  fontWeight: 600,
+                                  fontSize: '0.74rem',
+                                }}
+                              >
+                                v{appBuildInfo?.version || '0.1.1'}
+                              </span>
+                              <span
+                                className="settings-context-pill"
+                                style={{
+                                  background: (appBuildInfo?.default_channel === 'dev' || (appBuildInfo?.app_name && appBuildInfo.app_name.toLowerCase().includes('dev')))
+                                    ? 'rgba(234, 179, 8, 0.15)'
+                                    : 'rgba(16, 185, 129, 0.15)',
+                                  color: (appBuildInfo?.default_channel === 'dev' || (appBuildInfo?.app_name && appBuildInfo.app_name.toLowerCase().includes('dev')))
+                                    ? 'var(--color-modified)'
+                                    : 'var(--color-added)',
+                                  borderColor: (appBuildInfo?.default_channel === 'dev' || (appBuildInfo?.app_name && appBuildInfo.app_name.toLowerCase().includes('dev')))
+                                    ? 'rgba(234, 179, 8, 0.3)'
+                                    : 'rgba(16, 185, 129, 0.3)',
+                                  fontWeight: 600,
+                                }}
+                              >
+                                {(appBuildInfo?.default_channel === 'dev' || (appBuildInfo?.app_name && appBuildInfo.app_name.toLowerCase().includes('dev'))) ? 'Dev Preview Edition' : 'Main Stable Edition'}
+                              </span>
+                            </div>
+                            <div style={{ fontSize: '0.74rem', color: 'var(--color-text-muted)', marginTop: '3px' }}>
+                              Installed Desktop Binary • GitHub Releases Remote Host
+                            </div>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleCheckForUpdates()}
+                          disabled={isCheckingUpdate || isInstallingUpdate}
+                          style={{
+                            background: 'var(--accent-purple-bright)',
+                            color: '#fff',
+                            border: 'none',
+                            borderRadius: '8px',
+                            padding: '8px 16px',
+                            fontSize: '0.8rem',
+                            fontWeight: 600,
+                            cursor: isCheckingUpdate || isInstallingUpdate ? 'not-allowed' : 'pointer',
+                            opacity: isCheckingUpdate || isInstallingUpdate ? 0.7 : 1,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            boxShadow: '0 2px 10px rgba(139, 92, 246, 0.3)',
+                          }}
+                        >
+                          <RefreshCw size={14} className={isCheckingUpdate ? 'spin-icon' : ''} />
+                          <span>{isCheckingUpdate ? 'Checking Releases...' : 'Check for Updates'}</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Channel Selection Card */}
+                    <div className="settings-card">
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                        <div>
+                          <label className="settings-field-label">
+                            <Radio size={14} />
+                            <span>Update Channel</span>
+                          </label>
+                          <p className="settings-field-hint" style={{ marginTop: '2px' }}>
+                            Choose which release stream this app receives updates from. By default, your channel matches whether you installed the Main or Dev build.
+                          </p>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '12px' }}>
+                          {/* Main Option */}
+                          <div
+                            onClick={() => {
+                              setUpdateChannel('main');
+                              if (updateInfo) handleCheckForUpdates('main');
+                            }}
+                            style={{
+                              padding: '14px',
+                              borderRadius: '10px',
+                              border: updateChannel === 'main' 
+                                ? '2px solid var(--accent-purple-bright)' 
+                                : '1px solid var(--border-color)',
+                              background: updateChannel === 'main' 
+                                ? 'rgba(139, 92, 246, 0.08)' 
+                                : 'var(--bg-active)',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '6px',
+                              transition: 'all 0.2s ease',
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600, color: 'var(--color-text-bright)', fontSize: '0.86rem' }}>
+                                <CheckCircle2 size={15} style={{ color: updateChannel === 'main' ? 'var(--color-added)' : 'var(--color-text-muted)' }} />
+                                <span>Main (Stable)</span>
+                              </div>
+                              <span className="settings-context-pill" style={{ background: 'rgba(16, 185, 129, 0.1)', color: 'var(--color-added)', borderColor: 'rgba(16, 185, 129, 0.25)' }}>
+                                Recommended
+                              </span>
+                            </div>
+                            <p style={{ fontSize: '0.74rem', color: 'var(--color-text-muted)', margin: 0, lineHeight: 1.4 }}>
+                              Production-ready builds vetted for stability. Updates are fetched from the latest official GitHub release.
+                            </p>
+                            <div style={{ fontSize: '0.68rem', fontFamily: 'var(--font-mono)', color: 'var(--color-text-muted)', opacity: 0.8, marginTop: '4px' }}>
+                              Endpoint: releases/latest/download/latest.json
+                            </div>
+                          </div>
+
+                          {/* Dev Option */}
+                          <div
+                            onClick={() => {
+                              setUpdateChannel('dev');
+                              if (updateInfo) handleCheckForUpdates('dev');
+                            }}
+                            style={{
+                              padding: '14px',
+                              borderRadius: '10px',
+                              border: updateChannel === 'dev' 
+                                ? '2px solid var(--accent-purple-bright)' 
+                                : '1px solid var(--border-color)',
+                              background: updateChannel === 'dev' 
+                                ? 'rgba(139, 92, 246, 0.08)' 
+                                : 'var(--bg-active)',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '6px',
+                              transition: 'all 0.2s ease',
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600, color: 'var(--color-text-bright)', fontSize: '0.86rem' }}>
+                                <CheckCircle2 size={15} style={{ color: updateChannel === 'dev' ? 'var(--color-modified)' : 'var(--color-text-muted)' }} />
+                                <span>Dev (Pre-release)</span>
+                              </div>
+                              <span className="settings-context-pill" style={{ background: 'rgba(234, 179, 8, 0.1)', color: 'var(--color-modified)', borderColor: 'rgba(234, 179, 8, 0.25)' }}>
+                                Preview
+                              </span>
+                            </div>
+                            <p style={{ fontSize: '0.74rem', color: 'var(--color-text-muted)', margin: 0, lineHeight: 1.4 }}>
+                              Early access builds with new features before stable release. Updates are fetched from the rolling Dev pre-release.
+                            </p>
+                            <div style={{ fontSize: '0.68rem', fontFamily: 'var(--font-mono)', color: 'var(--color-text-muted)', opacity: 0.8, marginTop: '4px' }}>
+                              Endpoint: releases/download/dev/latest.json
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Auto-check toggle */}
+                        <div style={{ paddingTop: '8px', borderTop: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <div>
+                            <div style={{ fontSize: '0.82rem', fontWeight: 500, color: 'var(--color-text-bright)' }}>
+                              Automatic Startup Check
+                            </div>
+                            <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
+                              Silently check for new versions on the selected channel when StageNode opens.
+                            </div>
+                          </div>
+                          <input
+                            type="checkbox"
+                            className="settings-checkbox"
+                            checked={autoCheckUpdates}
+                            onChange={e => setAutoCheckUpdates(e.target.checked)}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Update Result / Download Status Card */}
+                    {(updateCheckError || updateInfo || isInstallingUpdate || updateInstalledReady) && (
+                      <div className="settings-card" style={{ borderLeft: updateCheckError ? '3px solid var(--color-deleted)' : updateInfo?.available ? '3px solid var(--accent-purple-bright)' : '3px solid var(--color-added)' }}>
+                        {updateCheckError ? (
+                          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', color: 'var(--color-deleted)' }}>
+                            <AlertCircle size={18} style={{ flexShrink: 0, marginTop: '2px' }} />
+                            <div>
+                              <div style={{ fontSize: '0.84rem', fontWeight: 600 }}>Update Check Notice</div>
+                              <div style={{ fontSize: '0.76rem', marginTop: '2px', opacity: 0.9 }}>{updateCheckError}</div>
+                              <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: '4px' }}>
+                                This usually indicates no releases have been published to this channel yet, or the network is unavailable.
+                              </div>
+                            </div>
+                          </div>
+                        ) : updateInfo?.available ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+                              <div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <ArrowUpCircle size={18} style={{ color: 'var(--color-added)' }} />
+                                  <span style={{ fontSize: '0.94rem', fontWeight: 600, color: 'var(--color-text-bright)' }}>
+                                    New Version Available: v{updateInfo.version}
+                                  </span>
+                                  {updateInfo.date && (
+                                    <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
+                                      ({updateInfo.date.split('T')[0]})
+                                    </span>
+                                  )}
+                                </div>
+                                <div style={{ fontSize: '0.74rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+                                  Current: v{updateInfo.current_version} • Target Channel: {updateChannel.toUpperCase()}
+                                </div>
+                              </div>
+
+                              {updateInstalledReady ? (
+                                <button
+                                  type="button"
+                                  onClick={handleRestartApp}
+                                  style={{
+                                    background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                                    color: '#fff',
+                                    border: 'none',
+                                    borderRadius: '8px',
+                                    padding: '8px 16px',
+                                    fontSize: '0.82rem',
+                                    fontWeight: 600,
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px',
+                                    boxShadow: '0 2px 10px rgba(16, 185, 129, 0.3)',
+                                  }}
+                                >
+                                  <RefreshCw size={14} />
+                                  <span>Restart App to Apply</span>
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={handleInstallUpdate}
+                                  disabled={isInstallingUpdate}
+                                  style={{
+                                    background: 'var(--accent-purple-bright)',
+                                    color: '#fff',
+                                    border: 'none',
+                                    borderRadius: '8px',
+                                    padding: '8px 16px',
+                                    fontSize: '0.82rem',
+                                    fontWeight: 600,
+                                    cursor: isInstallingUpdate ? 'not-allowed' : 'pointer',
+                                    opacity: isInstallingUpdate ? 0.7 : 1,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px',
+                                  }}
+                                >
+                                  <Download size={14} />
+                                  <span>{isInstallingUpdate ? 'Downloading & Installing...' : 'Download & Install Update'}</span>
+                                </button>
+                              )}
+                            </div>
+
+                            {/* Release notes if available */}
+                            {updateInfo.body && (
+                              <div style={{ background: 'var(--bg-active)', borderRadius: '8px', padding: '10px 14px', border: '1px solid var(--border-color)', maxHeight: '160px', overflowY: 'auto' }}>
+                                <div style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--color-text-muted)', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                  Release Notes
+                                </div>
+                                <div style={{ fontSize: '0.78rem', color: 'var(--color-text-bright)', whiteSpace: 'pre-wrap', lineHeight: 1.5, fontFamily: 'var(--font-mono)' }}>
+                                  {updateInfo.body}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Download Progress Bar */}
+                            {isInstallingUpdate && (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
+                                  <span>Downloading package and verifying signature...</span>
+                                  <span>{downloadProgress?.percentage ? `${downloadProgress.percentage}%` : `${((downloadProgress?.downloaded || 0) / 1048576).toFixed(1)} MB`}</span>
+                                </div>
+                                <div style={{ width: '100%', height: '6px', borderRadius: '3px', background: 'var(--bg-active)', overflow: 'hidden' }}>
+                                  <div
+                                    style={{
+                                      height: '100%',
+                                      background: 'var(--accent-purple-bright)',
+                                      width: `${downloadProgress?.percentage || 30}%`,
+                                      transition: 'width 0.2s ease',
+                                    }}
+                                  />
+                                </div>
+                              </div>
+                            )}
+
+                            {installError && (
+                              <div style={{ color: 'var(--color-deleted)', fontSize: '0.76rem' }}>
+                                Installation error: {installError}
+                              </div>
+                            )}
+
+                            {updateInstalledReady && (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-added)', fontSize: '0.78rem', fontWeight: 500 }}>
+                                <CheckCircle2 size={16} />
+                                <span>Update downloaded and verified successfully! Click &quot;Restart App to Apply&quot; to finish updating.</span>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <CheckCircle2 size={18} style={{ color: 'var(--color-added)', flexShrink: 0 }} />
+                            <div>
+                              <div style={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--color-text-bright)' }}>
+                                You&apos;re up to date!
+                              </div>
+                              <div style={{ fontSize: '0.74rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+                                Version {updateInfo?.current_version || appBuildInfo?.version} is the latest available on the {updateChannel.toUpperCase()} channel.
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </>
                 )}
 
