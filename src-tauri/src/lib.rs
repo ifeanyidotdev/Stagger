@@ -41,7 +41,6 @@ pub fn run() {
             updater::download_and_install_update,
             updater::restart_app
         ])
-        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
