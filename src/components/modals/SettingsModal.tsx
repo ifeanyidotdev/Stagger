@@ -1627,7 +1627,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         Application Updates
                       </h3>
                       <p className="settings-field-hint">
-                        StageNode automatically checks for remote updates on startup and window focus.
+                        Ensure your desktop application is running the latest features, improvements, and fixes.
                       </p>
                     </div>
 
