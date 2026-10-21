@@ -40,6 +40,7 @@ import type {
   AppTheme,
   AppBuildInfo,
   AppUpdateInfo,
+  UpdateStatus,
   UpdateDownloadProgress
 } from '../../types/settings';
 import type { GitCliResult } from '../../types/git';
@@ -56,6 +57,10 @@ interface SettingsModalProps {
   currentBranch?: string;
   initialTab?: GlobalTab;
   cachedUpdateInfo?: AppUpdateInfo | null;
+  updateStatus?: UpdateStatus;
+  updateProgress?: UpdateDownloadProgress | null;
+  onTriggerUpdateCheck?: () => Promise<void>;
+  onRestartApp?: () => void;
   onSettingsSaved?: (settings: GlobalSettings) => void;
   onRemoteUrlUpdated?: (newUrl: string) => void;
 }
@@ -71,6 +76,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   currentBranch = 'main',
   initialTab,
   cachedUpdateInfo,
+  updateStatus = 'idle',
+  updateProgress,
+  onTriggerUpdateCheck,
+  onRestartApp,
   onSettingsSaved,
   onRemoteUrlUpdated,
 }) => {
@@ -449,10 +458,17 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     setDownloadProgress(null);
 
     try {
-      const result = await invoke<AppUpdateInfo>('check_app_update', {
-        channel: null,
-      });
-      setUpdateInfo(result);
+      if (onTriggerUpdateCheck) {
+        await onTriggerUpdateCheck();
+      } else {
+        const result = await invoke<AppUpdateInfo>('check_app_update', {
+          channel: null,
+        });
+        setUpdateInfo(result);
+        if (result?.available) {
+          await handleInstallUpdate();
+        }
+      }
     } catch (err: any) {
       setUpdateCheckError(err?.message || String(err));
       setUpdateInfo(null);
@@ -482,6 +498,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
   // Relaunch the app to apply the installed update
   const handleRestartApp = async () => {
+    if (onRestartApp) {
+      onRestartApp();
+      return;
+    }
     try {
       await invoke('restart_app');
     } catch (err) {
@@ -1697,147 +1717,176 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                     </div>
 
                     {/* Update Result / Download Status Card */}
-                    {(updateCheckError || updateInfo || isInstallingUpdate || updateInstalledReady) && (
-                      <div className="settings-card" style={{ borderLeft: updateCheckError ? '3px solid var(--color-deleted)' : updateInfo?.available ? '3px solid var(--accent-purple-bright)' : '3px solid var(--color-added)' }}>
-                        {updateCheckError ? (
-                          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', color: 'var(--color-deleted)' }}>
-                            <AlertCircle size={18} style={{ flexShrink: 0, marginTop: '2px' }} />
-                            <div>
-                              <div style={{ fontSize: '0.84rem', fontWeight: 600 }}>Update Check Notice</div>
-                              <div style={{ fontSize: '0.76rem', marginTop: '2px', opacity: 0.9 }}>{updateCheckError}</div>
-                              <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: '4px' }}>
-                                This usually indicates no releases have been published to this channel yet, or the network is unavailable.
+                    {(() => {
+                      const isReadyToApply = updateStatus === 'ready' || updateInstalledReady;
+                      const isCurrentlyDownloading = updateStatus === 'downloading' || isInstallingUpdate;
+                      const effectiveProgress = updateProgress || downloadProgress;
+
+                      if (!updateCheckError && !updateInfo && !isCurrentlyDownloading && !isReadyToApply) {
+                        return null;
+                      }
+
+                      return (
+                        <div className="settings-card" style={{ borderLeft: updateCheckError ? '3px solid var(--color-deleted)' : updateInfo?.available ? '3px solid var(--accent-purple-bright)' : '3px solid var(--color-added)' }}>
+                          {updateCheckError ? (
+                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', color: 'var(--color-deleted)' }}>
+                              <AlertCircle size={18} style={{ flexShrink: 0, marginTop: '2px' }} />
+                              <div>
+                                <div style={{ fontSize: '0.84rem', fontWeight: 600 }}>Update Check Notice</div>
+                                <div style={{ fontSize: '0.76rem', marginTop: '2px', opacity: 0.9 }}>{updateCheckError}</div>
+                                <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: '4px' }}>
+                                  This usually indicates no releases have been published to this channel yet, or the network is unavailable.
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        ) : updateInfo?.available ? (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
-                              <div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                  <ArrowUpCircle size={18} style={{ color: 'var(--color-added)' }} />
-                                  <span style={{ fontSize: '0.94rem', fontWeight: 600, color: 'var(--color-text-bright)' }}>
-                                    New Version Available: v{updateInfo.version}
-                                  </span>
-                                  {updateInfo.date && (
-                                    <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
-                                      ({updateInfo.date.split('T')[0]})
+                          ) : updateInfo?.available ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+                                <div>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <ArrowUpCircle size={18} style={{ color: 'var(--color-added)' }} />
+                                    <span style={{ fontSize: '0.94rem', fontWeight: 600, color: 'var(--color-text-bright)' }}>
+                                      New Version Available: v{updateInfo.version}
                                     </span>
-                                  )}
+                                    {updateInfo.date && (
+                                      <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
+                                        ({updateInfo.date.split('T')[0]})
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div style={{ fontSize: '0.74rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+                                    Currently installed: v{updateInfo.current_version}
+                                  </div>
                                 </div>
-                                <div style={{ fontSize: '0.74rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
-                                  Currently installed: v{updateInfo.current_version}
-                                </div>
+
+                                {isReadyToApply ? (
+                                  <button
+                                    type="button"
+                                    onClick={handleRestartApp}
+                                    style={{
+                                      background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                                      color: '#fff',
+                                      border: 'none',
+                                      borderRadius: '8px',
+                                      padding: '8px 16px',
+                                      fontSize: '0.82rem',
+                                      fontWeight: 600,
+                                      cursor: 'pointer',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '8px',
+                                      boxShadow: '0 2px 10px rgba(16, 185, 129, 0.3)',
+                                    }}
+                                  >
+                                    <RefreshCw size={14} />
+                                    <span>Restart App to Apply</span>
+                                  </button>
+                                ) : isCurrentlyDownloading ? (
+                                  <button
+                                    type="button"
+                                    disabled
+                                    style={{
+                                      background: 'rgba(139, 92, 246, 0.25)',
+                                      color: 'var(--accent-purple-bright)',
+                                      border: '1px solid rgba(139, 92, 246, 0.4)',
+                                      borderRadius: '8px',
+                                      padding: '8px 16px',
+                                      fontSize: '0.82rem',
+                                      fontWeight: 600,
+                                      cursor: 'not-allowed',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '8px',
+                                    }}
+                                  >
+                                    <ArrowDownToLine size={14} className="spin-icon" />
+                                    <span>Downloading in Background...</span>
+                                  </button>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={handleInstallUpdate}
+                                    style={{
+                                      background: 'var(--accent-purple-bright)',
+                                      color: '#fff',
+                                      border: 'none',
+                                      borderRadius: '8px',
+                                      padding: '8px 16px',
+                                      fontSize: '0.82rem',
+                                      fontWeight: 600,
+                                      cursor: 'pointer',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '8px',
+                                    }}
+                                  >
+                                    <ArrowDownToLine size={14} strokeWidth={2.2} />
+                                    <span>Download & Install Update</span>
+                                  </button>
+                                )}
                               </div>
 
-                              {updateInstalledReady ? (
-                                <button
-                                  type="button"
-                                  onClick={handleRestartApp}
-                                  style={{
-                                    background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                                    color: '#fff',
-                                    border: 'none',
-                                    borderRadius: '8px',
-                                    padding: '8px 16px',
-                                    fontSize: '0.82rem',
-                                    fontWeight: 600,
-                                    cursor: 'pointer',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '8px',
-                                    boxShadow: '0 2px 10px rgba(16, 185, 129, 0.3)',
-                                  }}
-                                >
-                                  <RefreshCw size={14} />
-                                  <span>Restart App to Apply</span>
-                                </button>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={handleInstallUpdate}
-                                  disabled={isInstallingUpdate}
-                                  style={{
-                                    background: 'var(--accent-purple-bright)',
-                                    color: '#fff',
-                                    border: 'none',
-                                    borderRadius: '8px',
-                                    padding: '8px 16px',
-                                    fontSize: '0.82rem',
-                                    fontWeight: 600,
-                                    cursor: isInstallingUpdate ? 'not-allowed' : 'pointer',
-                                    opacity: isInstallingUpdate ? 0.7 : 1,
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '8px',
-                                  }}
-                                >
-                                  <ArrowDownToLine size={14} strokeWidth={2.2} />
-                                  <span>{isInstallingUpdate ? 'Downloading & Installing...' : 'Download & Install Update'}</span>
-                                </button>
+                              {/* Release notes if available */}
+                              {updateInfo.body && (
+                                <div style={{ background: 'var(--bg-active)', borderRadius: '8px', padding: '10px 14px', border: '1px solid var(--border-color)', maxHeight: '160px', overflowY: 'auto' }}>
+                                  <div style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--color-text-muted)', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                    Release Notes
+                                  </div>
+                                  <div style={{ fontSize: '0.78rem', color: 'var(--color-text-bright)', whiteSpace: 'pre-wrap', lineHeight: 1.5, fontFamily: 'var(--font-mono)' }}>
+                                    {updateInfo.body}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Download Progress Bar */}
+                              {isCurrentlyDownloading && (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
+                                    <span>Downloading update in background...</span>
+                                    <span>{effectiveProgress?.percentage ? `${effectiveProgress.percentage}%` : effectiveProgress?.downloaded ? `${(effectiveProgress.downloaded / 1048576).toFixed(1)} MB` : 'In progress'}</span>
+                                  </div>
+                                  <div style={{ width: '100%', height: '6px', borderRadius: '3px', background: 'var(--bg-active)', overflow: 'hidden' }}>
+                                    <div
+                                      style={{
+                                        height: '100%',
+                                        background: 'var(--accent-purple-bright)',
+                                        width: `${effectiveProgress?.percentage || 30}%`,
+                                        transition: 'width 0.2s ease',
+                                      }}
+                                    />
+                                  </div>
+                                </div>
+                              )}
+
+                              {installError && (
+                                <div style={{ color: 'var(--color-deleted)', fontSize: '0.76rem' }}>
+                                  Installation error: {installError}
+                                </div>
+                              )}
+
+                              {isReadyToApply && (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-added)', fontSize: '0.78rem', fontWeight: 500 }}>
+                                  <CheckCircle2 size={16} />
+                                  <span>Update downloaded and verified successfully! Click &quot;Restart App to Apply&quot; to finish updating.</span>
+                                </div>
                               )}
                             </div>
-
-                            {/* Release notes if available */}
-                            {updateInfo.body && (
-                              <div style={{ background: 'var(--bg-active)', borderRadius: '8px', padding: '10px 14px', border: '1px solid var(--border-color)', maxHeight: '160px', overflowY: 'auto' }}>
-                                <div style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--color-text-muted)', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                                  Release Notes
+                          ) : (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                              <CheckCircle2 size={18} style={{ color: 'var(--color-added)', flexShrink: 0 }} />
+                              <div>
+                                <div style={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--color-text-bright)' }}>
+                                  You&apos;re up to date!
                                 </div>
-                                <div style={{ fontSize: '0.78rem', color: 'var(--color-text-bright)', whiteSpace: 'pre-wrap', lineHeight: 1.5, fontFamily: 'var(--font-mono)' }}>
-                                  {updateInfo.body}
+                                <div style={{ fontSize: '0.74rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+                                  Version {updateInfo?.current_version || appBuildInfo?.version} is the latest release.
                                 </div>
-                              </div>
-                            )}
-
-                            {/* Download Progress Bar */}
-                            {isInstallingUpdate && (
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
-                                  <span>Downloading package and verifying signature...</span>
-                                  <span>{downloadProgress?.percentage ? `${downloadProgress.percentage}%` : `${((downloadProgress?.downloaded || 0) / 1048576).toFixed(1)} MB`}</span>
-                                </div>
-                                <div style={{ width: '100%', height: '6px', borderRadius: '3px', background: 'var(--bg-active)', overflow: 'hidden' }}>
-                                  <div
-                                    style={{
-                                      height: '100%',
-                                      background: 'var(--accent-purple-bright)',
-                                      width: `${downloadProgress?.percentage || 30}%`,
-                                      transition: 'width 0.2s ease',
-                                    }}
-                                  />
-                                </div>
-                              </div>
-                            )}
-
-                            {installError && (
-                              <div style={{ color: 'var(--color-deleted)', fontSize: '0.76rem' }}>
-                                Installation error: {installError}
-                              </div>
-                            )}
-
-                            {updateInstalledReady && (
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-added)', fontSize: '0.78rem', fontWeight: 500 }}>
-                                <CheckCircle2 size={16} />
-                                <span>Update downloaded and verified successfully! Click &quot;Restart App to Apply&quot; to finish updating.</span>
-                              </div>
-                            )}
-                          </div>
-                        ) : (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                            <CheckCircle2 size={18} style={{ color: 'var(--color-added)', flexShrink: 0 }} />
-                            <div>
-                              <div style={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--color-text-bright)' }}>
-                                You&apos;re up to date!
-                              </div>
-                              <div style={{ fontSize: '0.74rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
-                                Version {updateInfo?.current_version || appBuildInfo?.version} is the latest release.
                               </div>
                             </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
+                          )}
+                        </div>
+                      );
+                    })()}
                   </>
                 )}
 

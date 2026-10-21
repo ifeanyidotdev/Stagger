@@ -1,6 +1,9 @@
+use std::sync::atomic::{AtomicBool, Ordering};
 use serde::Serialize;
 use tauri::Emitter;
 use tauri_plugin_updater::UpdaterExt;
+
+static IS_DOWNLOADING: AtomicBool = AtomicBool::new(false);
 
 #[derive(Serialize, Clone, Debug)]
 pub struct AppBuildInfo {
@@ -100,6 +103,18 @@ pub async fn download_and_install_update(
     app: tauri::AppHandle,
     channel: Option<String>,
 ) -> Result<(), String> {
+    if IS_DOWNLOADING.swap(true, Ordering::SeqCst) {
+        return Err("Update download already in progress.".to_string());
+    }
+
+    struct DownloadGuard;
+    impl Drop for DownloadGuard {
+        fn drop(&mut self) {
+            IS_DOWNLOADING.store(false, Ordering::SeqCst);
+        }
+    }
+    let _guard = DownloadGuard;
+
     let endpoint_url = resolve_channel_endpoint(channel, &app);
     let parsed_url = url::Url::parse(&endpoint_url)
         .map_err(|e| format!("Invalid update endpoint URL ({}): {}", endpoint_url, e))?;
@@ -147,6 +162,8 @@ pub async fn download_and_install_update(
         )
         .await
         .map_err(|e| format!("Failed to download and install update: {}", e))?;
+
+    let _ = app.emit("update-ready", ());
 
     Ok(())
 }

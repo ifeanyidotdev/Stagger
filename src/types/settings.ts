@@ -34,6 +34,8 @@ export interface AppUpdateInfo {
   body?: string | null;
 }
 
+export type UpdateStatus = 'idle' | 'checking' | 'downloading' | 'ready' | 'error';
+
 export interface UpdateDownloadProgress {
   downloaded: number;
   total?: number | null;

@@ -1,7 +1,7 @@
 import React from 'react';
-import { ChevronRight, Layers, History, GitPullRequest, FolderSync, LogOut, Sparkles, Settings, ArrowDown, ArrowUp, ArrowUpCircle } from 'lucide-react';
+import { ChevronRight, Layers, History, GitPullRequest, FolderSync, LogOut, Sparkles, Settings, ArrowDown, ArrowUp, ArrowUpCircle, ArrowDownToLine, RefreshCw } from 'lucide-react';
 import type { GitHubUser } from '../../types/git';
-import type { AppUpdateInfo } from '../../types/settings';
+import type { AppUpdateInfo, UpdateStatus, UpdateDownloadProgress } from '../../types/settings';
 
 interface TopbarProps {
   sidebarCollapsed: boolean;
@@ -20,6 +20,9 @@ interface TopbarProps {
   githubUser: GitHubUser | null;
   handleGitHubSignout: () => void;
   availableUpdate?: AppUpdateInfo | null;
+  updateStatus?: UpdateStatus;
+  updateProgress?: UpdateDownloadProgress | null;
+  onRestartApp?: () => void;
   onOpenSettings?: (tab?: 'global-updates') => void;
 }
 
@@ -40,6 +43,9 @@ const Topbar: React.FC<TopbarProps> = ({
   githubUser,
   handleGitHubSignout,
   availableUpdate,
+  updateStatus = 'idle',
+  updateProgress,
+  onRestartApp,
   onOpenSettings
 }) => {
   return (
@@ -111,9 +117,38 @@ const Topbar: React.FC<TopbarProps> = ({
           </button>
         )}
 
-        {/* Update Available Indicator Badge */}
-        {availableUpdate?.available && (
+        {/* Update Indicators & Restart Trigger */}
+        {updateStatus === 'ready' && availableUpdate?.version && (
           <button
+            type="button"
+            className="topbar-action-btn topbar-restart-btn"
+            onClick={onRestartApp || (() => onOpenSettings?.('global-updates'))}
+            title={`Stagger v${availableUpdate.version} is downloaded and ready! Click to restart and apply update.`}
+          >
+            <RefreshCw size={13} className="spin-icon-hover" />
+            <span>Restart to Update</span>
+            <span className="topbar-update-version-tag">v{availableUpdate.version}</span>
+          </button>
+        )}
+
+        {updateStatus === 'downloading' && (
+          <button
+            type="button"
+            className="topbar-action-btn topbar-downloading-btn"
+            onClick={() => onOpenSettings?.('global-updates')}
+            title="Downloading update in background... Click to view details."
+          >
+            <ArrowDownToLine size={13} className="spin-icon" />
+            <span>
+              Downloading{availableUpdate?.version ? ` v${availableUpdate.version}` : ''}
+              {updateProgress?.percentage !== undefined && updateProgress?.percentage !== null ? ` (${updateProgress.percentage}%)` : ''}
+            </span>
+          </button>
+        )}
+
+        {updateStatus !== 'ready' && updateStatus !== 'downloading' && availableUpdate?.available && (
+          <button
+            type="button"
             className="topbar-action-btn"
             onClick={() => onOpenSettings?.('global-updates')}
             title={`A new update (v${availableUpdate.version}) is available. Click to download and install.`}

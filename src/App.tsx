@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { X, Layers, Globe, FolderGit2, ChevronRight, FolderOpen } from "lucide-react";
 import "./App.css";
 
@@ -21,7 +22,8 @@ import CommitBuilder from "./components/staging/CommitBuilder";
 import HistoryView from "./components/history/HistoryView";
 import Dialogs from "./components/modals/Dialogs";
 import SettingsModal from "./components/modals/SettingsModal";
-import type { AppUpdateInfo } from "./types/settings";
+import UpdateRestartPrompt from "./components/common/UpdateRestartPrompt";
+import type { AppUpdateInfo, UpdateStatus, UpdateDownloadProgress } from "./types/settings";
 
 function App() {
   // --- REPOSITORY & WORKSPACE STATE ---
@@ -165,10 +167,48 @@ function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [settingsInitialTab, setSettingsInitialTab] = useState<'global-git' | 'global-updates' | undefined>(undefined);
   const [availableUpdate, setAvailableUpdate] = useState<AppUpdateInfo | null>(null);
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus>('idle');
+  const [updateProgress, setUpdateProgress] = useState<UpdateDownloadProgress | null>(null);
+  const [showRestartPrompt, setShowRestartPrompt] = useState(false);
+  const isDownloadingRef = useRef(false);
   const lastUpdateCheckRef = useRef<number>(0);
+
+  const handleRestartApp = async () => {
+    try {
+      await invoke("restart_app");
+    } catch (err) {
+      console.error("Failed to restart app:", err);
+    }
+  };
+
+  const startBackgroundDownload = async (_update: AppUpdateInfo) => {
+    if (isDownloadingRef.current || updateStatus === 'downloading' || updateStatus === 'ready') {
+      return;
+    }
+    isDownloadingRef.current = true;
+    setUpdateStatus('downloading');
+    setUpdateProgress(null);
+
+    try {
+      await invoke('download_and_install_update', { channel: null });
+      setUpdateStatus('ready');
+      setShowRestartPrompt(true);
+    } catch (err: any) {
+      console.error("Background update download failed:", err);
+      if (!String(err).includes("already in progress")) {
+        setUpdateStatus('error');
+      }
+    } finally {
+      isDownloadingRef.current = false;
+    }
+  };
 
   const checkForRemoteUpdates = async (force: boolean = false) => {
     const now = Date.now();
+    // Do not disrupt an in-flight download or ready state
+    if (isDownloadingRef.current || updateStatus === 'downloading' || updateStatus === 'ready') {
+      return;
+    }
     // Throttle focus checks so we do not spam GitHub API on rapid window switches (at least 3 minutes between auto-checks)
     if (!force && now - lastUpdateCheckRef.current < 3 * 60 * 1000) {
       return;
@@ -176,22 +216,49 @@ function App() {
     lastUpdateCheckRef.current = now;
 
     try {
+      setUpdateStatus(prev => (prev === 'idle' ? 'checking' : prev));
       const result = await invoke<AppUpdateInfo>("check_app_update", { channel: null });
       if (result && result.available) {
         setAvailableUpdate(result);
+        // Automatically download update in the background!
+        await startBackgroundDownload(result);
       } else {
         setAvailableUpdate(null);
+        setUpdateStatus('idle');
       }
     } catch (err) {
       console.debug("Background update check:", err);
+      setUpdateStatus('idle');
     }
   };
 
   useEffect(() => {
-    // 1. Check immediately on startup
+    // 1. Listen for background download progress & ready events
+    let unlistenProgress: (() => void) | undefined;
+    let unlistenReady: (() => void) | undefined;
+
+    listen<UpdateDownloadProgress>('update-progress', (event) => {
+      setUpdateProgress(event.payload);
+      setUpdateStatus('downloading');
+    }).then((fn) => {
+      unlistenProgress = fn;
+    }).catch(err => {
+      console.warn('Could not register update-progress listener:', err);
+    });
+
+    listen('update-ready', () => {
+      setUpdateStatus('ready');
+      setShowRestartPrompt(true);
+    }).then((fn) => {
+      unlistenReady = fn;
+    }).catch(err => {
+      console.warn('Could not register update-ready listener:', err);
+    });
+
+    // 2. Check immediately on startup
     checkForRemoteUpdates(true);
 
-    // 2. Check on focus change (when user returns to the app window)
+    // 3. Check on focus change (when user returns to the app window)
     const handleFocus = () => {
       checkForRemoteUpdates(false);
     };
@@ -199,6 +266,8 @@ function App() {
     window.addEventListener("focus", handleFocus);
     return () => {
       window.removeEventListener("focus", handleFocus);
+      if (unlistenProgress) unlistenProgress();
+      if (unlistenReady) unlistenReady();
     };
   }, []);
 
@@ -2312,6 +2381,9 @@ function App() {
             githubUser={githubUser}
             handleGitHubSignout={handleGitHubSignout}
             availableUpdate={availableUpdate}
+            updateStatus={updateStatus}
+            updateProgress={updateProgress}
+            onRestartApp={handleRestartApp}
             onOpenSettings={(tab) => {
               setSettingsInitialTab(tab);
               setIsSettingsOpen(true);
@@ -2597,11 +2669,27 @@ function App() {
         currentBranch={workspaces.length > 0 && hasRepo ? currentBranch : ""}
         initialTab={settingsInitialTab}
         cachedUpdateInfo={availableUpdate}
+        updateStatus={updateStatus}
+        updateProgress={updateProgress}
+        onTriggerUpdateCheck={() => checkForRemoteUpdates(true)}
+        onRestartApp={handleRestartApp}
         onRemoteUrlUpdated={(newUrl) => setRemoteUrl(newUrl)}
         onSettingsSaved={() => {
           if (workspaces.length > 0 && repoPath) {
             refreshRepository(repoPath);
           }
+        }}
+      />
+
+      <UpdateRestartPrompt
+        isOpen={showRestartPrompt && updateStatus === 'ready'}
+        version={availableUpdate?.version}
+        onRestart={handleRestartApp}
+        onDismiss={() => setShowRestartPrompt(false)}
+        onOpenDetails={() => {
+          setShowRestartPrompt(false);
+          setSettingsInitialTab('global-updates');
+          setIsSettingsOpen(true);
         }}
       />
 
