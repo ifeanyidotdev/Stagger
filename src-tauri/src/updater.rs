@@ -21,7 +21,7 @@ pub struct AppUpdateInfo {
 #[derive(Serialize, Clone, Debug)]
 pub struct UpdateDownloadProgressPayload {
     pub downloaded: usize,
-    pub total: Option<usize>,
+    pub total: Option<u64>,
     pub percentage: Option<f64>,
 }
 

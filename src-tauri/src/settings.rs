@@ -163,6 +163,8 @@ pub fn get_global_settings_impl() -> Result<GlobalSettings, String> {
             },
             auto_open_pull_dialog: Some(true),
             default_pr_merge_method: Some("merge".to_string()),
+            update_channel: Some("main".to_string()),
+            auto_check_updates: Some(true),
         };
 
         // Attempt initial save
@@ -369,6 +371,7 @@ mod tests {
             openai_api_key: None,
             openai_model: Some("gpt-4o".into()),
             openai_base_url: None,
+            ..Default::default()
         };
 
         let json = serde_json::to_string(&settings).expect("Serialization failed");
