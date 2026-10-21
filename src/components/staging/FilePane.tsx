@@ -123,7 +123,7 @@ const FilePane: React.FC<FilePaneProps> = ({
                       </div>
                     </div>
                     <button 
-                      style={{ width: "100%", padding: "4px", background: "var(--bg-app)", border: "1px solid var(--border-color)", borderRadius: "4px", color: "white", fontSize: "0.75rem", cursor: "pointer" }}
+                      style={{ width: "100%", padding: "4px", background: "var(--bg-active)", border: "1px solid var(--border-color)", borderRadius: "4px", color: "var(--color-text-bright)", fontSize: "0.75rem", cursor: "pointer" }}
                       onClick={() => resolveConflict(file, "resolved")}
                     >
                       Mark Resolved

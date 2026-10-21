@@ -712,7 +712,7 @@ const Dialogs: React.FC<DialogsProps> = ({
             
             <button 
               className="sync-button" 
-              style={{ background: "rgba(255,255,255,0.06)", border: "1px solid var(--border-color)" }}
+              style={{ background: "var(--bg-active)", border: "1px solid var(--border-color)" }}
               onClick={handleCloneOptionWorkspace}
             >
               Clone a remote Git repository into this folder
@@ -812,7 +812,7 @@ const Dialogs: React.FC<DialogsProps> = ({
               
               <button 
                 className="sync-button" 
-                style={{ flex: 1, background: "rgba(255,255,255,0.06)", border: "1px solid var(--border-color)", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
+                style={{ flex: 1, background: "var(--bg-active)", border: "1px solid var(--border-color)", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
                 onClick={() => {
                   setDialogInput2(dialogInput);
                   setDialogInput("");

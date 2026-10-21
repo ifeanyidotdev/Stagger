@@ -2575,7 +2575,7 @@ function App() {
             
             <div className="hunk-details-content">
               <div className="hunk-details-code">
-                <div className="diff-hunk-header" style={{ padding: "8px 14px", background: "rgba(139, 92, 246, 0.08)", borderBottom: "1px solid var(--border-color)", fontFamily: "var(--font-mono)", fontSize: "0.76rem", color: "var(--accent-purple-bright)" }}>
+                <div className="diff-hunk-header" style={{ padding: "8px 14px", background: "var(--bg-active)", borderBottom: "1px solid var(--border-color)", fontFamily: "var(--font-mono)", fontSize: "0.76rem", color: "var(--accent-purple-bright)" }}>
                   {activeDetailHunk.header}
                 </div>
                 <div style={{ padding: "8px 0" }}>

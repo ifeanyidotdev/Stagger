@@ -25,11 +25,12 @@ import {
   GitMerge,
   GitCommit,
   GitPullRequest,
-  Workflow
+  Workflow,
+  Palette
 } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { openUrl, revealItemInDir } from '@tauri-apps/plugin-opener';
-import type { GlobalSettings, SystemGitConfig, WorkspaceSettings } from '../../types/settings';
+import type { GlobalSettings, SystemGitConfig, WorkspaceSettings, AppTheme } from '../../types/settings';
 import type { GitCliResult } from '../../types/git';
 import { 
   GEMINI_MODELS, 
@@ -47,7 +48,7 @@ interface SettingsModalProps {
 }
 
 type ContextType = 'global' | 'workspace';
-type GlobalTab = 'global-git' | 'global-pull' | 'global-gitignore' | 'global-ai';
+type GlobalTab = 'global-git' | 'global-appearance' | 'global-pull' | 'global-gitignore' | 'global-ai';
 type WorkspaceTab = 'workspace-remote' | 'workspace-pull' | 'workspace-identity' | 'workspace-overview';
 
 const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -66,6 +67,20 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<{ success?: boolean; message?: string } | null>(null);
+
+  // Appearance & Theme Settings
+  const [theme, setTheme] = useState<AppTheme>(() => {
+    return (localStorage.getItem('stagenode_theme') as AppTheme) || 'catppuccin-mocha';
+  });
+
+  const handleThemeChange = (newTheme: AppTheme) => {
+    setTheme(newTheme);
+    document.documentElement.setAttribute('data-theme', newTheme);
+    if (document.body) {
+      document.body.setAttribute('data-theme', newTheme);
+    }
+    localStorage.setItem('stagenode_theme', newTheme);
+  };
 
   // Global Git Settings
   const [userName, setUserName] = useState('');
@@ -180,6 +195,14 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         const storedPr = localStorage.getItem('stagenode_pr_merge_method');
         const loadedPrMethod = settings.default_pr_merge_method || (storedPr as any) || 'merge';
         setDefaultPrMergeMethod(loadedPrMethod);
+
+        // Load Theme
+        const storedTheme = (localStorage.getItem('stagenode_theme') as AppTheme) || settings.theme || 'catppuccin-mocha';
+        setTheme(storedTheme);
+        document.documentElement.setAttribute('data-theme', storedTheme);
+        if (document.body) {
+          document.body.setAttribute('data-theme', storedTheme);
+        }
 
         // Load universal gitignore content
         if (loadedGitignorePath) {
@@ -411,8 +434,14 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         default_pull_strategy: defaultPullStrategy,
         auto_open_pull_dialog: autoOpenPullDialog,
         default_pr_merge_method: defaultPrMergeMethod,
+        theme: theme,
       };
 
+      localStorage.setItem('stagenode_theme', theme);
+      document.documentElement.setAttribute('data-theme', theme);
+      if (document.body) {
+        document.body.setAttribute('data-theme', theme);
+      }
       localStorage.setItem('stagenode_pull_strategy', defaultPullStrategy);
       localStorage.setItem('stagenode_auto_open_pull_dialog', JSON.stringify(autoOpenPullDialog));
       localStorage.setItem('stagenode_pr_merge_method', defaultPrMergeMethod);
@@ -503,8 +532,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="settings-window-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="settings-window">
+    <div className="settings-window-overlay" data-theme={theme} onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="settings-window" data-theme={theme}>
         {/* Top Header with Context Switcher */}
         <div className="settings-topbar">
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -513,12 +542,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 width: '32px',
                 height: '32px',
                 borderRadius: '8px',
-                background: 'rgba(139, 92, 246, 0.15)',
+                background: 'var(--bg-active)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 color: 'var(--accent-purple-bright)',
-                border: '1px solid rgba(139, 92, 246, 0.3)',
+                border: '1px solid var(--border-color)',
               }}
             >
               <Settings size={16} />
@@ -597,6 +626,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
                 <button
                   type="button"
+                  className={`settings-nav-btn ${activeGlobalTab === 'global-appearance' ? 'active' : ''}`}
+                  onClick={() => setActiveGlobalTab('global-appearance')}
+                >
+                  <Palette size={15} className="settings-nav-icon" style={{ color: 'var(--accent-purple-bright)' }} />
+                  <span>Appearance</span>
+                </button>
+
+                <button
+                  type="button"
                   className={`settings-nav-btn ${activeGlobalTab === 'global-pull' ? 'active' : ''}`}
                   onClick={() => setActiveGlobalTab('global-pull')}
                 >
@@ -619,7 +657,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                   onClick={() => setActiveGlobalTab('global-ai')}
                 >
                   <Sparkles size={15} className="settings-nav-icon" style={{ color: 'var(--color-modified)' }} />
-                  <span>AI Models & BYOK</span>
+                  <span>AI Settings</span>
                 </button>
               </div>
             ) : (
@@ -747,7 +785,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         alignItems: 'center',
                         justifyContent: 'space-between',
                         gap: '16px',
-                        background: 'rgba(255, 255, 255, 0.02)',
+                        background: 'var(--bg-panel-secondary)',
                         padding: '16px 20px',
                       }}
                     >
@@ -767,6 +805,118 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         />
                         <span className="settings-switch-slider" />
                       </label>
+                    </div>
+                  </>
+                )}
+
+                {/* APPEARANCE & THEME */}
+                {activeContext === 'global' && activeGlobalTab === 'global-appearance' && (
+                  <>
+                    <div>
+                      <h3 style={{ fontSize: '0.96rem', fontWeight: 600, color: 'var(--color-text-bright)' }}>
+                        Appearance
+                      </h3>
+                      <p className="settings-field-hint">
+                        Choose the color theme and visual style for StageNode. Changes apply immediately.
+                      </p>
+                    </div>
+
+                    <div className="settings-card" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <div>
+                          <div style={{ fontSize: '0.86rem', fontWeight: 600, color: 'var(--color-text-bright)' }}>
+                            Active Theme
+                          </div>
+                          <div style={{ fontSize: '0.74rem', color: 'var(--color-text-muted)' }}>
+                            Configures background surfaces, borders, git staging status colors, and accent highlights.
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="settings-theme-grid">
+                        
+                        {/* Option 1: Catppuccin Mocha (Default) */}
+                        <div 
+                          onClick={() => handleThemeChange('catppuccin-mocha')}
+                          className={`settings-theme-card ${theme === 'catppuccin-mocha' ? 'active' : ''}`}
+                        >
+                          <div className="settings-theme-card-header">
+                            <span className="settings-theme-card-title">
+                              Catppuccin Mocha
+                            </span>
+                            {theme === 'catppuccin-mocha' && (
+                              <span className="settings-theme-card-check">
+                                <CheckCircle2 size={16} />
+                              </span>
+                            )}
+                          </div>
+                          <p className="settings-theme-card-desc">
+                            Official soothing cool-dark palette with mauve, lavender, and mint accents on comfortable navy-slate surfaces.
+                          </p>
+                          <div className="settings-theme-swatches">
+                            <span className="settings-swatch" style={{ background: '#1e1e2e' }} title="Base #1e1e2e" />
+                            <span className="settings-swatch" style={{ background: '#181825' }} title="Mantle #181825" />
+                            <span className="settings-swatch" style={{ background: '#cba6f7' }} title="Mauve #cba6f7" />
+                            <span className="settings-swatch" style={{ background: '#a6e3a1' }} title="Green #a6e3a1" />
+                            <span className="settings-swatch" style={{ background: '#fab387' }} title="Peach #fab387" />
+                          </div>
+                        </div>
+
+                        {/* Option 2: Catppuccin Latte */}
+                        <div 
+                          onClick={() => handleThemeChange('catppuccin-latte')}
+                          className={`settings-theme-card ${theme === 'catppuccin-latte' ? 'active' : ''}`}
+                        >
+                          <div className="settings-theme-card-header">
+                            <span className="settings-theme-card-title">
+                              Catppuccin Latte
+                            </span>
+                            {theme === 'catppuccin-latte' && (
+                              <span className="settings-theme-card-check">
+                                <CheckCircle2 size={16} />
+                              </span>
+                            )}
+                          </div>
+                          <p className="settings-theme-card-desc">
+                            Official crisp and light flavor with soothing pastel accents on clean paper surfaces.
+                          </p>
+                          <div className="settings-theme-swatches">
+                            <span className="settings-swatch" style={{ background: '#eff1f5' }} title="Base #eff1f5" />
+                            <span className="settings-swatch" style={{ background: '#ccd0da' }} title="Surface #ccd0da" />
+                            <span className="settings-swatch" style={{ background: '#8839ef' }} title="Mauve #8839ef" />
+                            <span className="settings-swatch" style={{ background: '#40a02b' }} title="Green #40a02b" />
+                            <span className="settings-swatch" style={{ background: '#1e66f5' }} title="Blue #1e66f5" />
+                          </div>
+                        </div>
+
+                        {/* Option 3: Cosmic Charcoal */}
+                        <div 
+                          onClick={() => handleThemeChange('cosmic-dark')}
+                          className={`settings-theme-card ${theme === 'cosmic-dark' ? 'active' : ''}`}
+                        >
+                          <div className="settings-theme-card-header">
+                            <span className="settings-theme-card-title">
+                              Cosmic Charcoal
+                            </span>
+                            {theme === 'cosmic-dark' && (
+                              <span className="settings-theme-card-check">
+                                <CheckCircle2 size={16} />
+                              </span>
+                            )}
+                          </div>
+                          <p className="settings-theme-card-desc">
+                            Legacy high-contrast cold charcoal background with vivid violet accents and emerald diff lines.
+                          </p>
+                          <div className="settings-theme-swatches">
+                            <span className="settings-swatch" style={{ background: '#0c0d12' }} title="Charcoal #0c0d12" />
+                            <span className="settings-swatch" style={{ background: '#15161f' }} title="Panel #15161f" />
+                            <span className="settings-swatch" style={{ background: '#7c3aed' }} title="Violet #7c3aed" />
+                            <span className="settings-swatch" style={{ background: '#22c55e' }} title="Emerald #22c55e" />
+                            <span className="settings-swatch" style={{ background: '#60a5fa' }} title="Blue #60a5fa" />
+                          </div>
+                        </div>
+
+                      </div>
                     </div>
                   </>
                 )}
@@ -876,7 +1026,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         alignItems: 'center',
                         justifyContent: 'space-between',
                         gap: '16px',
-                        background: 'rgba(255, 255, 255, 0.02)',
+                        background: 'var(--bg-panel-secondary)',
                         padding: '16px 20px',
                       }}
                     >
@@ -1092,15 +1242,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                   </>
                 )}
 
-                {/* 3. AI MODELS & BYOK (VERCEL AI SDK) */}
+                {/* 3. AI SETTINGS */}
                 {activeContext === 'global' && activeGlobalTab === 'global-ai' && (
                   <>
                     <div>
                       <h3 style={{ fontSize: '0.96rem', fontWeight: 600, color: 'var(--color-text-bright)' }}>
-                        AI Models & Bring-Your-Own-Key (BYOK)
+                        AI Settings
                       </h3>
                       <p className="settings-field-hint">
-                        Powered by <strong>Vercel AI SDK</strong>. Keys are stored locally on your device in <code style={{ fontFamily: 'var(--font-mono)' }}>~/.stagenode/settings.json</code>.
+                        Configure your AI providers and API keys for smart commit messages and assistance.
                       </p>
                     </div>
 
@@ -1643,7 +1793,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                           style={{
                             padding: '12px 14px',
                             borderRadius: '8px',
-                            background: 'rgba(255, 255, 255, 0.02)',
+                            background: 'var(--bg-panel-secondary)',
                             border: '1px solid var(--border-color)',
                             display: 'flex',
                             alignItems: 'center',
@@ -1758,7 +1908,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 {/* Empty Workspace Fallback */}
                 {!hasWorkspace && activeContext === 'workspace' && (
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', textAlign: 'center', padding: '40px 20px' }}>
-                    <div style={{ width: 48, height: 48, borderRadius: '12px', background: 'rgba(255, 255, 255, 0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px', color: 'var(--color-text-muted)' }}>
+                    <div style={{ width: 48, height: 48, borderRadius: '12px', background: 'var(--bg-active)', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px', color: 'var(--color-text-muted)' }}>
                       <Folder size={24} />
                     </div>
                     <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--color-text-bright)', marginBottom: '8px' }}>

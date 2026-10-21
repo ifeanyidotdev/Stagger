@@ -1,5 +1,5 @@
 import React from 'react';
-import { GitCommit, UserPlus, X } from 'lucide-react';
+import { GitCommit, UserPlus, Users, Plus, X } from 'lucide-react';
 import type { GitFileStatus } from '../../types/git';
 
 interface CommitBuilderProps {
@@ -39,6 +39,14 @@ const CommitBuilder: React.FC<CommitBuilderProps> = ({
 }) => {
   const isCommitReady = Boolean(commitTitle.trim() && (stagedFiles.length > 0 || amendCommit));
 
+  const handleAddAuthor = () => {
+    const val = coAuthorInput.trim().replace(/,/g, "");
+    if (val && !coAuthors.includes(val)) {
+      setCoAuthors([...coAuthors, val]);
+    }
+    setCoAuthorInput("");
+  };
+
   return (
     <div className="commit-builder">
       <div className="commit-inputs-wrapper">
@@ -63,43 +71,78 @@ const CommitBuilder: React.FC<CommitBuilderProps> = ({
           autoComplete="off"
         />
         
-        {(showCoAuthorInput || coAuthors.length > 0) && (
+        {showCoAuthorInput && (
           <div className="coauthors-tag-bar">
-            <span className="coauthors-label">Co-Authors</span>
-            <div className="coauthors-chips-list">
-              {coAuthors.map((author, index) => (
-                <div key={index} className="coauthor-chip">
-                  <span>{author}</span>
-                  <X 
-                    size={12} 
-                    className="coauthor-chip-remove" 
-                    onClick={() => setCoAuthors(coAuthors.filter((_, i) => i !== index))} 
-                  />
-                </div>
-              ))}
-              <input 
-                className="coauthor-tag-input"
-                value={coAuthorInput}
-                onChange={(e) => setCoAuthorInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if ((e.key === "Enter" || e.key === ",") && coAuthorInput.trim()) {
-                    e.preventDefault();
-                    const val = coAuthorInput.trim().replace(/,/g, "");
-                    if (val && !coAuthors.includes(val)) {
-                      setCoAuthors([...coAuthors, val]);
+            <div className="coauthors-header">
+              <div className="coauthors-header-left">
+                <Users size={12} className="coauthors-header-icon" />
+                <span className="coauthors-label">Co-Authors</span>
+                {coAuthors.length > 0 && (
+                  <span className="coauthors-badge">{coAuthors.length}</span>
+                )}
+              </div>
+              <button 
+                type="button" 
+                className="coauthors-close-btn"
+                onClick={() => setShowCoAuthorInput(false)}
+                title="Hide co-authors"
+              >
+                <X size={12} />
+              </button>
+            </div>
+
+            <div className="coauthors-input-container">
+              <div className="coauthors-chips-list">
+                {coAuthors.map((author, index) => (
+                  <div key={index} className="coauthor-chip">
+                    <span className="coauthor-chip-name">{author}</span>
+                    <button
+                      type="button"
+                      className="coauthor-chip-remove"
+                      onClick={() => setCoAuthors(coAuthors.filter((_, i) => i !== index))}
+                      title={`Remove ${author}`}
+                    >
+                      <X size={11} />
+                    </button>
+                  </div>
+                ))}
+                <input 
+                  className="coauthor-tag-input"
+                  value={coAuthorInput}
+                  onChange={(e) => setCoAuthorInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if ((e.key === "Enter" || e.key === ",") && coAuthorInput.trim()) {
+                      e.preventDefault();
+                      handleAddAuthor();
+                    } else if (e.key === "Backspace" && !coAuthorInput && coAuthors.length > 0) {
+                      setCoAuthors(coAuthors.slice(0, -1));
                     }
-                    setCoAuthorInput("");
-                  } else if (e.key === "Backspace" && !coAuthorInput && coAuthors.length > 0) {
-                    setCoAuthors(coAuthors.slice(0, -1));
-                  }
-                }}
-                placeholder="Name <email> or @username..."
-                autoFocus={showCoAuthorInput && coAuthors.length === 0}
-                autoCorrect="off"
-                autoCapitalize="off"
-                spellCheck={false}
-                autoComplete="off"
-              />
+                  }}
+                  placeholder={coAuthors.length === 0 ? "Name <email@example.com> or username..." : "Add another..."}
+                  autoFocus={showCoAuthorInput && coAuthors.length === 0}
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
+                  autoComplete="off"
+                />
+              </div>
+              {coAuthorInput.trim() && (
+                <button 
+                  type="button" 
+                  className="coauthor-add-btn"
+                  onClick={handleAddAuthor}
+                  title="Add co-author"
+                >
+                  <Plus size={11} />
+                  <span>Add</span>
+                </button>
+              )}
+            </div>
+
+            <div className="coauthors-hint">
+              <span>Press <kbd>Enter</kbd> or <kbd>,</kbd> to add</span>
+              <span>•</span>
+              <span>Appends standard <code>Co-authored-by: Name &lt;email&gt;</code> trailer</span>
             </div>
           </div>
         )}
@@ -110,7 +153,7 @@ const CommitBuilder: React.FC<CommitBuilderProps> = ({
           <button 
             className={`coauthor-icon-btn ${showCoAuthorInput || coAuthors.length > 0 ? "active" : ""}`}
             onClick={() => setShowCoAuthorInput(!showCoAuthorInput)}
-            title="Add Co-authors"
+            title={coAuthors.length > 0 ? `Co-authors (${coAuthors.length}): ${coAuthors.join(', ')}` : "Add co-authors"}
             type="button"
           >
             <UserPlus size={14} />

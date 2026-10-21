@@ -1,3 +1,5 @@
+export type AppTheme = 'catppuccin-mocha' | 'catppuccin-latte' | 'cosmic-dark';
+
 export interface GlobalSettings {
   git_user_name?: string | null;
   git_user_email?: string | null;
@@ -13,6 +15,7 @@ export interface GlobalSettings {
   default_pull_strategy?: 'prompt' | 'merge' | 'rebase' | null;
   auto_open_pull_dialog?: boolean | null;
   default_pr_merge_method?: 'merge' | 'squash' | 'rebase' | null;
+  theme?: AppTheme | null;
 }
 
 export interface SystemGitConfig {

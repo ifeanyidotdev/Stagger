@@ -2,60 +2,587 @@
 @import "tailwindcss";
 
 /* ==========================================================================
-   ANTIGRAVITY DESIGN SYSTEM: ELEVATED COSMIC DARK THEME
+   CATPPUCCIN MOCHA DESIGN SYSTEM (DEFAULT)
    ========================================================================== */
 
-:root {
+:root, [data-theme="catppuccin-mocha"] {
   --font-sans: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', Menlo, Monaco, Consolas, monospace;
 
-  /* Antigravity IDE Charcoal Palette */
-  --bg-app: #0c0d12;                     /* Deep dark charcoal canvas */
-  --bg-sidebar: #111218;                 /* Sleek sidebar surface */
-  --bg-panel: #15161f;                   /* Card / floating panel surface */
-  --bg-panel-solid: #15161f;             /* Solid panel background */
-  --bg-panel-secondary: #181924;         /* Recessed container surface */
-  --bg-input: #111218;                   /* Crisp recessed input background */
+  /* Catppuccin Mocha Palette */
+  --bg-app: #1e1e2e;                     /* Catppuccin Mocha Base */
+  --bg-sidebar: #181825;                 /* Catppuccin Mantle */
+  --bg-panel: #313244;                   /* Catppuccin Surface 0 */
+  --bg-panel-solid: #1e1e2e;             /* Solid canvas surface */
+  --bg-panel-secondary: #28283d;         /* Elevated container */
+  --bg-input: #181825;                   /* Recessed input (Mantle) */
 
-  --bg-hover: rgba(255, 255, 255, 0.05); /* Clean hover */
-  --bg-active: #1e202b;                  /* Active / selected pill state */
+  --bg-hover: rgba(205, 214, 244, 0.08); /* Catppuccin text tint hover */
+  --bg-active: #45475a;                  /* Catppuccin Surface 1 */
 
   /* Hairline Borders */
-  --border-color: #1e202b;               /* Precise 1px boundary */
-  --border-hover: #2e3142;               /* Slightly brighter hover boundary */
-  --border-active: #7c3aed;              /* Antigravity purple focus */
-  --border-glow: rgba(124, 58, 237, 0.35);
+  --border-color: #313244;               /* Surface 0 boundary */
+  --border-hover: #45475a;               /* Surface 1 hover boundary */
+  --border-active: #cba6f7;              /* Mauve focus */
+  --border-glow: rgba(203, 166, 247, 0.35);
 
-  /* Primary Violet Accent */
-  --accent-purple: #7c3aed;              /* Violet-600 */
-  --accent-purple-bright: #8b5cf6;       /* Violet-500 */
-  --accent-blue: #60a5fa;                /* Sky-400 */
-  --accent-gradient: #7c3aed;
-  --accent-gradient-hover: #8b5cf6;
-  --accent-button: #7c3aed;
-  --accent-button-hover: #8b5cf6;
+  /* Accents */
+  --accent-purple: #cba6f7;              /* Catppuccin Mauve */
+  --accent-purple-bright: #b4befe;       /* Catppuccin Lavender */
+  --accent-blue: #89b4fa;                /* Catppuccin Blue / Sapphire */
+  --accent-gradient: #cba6f7;
+  --accent-gradient-hover: #b4befe;
+  --accent-button: #cba6f7;
+  --accent-button-hover: #b4befe;
 
   /* Status Indicators matching IDE Diff */
-  --color-staged: #22c55e;               /* Emerald addition */
-  --color-staged-glow: rgba(34, 197, 94, 0.25);
-  --color-modified: #fbbf24;             /* Amber modified */
-  --color-untracked: #f59e0b;            /* Warning untracked */
-  --color-deleted: #ef4444;              /* Rose deletion */
-  --color-conflict: #f43f5e;             /* Conflict */
+  --color-staged: #a6e3a1;               /* Catppuccin Green */
+  --color-staged-glow: rgba(166, 227, 161, 0.25);
+  --color-modified: #f9e2af;             /* Catppuccin Yellow */
+  --color-untracked: #fab387;            /* Catppuccin Peach */
+  --color-deleted: #f38ba8;              /* Catppuccin Red */
+  --color-conflict: #eba0ac;             /* Catppuccin Maroon */
 
   /* Typography */
-  --color-text-bright: #f3f4f6;          /* Primary white */
-  --color-text-main: #9ca3af;            /* Secondary gray */
-  --color-text-muted: #6b7280;           /* Muted text */
-  --color-text-dark: #4b5563;            /* Dark gutter gray */
+  --color-text-bright: #ffffff;          /* Pure White / Rosewater */
+  --color-text-main: #cdd6f4;            /* Catppuccin Text */
+  --color-text-muted: #a6adc8;           /* Catppuccin Subtext 0 */
+  --color-text-dark: #6c7086;            /* Catppuccin Overlay 0 */
 
   /* Elevation */
-  --shadow-card: 0 4px 20px rgba(0, 0, 0, 0.45);
-  --shadow-popup: 0 20px 50px rgba(0, 0, 0, 0.75), 0 0 0 1px #1e202b;
+  --shadow-card: 0 4px 20px rgba(0, 0, 0, 0.55);
+  --shadow-popup: 0 20px 50px rgba(0, 0, 0, 0.8), 0 0 0 1px #313244;
 
   /* Transitions */
   --transition-quick: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
   --transition-smooth: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Catppuccin Latte (Official Light Flavor) */
+[data-theme="catppuccin-latte"] {
+  --bg-app: #eff1f5;                     /* Catppuccin Latte Base */
+  --bg-sidebar: #e6e9ef;                 /* Catppuccin Latte Mantle */
+  --bg-panel: #ffffff;                   /* White card surface */
+  --bg-panel-solid: #ffffff;             /* Solid card surface */
+  --bg-panel-secondary: #e6e9ef;         /* Recessed container / Mantle */
+  --bg-input: #dce0e8;                   /* Crisp recessed input / Crust */
+
+  --bg-hover: rgba(76, 79, 105, 0.08);  /* Latte text tint hover */
+  --bg-active: #ccd0da;                  /* Surface 0 active pill */
+
+  /* Hairline Borders */
+  --border-color: #ccd0da;               /* Surface 0 boundary */
+  --border-hover: #bcc0cc;               /* Surface 1 boundary */
+  --border-active: #8839ef;              /* Mauve focus */
+  --border-glow: rgba(136, 57, 239, 0.25);
+
+  /* Primary Accents */
+  --accent-purple: #8839ef;              /* Catppuccin Latte Mauve */
+  --accent-purple-bright: #7287fd;       /* Catppuccin Latte Lavender */
+  --accent-blue: #1e66f5;                /* Catppuccin Latte Blue */
+  --accent-gradient: #8839ef;
+  --accent-gradient-hover: #7287fd;
+  --accent-button: #8839ef;
+  --accent-button-hover: #7287fd;
+
+  /* Status Indicators matching Latte */
+  --color-staged: #40a02b;               /* Catppuccin Latte Green */
+  --color-staged-glow: rgba(64, 160, 43, 0.2);
+  --color-modified: #df8e1d;             /* Catppuccin Latte Yellow */
+  --color-untracked: #fe640b;            /* Catppuccin Latte Peach */
+  --color-deleted: #d20f39;              /* Catppuccin Latte Red */
+  --color-conflict: #e64553;             /* Catppuccin Latte Maroon */
+
+  /* Typography */
+  --color-text-bright: #20222c;          /* High contrast dark text */
+  --color-text-main: #4c4f69;            /* Catppuccin Latte Text */
+  --color-text-muted: #6c6f85;           /* Catppuccin Latte Subtext 0 */
+  --color-text-dark: #9ca0b0;            /* Catppuccin Latte Overlay 0 */
+
+  /* Elevation */
+  --shadow-card: 0 4px 20px rgba(0, 0, 0, 0.08);
+  --shadow-popup: 0 20px 50px rgba(0, 0, 0, 0.15), 0 0 0 1px #ccd0da;
+}
+
+/* Catppuccin Latte (Official Light Flavor) - Component Adaptations */
+[data-theme="catppuccin-latte"] ::-webkit-scrollbar-thumb {
+  background: rgba(76, 79, 105, 0.2);
+}
+[data-theme="catppuccin-latte"] ::-webkit-scrollbar-thumb:hover {
+  background: rgba(76, 79, 105, 0.35);
+}
+
+/* Latte - Settings Modal & Dialog Overlay */
+[data-theme="catppuccin-latte"] .settings-window-overlay,
+.settings-window-overlay[data-theme="catppuccin-latte"] {
+  background: rgba(76, 79, 105, 0.38) !important;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+[data-theme="catppuccin-latte"] .settings-window,
+.settings-window[data-theme="catppuccin-latte"] {
+  background: #ffffff !important;
+  color: #4c4f69 !important;
+  border: 1px solid #ccd0da !important;
+  box-shadow: 0 24px 64px rgba(76, 79, 105, 0.18), 0 0 0 1px #ccd0da !important;
+}
+
+[data-theme="catppuccin-latte"] .settings-sidebar,
+.settings-window[data-theme="catppuccin-latte"] .settings-sidebar {
+  background: #e6e9ef !important;
+  border-right: 1px solid #ccd0da !important;
+}
+
+[data-theme="catppuccin-latte"] .settings-topbar,
+.settings-window[data-theme="catppuccin-latte"] .settings-topbar {
+  background: #e6e9ef !important;
+  border-bottom: 1px solid #ccd0da !important;
+}
+
+[data-theme="catppuccin-latte"] .settings-footer,
+.settings-window[data-theme="catppuccin-latte"] .settings-footer {
+  background: #e6e9ef !important;
+  border-top: 1px solid #ccd0da !important;
+}
+
+[data-theme="catppuccin-latte"] .settings-content-pane,
+.settings-window[data-theme="catppuccin-latte"] .settings-content-pane {
+  background: #eff1f5 !important;
+}
+
+[data-theme="catppuccin-latte"] .settings-card,
+.settings-window[data-theme="catppuccin-latte"] .settings-card {
+  background: #ffffff !important;
+  border: 1px solid #ccd0da !important;
+  box-shadow: 0 2px 10px rgba(76, 79, 105, 0.06) !important;
+}
+
+[data-theme="catppuccin-latte"] .settings-context-switcher,
+.settings-window[data-theme="catppuccin-latte"] .settings-context-switcher {
+  background: #dce0e8 !important;
+  border: 1px solid #ccd0da !important;
+}
+
+[data-theme="catppuccin-latte"] .settings-context-tab.active,
+.settings-window[data-theme="catppuccin-latte"] .settings-context-tab.active {
+  background: #ffffff !important;
+  color: #20222c !important;
+  box-shadow: 0 1px 4px rgba(76, 79, 105, 0.12) !important;
+}
+
+[data-theme="catppuccin-latte"] .settings-nav-btn,
+.settings-window[data-theme="catppuccin-latte"] .settings-nav-btn {
+  color: #4c4f69 !important;
+}
+
+[data-theme="catppuccin-latte"] .settings-nav-btn:hover,
+.settings-window[data-theme="catppuccin-latte"] .settings-nav-btn:hover {
+  background: rgba(76, 79, 105, 0.08) !important;
+  color: #20222c !important;
+}
+
+[data-theme="catppuccin-latte"] .settings-nav-btn.active,
+.settings-window[data-theme="catppuccin-latte"] .settings-nav-btn.active {
+  background: #ccd0da !important;
+  color: #20222c !important;
+  border-color: #bcc0cc !important;
+}
+
+[data-theme="catppuccin-latte"] .settings-theme-card,
+.settings-window[data-theme="catppuccin-latte"] .settings-theme-card {
+  background: #eff1f5 !important;
+  border: 1px solid #ccd0da !important;
+}
+
+[data-theme="catppuccin-latte"] .settings-theme-card:hover,
+.settings-window[data-theme="catppuccin-latte"] .settings-theme-card:hover {
+  background: #e6e9ef !important;
+  border-color: #bcc0cc !important;
+}
+
+[data-theme="catppuccin-latte"] .settings-theme-card.active,
+.settings-window[data-theme="catppuccin-latte"] .settings-theme-card.active {
+  background: #ffffff !important;
+  border-color: #8839ef !important;
+  box-shadow: 0 0 0 2px #8839ef, 0 4px 14px rgba(136, 57, 239, 0.15) !important;
+}
+
+[data-theme="catppuccin-latte"] .settings-theme-card-title,
+.settings-window[data-theme="catppuccin-latte"] .settings-theme-card-title {
+  color: #20222c !important;
+}
+
+[data-theme="catppuccin-latte"] .settings-theme-card-desc,
+.settings-window[data-theme="catppuccin-latte"] .settings-theme-card-desc {
+  color: #6c6f85 !important;
+}
+
+[data-theme="catppuccin-latte"] .dialog-input,
+.settings-window[data-theme="catppuccin-latte"] .dialog-input {
+  background: #ffffff !important;
+  color: #20222c !important;
+  border: 1px solid #ccd0da !important;
+}
+
+[data-theme="catppuccin-latte"] .dialog-input:focus,
+.settings-window[data-theme="catppuccin-latte"] .dialog-input:focus {
+  border-color: #8839ef !important;
+  box-shadow: 0 0 0 2px rgba(136, 57, 239, 0.2) !important;
+}
+
+[data-theme="catppuccin-latte"] .dialog-button.secondary,
+.settings-window[data-theme="catppuccin-latte"] .dialog-button.secondary {
+  background: #e6e9ef !important;
+  color: #4c4f69 !important;
+  border: 1px solid #ccd0da !important;
+}
+
+[data-theme="catppuccin-latte"] .dialog-button.secondary:hover:not(:disabled),
+.settings-window[data-theme="catppuccin-latte"] .dialog-button.secondary:hover:not(:disabled) {
+  background: #dce0e8 !important;
+  color: #20222c !important;
+  border-color: #bcc0cc !important;
+}
+
+/* Latte - Canvas & Staging Mesh */
+[data-theme="catppuccin-latte"] .canvas-container {
+  background: 
+    radial-gradient(#bcc0cc 1.2px, transparent 1.2px) 0 0 / 22px 22px,
+    #eff1f5 !important;
+}
+
+[data-theme="catppuccin-latte"] .canvas-instruction {
+  background: #ffffff !important;
+  border: 1px solid #ccd0da !important;
+  color: #20222c !important;
+  box-shadow: 0 2px 10px rgba(76, 79, 105, 0.08) !important;
+}
+
+[data-theme="catppuccin-latte"] .empty-canvas {
+  color: #6c6f85 !important;
+}
+
+[data-theme="catppuccin-latte"] .empty-canvas-icon {
+  opacity: 0.45 !important;
+  color: #6c6f85 !important;
+}
+
+[data-theme="catppuccin-latte"] .empty-canvas-text {
+  color: #4c4f69 !important;
+  font-weight: 500 !important;
+}
+
+[data-theme="catppuccin-latte"] .mesh-node {
+  background: #ffffff !important;
+  border: 1px solid #ccd0da !important;
+  box-shadow: 0 4px 18px rgba(76, 79, 105, 0.1) !important;
+}
+
+[data-theme="catppuccin-latte"] .mesh-node:hover {
+  border-color: #8839ef !important;
+  box-shadow: 0 10px 28px rgba(136, 57, 239, 0.16) !important;
+}
+
+[data-theme="catppuccin-latte"] .node-title {
+  color: #8839ef !important;
+  font-weight: 600 !important;
+}
+
+[data-theme="catppuccin-latte"] .node-diff-preview {
+  background: #eff1f5 !important;
+  border: 1px solid #ccd0da !important;
+}
+
+[data-theme="catppuccin-latte"] .diff-hunk-header {
+  color: #8839ef !important;
+}
+
+[data-theme="catppuccin-latte"] .diff-line.context {
+  color: #4c4f69 !important;
+}
+
+[data-theme="catppuccin-latte"] .diff-line.addition {
+  background: rgba(64, 160, 43, 0.16) !important;
+  color: #40a02b !important;
+}
+
+[data-theme="catppuccin-latte"] .diff-line.deletion {
+  background: rgba(210, 15, 57, 0.14) !important;
+  color: #d20f39 !important;
+}
+
+[data-theme="catppuccin-latte"] .mesh-node.staged-zone {
+  border: 2px dashed #40a02b !important;
+  background: #ffffff !important;
+  box-shadow: 0 0 24px -4px rgba(64, 160, 43, 0.25) !important;
+}
+
+[data-theme="catppuccin-latte"] .connector-line {
+  filter: drop-shadow(0 1px 3px rgba(136, 57, 239, 0.25)) !important;
+}
+
+/* Latte - Floating Hunk Details Inspector */
+[data-theme="catppuccin-latte"] .hunk-details-overlay {
+  background: rgba(76, 79, 105, 0.45) !important;
+}
+
+[data-theme="catppuccin-latte"] .hunk-details-modal {
+  background: #ffffff !important;
+  border: 1px solid #ccd0da !important;
+  box-shadow: 0 24px 64px rgba(76, 79, 105, 0.2) !important;
+}
+
+[data-theme="catppuccin-latte"] .hunk-details-header {
+  background: #e6e9ef !important;
+  border-bottom: 1px solid #ccd0da !important;
+}
+
+[data-theme="catppuccin-latte"] .hunk-details-title {
+  color: #20222c !important;
+}
+
+[data-theme="catppuccin-latte"] .hunk-details-content {
+  background: #eff1f5 !important;
+}
+
+[data-theme="catppuccin-latte"] .hunk-details-code {
+  background: #ffffff !important;
+  border: 1px solid #ccd0da !important;
+}
+
+[data-theme="catppuccin-latte"] .hunk-details-actions {
+  background: #e6e9ef !important;
+  border-top: 1px solid #ccd0da !important;
+}
+
+/* Latte - Commit Builder (Canvas Dock) */
+[data-theme="catppuccin-latte"] .commit-builder {
+  background: #ffffff !important;
+  border: 1px solid #ccd0da !important;
+  box-shadow: 0 4px 16px rgba(76, 79, 105, 0.08) !important;
+}
+
+[data-theme="catppuccin-latte"] .commit-summary-input {
+  background: #eff1f5 !important;
+  border: 1px solid #ccd0da !important;
+  color: #20222c !important;
+}
+
+[data-theme="catppuccin-latte"] .commit-summary-input:focus {
+  border-color: #8839ef !important;
+  box-shadow: 0 0 0 2px rgba(136, 57, 239, 0.2) !important;
+}
+
+[data-theme="catppuccin-latte"] .commit-desc-input {
+  background: #eff1f5 !important;
+  border: 1px solid #ccd0da !important;
+  color: #4c4f69 !important;
+}
+
+[data-theme="catppuccin-latte"] .commit-desc-input:focus {
+  border-color: #8839ef !important;
+  box-shadow: 0 0 0 2px rgba(136, 57, 239, 0.2) !important;
+}
+
+[data-theme="catppuccin-latte"] .smart-commit-btn {
+  background: #8839ef !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 14px rgba(136, 57, 239, 0.3) !important;
+}
+
+[data-theme="catppuccin-latte"] .smart-commit-btn:hover:not(:disabled) {
+  background: #7287fd !important;
+  box-shadow: 0 6px 18px rgba(136, 57, 239, 0.45) !important;
+}
+
+[data-theme="catppuccin-latte"] .smart-commit-btn:disabled {
+  background: #ccd0da !important;
+  color: #9ca0b0 !important;
+  border: 1px solid #bcc0cc !important;
+}
+
+[data-theme="catppuccin-latte"] .coauthors-tag-bar {
+  background: #e6e9ef !important;
+  border: 1px solid #ccd0da !important;
+}
+
+[data-theme="catppuccin-latte"] .coauthor-chip {
+  background: #ffffff !important;
+  border: 1px solid #ccd0da !important;
+  color: #4c4f69 !important;
+}
+
+[data-theme="catppuccin-latte"] .coauthor-tag-input {
+  color: #20222c !important;
+}
+
+/* Latte - File Pane */
+[data-theme="catppuccin-latte"] .file-pane {
+  background: #e6e9ef !important;
+  border-right: 1px solid #ccd0da !important;
+}
+
+[data-theme="catppuccin-latte"] .file-item:hover {
+  background: rgba(76, 79, 105, 0.08) !important;
+  color: #20222c !important;
+}
+
+[data-theme="catppuccin-latte"] .file-item.selected {
+  background: #ccd0da !important;
+  border-color: #8839ef !important;
+  color: #20222c !important;
+}
+
+/* Latte - Topbar & Sidebar */
+[data-theme="catppuccin-latte"] .topbar {
+  background: #e6e9ef !important;
+  border-bottom: 1px solid #ccd0da !important;
+}
+
+[data-theme="catppuccin-latte"] .sidebar {
+  background: #e6e9ef !important;
+  border-right: 1px solid #ccd0da !important;
+}
+
+[data-theme="catppuccin-latte"] .tab-button {
+  color: #6c6f85 !important;
+}
+
+[data-theme="catppuccin-latte"] .tab-button:hover {
+  background: rgba(76, 79, 105, 0.08) !important;
+  color: #20222c !important;
+}
+
+[data-theme="catppuccin-latte"] .tab-button.active {
+  background: #ffffff !important;
+  color: #20222c !important;
+  border: 1px solid #ccd0da !important;
+  box-shadow: 0 1px 4px rgba(76, 79, 105, 0.1) !important;
+}
+
+[data-theme="catppuccin-latte"] .topbar-branch-pill {
+  background: #ffffff !important;
+  border: 1px solid #ccd0da !important;
+  color: #20222c !important;
+}
+
+[data-theme="catppuccin-latte"] .topbar-action-btn {
+  background: #ffffff !important;
+  border: 1px solid #ccd0da !important;
+  color: #4c4f69 !important;
+}
+
+[data-theme="catppuccin-latte"] .topbar-action-btn:hover {
+  background: #eff1f5 !important;
+  color: #20222c !important;
+  border-color: #bcc0cc !important;
+}
+
+/* Latte - History Graph */
+[data-theme="catppuccin-latte"] .graph-pane {
+  background: #eff1f5 !important;
+}
+
+[data-theme="catppuccin-latte"] .commit-row:hover {
+  background: rgba(76, 79, 105, 0.06) !important;
+}
+
+[data-theme="catppuccin-latte"] .commit-row.selected {
+  background: #ccd0da !important;
+}
+
+[data-theme="catppuccin-latte"] .commit-details-pane {
+  background: #e6e9ef !important;
+  border-left: 1px solid #ccd0da !important;
+}
+
+/* Latte - General Modals & Dialogs */
+[data-theme="catppuccin-latte"] .dialog-overlay {
+  background: rgba(76, 79, 105, 0.45) !important;
+}
+
+[data-theme="catppuccin-latte"] .dialog-content {
+  background: #ffffff !important;
+  border: 1px solid #ccd0da !important;
+  box-shadow: 0 20px 60px rgba(76, 79, 105, 0.16) !important;
+  color: #4c4f69 !important;
+}
+
+[data-theme="catppuccin-latte"] .dialog-title {
+  color: #20222c !important;
+}
+
+[data-theme="catppuccin-latte"] .dialog-close-btn {
+  color: #6c6f85 !important;
+}
+
+[data-theme="catppuccin-latte"] .dialog-close-btn:hover {
+  background: rgba(76, 79, 105, 0.08) !important;
+  color: #20222c !important;
+}
+
+[data-theme="catppuccin-latte"] .pull-strategy-card {
+  background: #e6e9ef !important;
+  border: 1px solid #ccd0da !important;
+}
+
+[data-theme="catppuccin-latte"] .pull-strategy-card:hover {
+  background: #dce0e8 !important;
+  border-color: #bcc0cc !important;
+}
+
+[data-theme="catppuccin-latte"] .pull-strategy-card.selected {
+  background: #ccd0da !important;
+  border-color: #8839ef !important;
+  box-shadow: 0 0 16px -4px rgba(136, 57, 239, 0.25) !important;
+}
+
+[data-theme="catppuccin-latte"] .pull-strategy-icon-box {
+  background: #ffffff !important;
+  border: 1px solid #ccd0da !important;
+  color: #4c4f69 !important;
+}
+
+[data-theme="catppuccin-latte"] .pull-strategy-card.selected .pull-strategy-icon-box {
+  background: #8839ef !important;
+  color: #ffffff !important;
+  border-color: #8839ef !important;
+}
+
+/* Cosmic Dark Legacy Variant */
+[data-theme="cosmic-dark"] {
+  --bg-app: #0c0d12;
+  --bg-sidebar: #111218;
+  --bg-panel: #15161f;
+  --bg-panel-solid: #15161f;
+  --bg-panel-secondary: #181924;
+  --bg-input: #111218;
+  --bg-hover: rgba(255, 255, 255, 0.05);
+  --bg-active: #1e202b;
+  --border-color: #1e202b;
+  --border-hover: #2e3142;
+  --border-active: #7c3aed;
+  --border-glow: rgba(124, 58, 237, 0.35);
+  --accent-purple: #7c3aed;
+  --accent-purple-bright: #8b5cf6;
+  --accent-blue: #60a5fa;
+  --accent-gradient: #7c3aed;
+  --accent-gradient-hover: #8b5cf6;
+  --accent-button: #7c3aed;
+  --accent-button-hover: #8b5cf6;
+  --color-staged: #22c55e;
+  --color-staged-glow: rgba(34, 197, 94, 0.25);
+  --color-modified: #fbbf24;
+  --color-untracked: #f59e0b;
+  --color-deleted: #ef4444;
+  --color-conflict: #f43f5e;
+  --color-text-bright: #f3f4f6;
+  --color-text-main: #9ca3af;
+  --color-text-muted: #6b7280;
+  --color-text-dark: #4b5563;
+  --shadow-card: 0 4px 20px rgba(0, 0, 0, 0.45);
+  --shadow-popup: 0 20px 50px rgba(0, 0, 0, 0.75), 0 0 0 1px #1e202b;
 }
 
 /* ==========================================================================
@@ -202,7 +729,7 @@ button, input, textarea, select, a, .workspace-trigger-btn, .tab-button, .branch
 }
 
 .workspace-trigger-btn:hover {
-  background: #1e202b;
+  background: var(--bg-active);
   border-color: var(--border-hover);
 }
 
@@ -298,9 +825,9 @@ button, input, textarea, select, a, .workspace-trigger-btn, .tab-button, .branch
 }
 
 .workspace-menu-item.active {
-  background: rgba(124, 58, 237, 0.12);
-  border-color: rgba(124, 58, 237, 0.25);
-  color: #ffffff;
+  background: var(--bg-active);
+  border-color: var(--border-hover);
+  color: var(--color-text-bright);
   font-weight: 500;
 }
 
@@ -364,9 +891,9 @@ button, input, textarea, select, a, .workspace-trigger-btn, .tab-button, .branch
 }
 
 .workspace-menu-add-btn:hover {
-  background: rgba(124, 58, 237, 0.16);
-  border-color: var(--accent-purple);
-  color: #ffffff;
+  background: var(--bg-hover);
+  border-color: var(--border-hover);
+  color: var(--color-text-bright);
 }
 
 .sidebar-toggle-btn {
@@ -474,8 +1001,8 @@ button, input, textarea, select, a, .workspace-trigger-btn, .tab-button, .branch
 }
 
 .dropdown-menu-item.highlight:hover {
-  background: rgba(96, 165, 250, 0.12);
-  color: #ffffff;
+  background: var(--bg-hover);
+  color: var(--accent-blue);
 }
 
 .dropdown-menu-item.highlight-warning {
@@ -483,8 +1010,8 @@ button, input, textarea, select, a, .workspace-trigger-btn, .tab-button, .branch
 }
 
 .dropdown-menu-item.highlight-warning:hover {
-  background: rgba(245, 158, 11, 0.12);
-  color: #ffffff;
+  background: var(--bg-hover);
+  color: var(--color-modified);
 }
 
 .dropdown-divider {
@@ -623,9 +1150,9 @@ button, input, textarea, select, a, .workspace-trigger-btn, .tab-button, .branch
 }
 
 .sync-button:hover:not(:disabled) {
-  background: #202230;
+  background: var(--bg-active);
   border-color: var(--border-hover);
-  color: #ffffff;
+  color: var(--color-text-bright);
 }
 
 .sync-button:disabled {
@@ -790,9 +1317,9 @@ button, input, textarea, select, a, .workspace-trigger-btn, .tab-button, .branch
 }
 
 .tab-button.active {
-  color: #ffffff;
+  color: var(--color-text-bright);
   background: var(--bg-active);
-  border-color: rgba(255, 255, 255, 0.08);
+  border-color: var(--border-hover);
 }
 
 /* Active Branch Indicator Pill in Topbar */
@@ -857,7 +1384,7 @@ button, input, textarea, select, a, .workspace-trigger-btn, .tab-button, .branch
 }
 
 .topbar-action-btn:hover {
-  background: #202230;
+  background: var(--bg-active);
   border-color: var(--border-hover);
 }
 
@@ -1046,7 +1573,7 @@ button, input, textarea, select, a, .workspace-trigger-btn, .tab-button, .branch
 }
 
 .badge {
-  background: rgba(255, 255, 255, 0.07);
+  background: var(--bg-active);
   color: var(--color-text-bright);
   padding: 1px 6px;
   border-radius: 10px;
@@ -1054,6 +1581,7 @@ button, input, textarea, select, a, .workspace-trigger-btn, .tab-button, .branch
   font-family: var(--font-mono);
   font-weight: 600;
   flex-shrink: 0;
+  border: 1px solid var(--border-color);
 }
 
 .header-checkbox,
@@ -1105,8 +1633,8 @@ button, input, textarea, select, a, .workspace-trigger-btn, .tab-button, .branch
   justify-content: space-between;
   padding: 5px 8px;
   margin: 3px 2px 6px 2px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: var(--bg-panel-secondary);
+  border: 1px solid var(--border-color);
   border-radius: 7px;
   animation: fadeIn 0.14s ease-out;
   gap: 8px;
@@ -1357,7 +1885,7 @@ button, input, textarea, select, a, .workspace-trigger-btn, .tab-button, .branch
 
 .canvas-container {
   background: 
-    radial-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px) 0 0 / 22px 22px,
+    radial-gradient(var(--border-color) 1.2px, transparent 1.2px) 0 0 / 22px 22px,
     var(--bg-app);
   border: none;
   border-radius: 0;
@@ -1379,13 +1907,14 @@ button, input, textarea, select, a, .workspace-trigger-btn, .tab-button, .branch
 .canvas-instruction {
   display: inline-flex;
   align-items: center;
-  background: rgba(15, 16, 23, 0.85);
+  background: var(--bg-panel);
   backdrop-filter: blur(12px);
   border: 1px solid var(--border-color);
   padding: 5px 12px;
   border-radius: 20px;
   font-size: 0.74rem;
-  color: var(--color-text-muted);
+  color: var(--color-text-bright);
+  box-shadow: var(--shadow-card);
 }
 
 .mesh-overlay-svg {
@@ -1399,7 +1928,7 @@ button, input, textarea, select, a, .workspace-trigger-btn, .tab-button, .branch
 .connector-line {
   fill: none;
   stroke-width: 2px;
-  filter: drop-shadow(0 0 4px rgba(139, 92, 246, 0.3));
+  filter: drop-shadow(0 0 4px var(--border-glow));
   transition: stroke 0.2s ease;
 }
 
@@ -1407,19 +1936,19 @@ button, input, textarea, select, a, .workspace-trigger-btn, .tab-button, .branch
 .mesh-node {
   position: absolute;
   width: 320px;
-  background: rgba(17, 19, 28, 0.95);
+  background: var(--bg-panel);
   backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.09);
+  border: 1px solid var(--border-color);
   border-radius: 10px;
   padding: 10px 12px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  box-shadow: var(--shadow-card);
   z-index: 5;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .mesh-node:hover {
-  border-color: rgba(139, 92, 246, 0.4);
-  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.7), 0 0 16px -2px rgba(139, 92, 246, 0.2);
+  border-color: var(--accent-purple);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.18), 0 0 16px -2px var(--border-glow);
 }
 
 .node-header {
@@ -1441,8 +1970,8 @@ button, input, textarea, select, a, .workspace-trigger-btn, .tab-button, .branch
 }
 
 .node-action {
-  background: rgba(139, 92, 246, 0.15);
-  border: 1px solid rgba(139, 92, 246, 0.3);
+  background: var(--bg-active);
+  border: 1px solid var(--border-color);
   color: var(--accent-purple-bright);
   font-family: var(--font-sans);
   font-size: 0.7rem;
@@ -1454,9 +1983,10 @@ button, input, textarea, select, a, .workspace-trigger-btn, .tab-button, .branch
 }
 
 .node-action:hover {
-  background: rgba(139, 92, 246, 0.28);
+  background: var(--accent-purple);
+  color: #ffffff;
   border-color: var(--accent-purple);
-  box-shadow: 0 0 10px rgba(139, 92, 246, 0.3);
+  box-shadow: 0 0 10px var(--border-glow);
 }
 
 .node-action.staged {
@@ -1466,8 +1996,8 @@ button, input, textarea, select, a, .workspace-trigger-btn, .tab-button, .branch
 }
 
 .node-diff-preview {
-  background: rgba(8, 9, 13, 0.8);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
   border-radius: 6px;
   padding: 6px;
   font-family: var(--font-mono);
@@ -1476,7 +2006,7 @@ button, input, textarea, select, a, .workspace-trigger-btn, .tab-button, .branch
 
 .diff-hunk-header {
   font-size: 0.68rem;
-  color: #64748b;
+  color: var(--accent-purple);
   margin-bottom: 4px;
 }
 
@@ -1490,23 +2020,23 @@ button, input, textarea, select, a, .workspace-trigger-btn, .tab-button, .branch
 }
 
 .diff-line.addition {
-  background: rgba(16, 185, 129, 0.12);
-  color: #34d399;
+  background: rgba(166, 227, 161, 0.14);
+  color: var(--color-staged);
 }
 
 .diff-line.deletion {
-  background: rgba(244, 63, 94, 0.12);
-  color: #fb7185;
+  background: rgba(243, 139, 168, 0.14);
+  color: var(--color-deleted);
 }
 
 .diff-line.context {
-  color: #94a3b8;
+  color: var(--color-text-muted);
 }
 
 .mesh-node.staged-zone {
-  border: 2px dashed rgba(16, 185, 129, 0.35);
-  background: rgba(16, 185, 129, 0.04);
-  box-shadow: 0 0 20px -5px rgba(16, 185, 129, 0.15);
+  border: 2px dashed var(--color-staged);
+  background: var(--bg-panel);
+  box-shadow: 0 0 20px -5px var(--color-staged-glow);
 }
 
 .empty-canvas {
@@ -1531,7 +2061,7 @@ button, input, textarea, select, a, .workspace-trigger-btn, .tab-button, .branch
   display: flex;
   flex-direction: column;
   gap: 8px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--shadow-card);
   flex-shrink: 0;
   margin: 12px 16px;
 }
@@ -1624,15 +2154,227 @@ button, input, textarea, select, a, .workspace-trigger-btn, .tab-button, .branch
   color: var(--color-text-muted);
 }
 
+/* --- CO-AUTHORS PANEL IN COMMIT BUILDER --- */
+.coauthors-tag-bar {
+  background: var(--bg-panel-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 9px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  animation: fadeIn 0.15s ease-out;
+  margin-top: 2px;
+}
+
+.coauthors-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.coauthors-header-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.coauthors-header-icon {
+  color: var(--accent-purple-bright);
+}
+
+.coauthors-label {
+  font-size: 0.73rem;
+  font-weight: 600;
+  color: var(--color-text-bright);
+  font-family: var(--font-sans);
+  letter-spacing: 0.01em;
+}
+
+.coauthors-badge {
+  background: rgba(139, 92, 246, 0.18);
+  border: 1px solid rgba(139, 92, 246, 0.35);
+  color: var(--accent-purple-bright);
+  font-size: 0.65rem;
+  font-weight: 600;
+  padding: 0 5px;
+  border-radius: 10px;
+  font-family: var(--font-mono);
+}
+
+.coauthors-close-btn {
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: var(--transition-quick);
+}
+
+.coauthors-close-btn:hover {
+  color: var(--color-text-bright);
+  background: var(--bg-hover);
+}
+
+.coauthors-input-container {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-radius: 7px;
+  padding: 4px 8px;
+  transition: var(--transition-quick);
+  min-height: 34px;
+}
+
+.coauthors-input-container:focus-within {
+  border-color: var(--accent-purple);
+  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.2);
+}
+
+.coauthors-chips-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  flex: 1;
+  min-width: 0;
+}
+
+.coauthor-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(124, 58, 237, 0.14);
+  border: 1px solid rgba(124, 58, 237, 0.32);
+  color: #ddd6fe;
+  padding: 2px 7px 2px 8px;
+  border-radius: 12px;
+  font-size: 0.72rem;
+  font-weight: 500;
+  font-family: var(--font-sans);
+  max-width: 100%;
+  transition: var(--transition-quick);
+}
+
+.coauthor-chip:hover {
+  background: rgba(124, 58, 237, 0.22);
+  border-color: rgba(124, 58, 237, 0.45);
+}
+
+.coauthor-chip-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 220px;
+}
+
+.coauthor-chip-remove {
+  background: transparent;
+  border: none;
+  color: #a78bfa;
+  cursor: pointer;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  width: 14px;
+  height: 14px;
+  transition: var(--transition-quick);
+}
+
+.coauthor-chip-remove:hover {
+  color: var(--color-conflict);
+  background: rgba(244, 63, 94, 0.15);
+}
+
+.coauthor-tag-input {
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--color-text-bright);
+  font-family: var(--font-sans);
+  font-size: 0.76rem;
+  flex: 1;
+  min-width: 160px;
+  padding: 3px 2px;
+}
+
+.coauthor-tag-input::placeholder {
+  color: var(--color-text-muted);
+  font-size: 0.74rem;
+}
+
+.coauthor-add-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: rgba(139, 92, 246, 0.2);
+  border: 1px solid rgba(139, 92, 246, 0.35);
+  color: var(--accent-purple-bright);
+  font-family: var(--font-sans);
+  font-size: 0.69rem;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 5px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: var(--transition-quick);
+}
+
+.coauthor-add-btn:hover {
+  background: rgba(139, 92, 246, 0.32);
+  border-color: var(--accent-purple);
+  color: #ffffff;
+}
+
+.coauthors-hint {
+  font-size: 0.67rem;
+  color: var(--color-text-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.coauthors-hint kbd {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 3px;
+  padding: 0 4px;
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+  color: var(--color-text-bright);
+}
+
+.coauthors-hint code {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: #c4b5fd;
+  background: rgba(139, 92, 246, 0.1);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
 .coauthor-icon-btn {
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid var(--border-color);
   color: var(--color-text-muted);
   cursor: pointer;
-  padding: 6px;
+  height: 28px;
+  min-width: 28px;
+  padding: 0 6px;
   border-radius: 6px;
-  display: flex;
+  display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 4px;
   transition: var(--transition-quick);
 }
@@ -1641,6 +2383,17 @@ button, input, textarea, select, a, .workspace-trigger-btn, .tab-button, .branch
   background: rgba(139, 92, 246, 0.15);
   border-color: var(--accent-purple);
   color: var(--accent-purple-bright);
+}
+
+.coauthor-count-badge {
+  background: var(--accent-purple);
+  color: #ffffff;
+  font-size: 0.62rem;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 10px;
+  font-family: var(--font-mono);
+  line-height: 1.1;
 }
 
 .checkbox-label {
@@ -1812,10 +2565,10 @@ button, input, textarea, select, a, .workspace-trigger-btn, .tab-button, .branch
 }
 
 .dialog-content {
-  background: rgba(15, 16, 23, 0.95);
+  background: var(--bg-panel);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border-color);
   box-shadow: var(--shadow-popup);
   border-radius: 16px;
   width: 100%;
@@ -1965,10 +2718,10 @@ button, input, textarea, select, a, .workspace-trigger-btn, .tab-button, .branch
 }
 
 .hunk-details-modal {
-  background: rgba(15, 17, 24, 0.95);
+  background: var(--bg-panel);
   backdrop-filter: blur(28px);
   -webkit-backdrop-filter: blur(28px);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--border-color);
   border-radius: 16px;
   width: 820px;
   max-width: 95vw;
@@ -1976,7 +2729,7 @@ button, input, textarea, select, a, .workspace-trigger-btn, .tab-button, .branch
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.8), 0 0 35px rgba(139, 92, 246, 0.15);
+  box-shadow: var(--shadow-popup);
   animation: dialogPop 0.18s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -2201,12 +2954,12 @@ select.dialog-input option {
   left: 0;
   right: 0;
   z-index: 120;
-  background: rgba(18, 19, 28, 0.98);
+  background: var(--bg-panel);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border-color);
   border-radius: 10px;
-  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  box-shadow: var(--shadow-popup);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -2582,7 +3335,7 @@ select.dialog-input option {
 .settings-window-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(5, 7, 10, 0.82);
+  background: rgba(0, 0, 0, 0.65);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
   z-index: 1200;
@@ -2593,11 +3346,11 @@ select.dialog-input option {
 }
 
 .settings-window {
-  background: radial-gradient(circle at 85% 0%, rgba(124, 58, 237, 0.09) 0%, rgba(14, 16, 23, 0.98) 60%), #0e1017;
+  background: var(--bg-panel);
   backdrop-filter: blur(36px);
   -webkit-backdrop-filter: blur(36px);
-  border: 1px solid rgba(255, 255, 255, 0.09);
-  box-shadow: 0 32px 80px rgba(0, 0, 0, 0.92), 0 0 1px 1px rgba(255, 255, 255, 0.08), 0 0 60px rgba(124, 58, 237, 0.12);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-popup);
   border-radius: 18px;
   width: 960px;
   max-width: 96vw;
@@ -2615,18 +3368,17 @@ select.dialog-input option {
   justify-content: space-between;
   padding: 14px 22px;
   border-bottom: 1px solid var(--border-color);
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--bg-sidebar);
   gap: 16px;
 }
 
 .settings-context-switcher {
   display: flex;
-  background: rgba(0, 0, 0, 0.45);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
   border-radius: 10px;
   padding: 3px;
   gap: 3px;
-  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.4);
 }
 
 .settings-context-tab {
@@ -2646,15 +3398,15 @@ select.dialog-input option {
 
 .settings-context-tab:hover:not(:disabled) {
   color: var(--color-text-bright);
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--bg-hover);
 }
 
 .settings-context-tab.active {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.12);
-  color: #fff;
+  background: var(--bg-panel);
+  border-color: var(--border-color);
+  color: var(--color-text-bright);
   font-weight: 600;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
 }
 
 .settings-context-tab:disabled {
@@ -2683,7 +3435,7 @@ select.dialog-input option {
   width: 250px;
   flex-shrink: 0;
   border-right: 1px solid var(--border-color);
-  background: rgba(0, 0, 0, 0.22);
+  background: var(--bg-sidebar);
   display: flex;
   flex-direction: column;
   padding: 16px 12px;
@@ -2747,8 +3499,8 @@ select.dialog-input option {
 }
 
 .settings-nav-btn.active {
-  background: rgba(124, 58, 237, 0.14);
-  border-color: rgba(124, 58, 237, 0.35);
+  background: var(--bg-active);
+  border-color: var(--border-hover);
   color: var(--color-text-bright);
 }
 
@@ -2763,6 +3515,7 @@ select.dialog-input option {
   display: flex;
   flex-direction: column;
   gap: 18px;
+  background: var(--bg-app);
 }
 
 /* iOS/macOS style Toggle Switch */
@@ -2784,8 +3537,8 @@ select.dialog-input option {
   position: absolute;
   cursor: pointer;
   inset: 0;
-  background: rgba(255, 255, 255, 0.12);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: var(--bg-active);
+  border: 1px solid var(--border-color);
   transition: 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   border-radius: 22px;
 }
@@ -2800,13 +3553,13 @@ select.dialog-input option {
   background: #ffffff;
   transition: 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   border-radius: 50%;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.25);
 }
 
 .settings-switch input:checked + .settings-switch-slider {
   background: var(--accent-purple);
   border-color: var(--accent-purple-bright);
-  box-shadow: 0 0 10px rgba(139, 92, 246, 0.35);
+  box-shadow: 0 0 10px var(--border-glow);
 }
 
 .settings-switch input:checked + .settings-switch-slider:before {
@@ -2815,19 +3568,90 @@ select.dialog-input option {
 
 /* Setting Cards */
 .settings-card {
-  background: rgba(21, 23, 33, 0.65);
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: var(--bg-panel);
+  border: 1px solid var(--border-color);
   border-radius: 14px;
   padding: 18px 20px;
   display: flex;
   flex-direction: column;
   gap: 16px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.22);
+  box-shadow: var(--shadow-card);
   transition: border-color 0.15s ease;
 }
 
 .settings-card:hover {
-  border-color: rgba(255, 255, 255, 0.1);
+  border-color: var(--border-hover);
+}
+
+/* Theme Selector Cards */
+.settings-theme-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin-top: 6px;
+}
+
+.settings-theme-card {
+  background: var(--bg-panel-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 16px;
+  cursor: pointer;
+  transition: var(--transition-quick);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  user-select: none;
+}
+
+.settings-theme-card:hover {
+  border-color: var(--border-hover);
+  background: var(--bg-hover);
+}
+
+.settings-theme-card.active {
+  border-color: var(--accent-purple);
+  background: var(--bg-active);
+  box-shadow: 0 0 0 1px var(--accent-purple), var(--shadow-card);
+}
+
+.settings-theme-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.settings-theme-card-title {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--color-text-bright);
+}
+
+.settings-theme-card-check {
+  color: var(--accent-purple);
+  display: flex;
+  align-items: center;
+}
+
+.settings-theme-card-desc {
+  font-size: 0.74rem;
+  color: var(--color-text-muted);
+  line-height: 1.45;
+}
+
+.settings-theme-swatches {
+  display: flex;
+  gap: 6px;
+  margin-top: auto;
+  padding-top: 6px;
+}
+
+.settings-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1px solid var(--border-color);
+  flex-shrink: 0;
 }
 
 .settings-card-header {
@@ -2857,21 +3681,21 @@ select.dialog-input option {
   padding: 12px 14px;
   border-radius: 10px;
   border: 1px solid var(--border-color);
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--bg-panel-secondary);
   cursor: pointer;
   transition: all 0.16s ease;
   user-select: none;
 }
 
 .settings-radio-card:hover {
-  background: rgba(255, 255, 255, 0.04);
-  border-color: rgba(168, 85, 247, 0.35);
+  background: var(--bg-hover);
+  border-color: var(--border-hover);
 }
 
 .settings-radio-card.selected {
   border-color: var(--accent-purple);
-  background: rgba(168, 85, 247, 0.09);
-  box-shadow: 0 0 16px -4px rgba(139, 92, 246, 0.25);
+  background: var(--bg-active);
+  box-shadow: 0 0 16px -4px var(--border-glow);
 }
 
 /* Clean, Modern Radio Rows */
@@ -2881,44 +3705,46 @@ select.dialog-input option {
   gap: 14px;
   padding: 12px 14px;
   border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-color);
+  background: var(--bg-panel-secondary);
   cursor: pointer;
   transition: all 0.16s ease;
   user-select: none;
 }
 
 .settings-radio-row:hover {
-  background: rgba(255, 255, 255, 0.04);
-  border-color: rgba(255, 255, 255, 0.14);
+  background: var(--bg-hover);
+  border-color: var(--border-hover);
 }
 
 .settings-radio-row.selected {
   border-color: var(--accent-purple);
-  background: rgba(168, 85, 247, 0.08);
+  background: var(--bg-active);
 }
 
 .settings-radio-row-icon {
   width: 32px;
   height: 32px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--bg-input);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
   transition: all 0.16s ease;
+  color: var(--accent-purple-bright);
 }
 
 .settings-radio-row.selected .settings-radio-row-icon {
-  background: rgba(168, 85, 247, 0.18);
+  background: var(--accent-purple);
+  color: #ffffff;
 }
 
 .settings-radio-circle {
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  border: 1.5px solid rgba(255, 255, 255, 0.25);
+  border: 1.5px solid var(--border-color);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2942,10 +3768,11 @@ select.dialog-input option {
   font-size: 0.65rem;
   padding: 1px 6px;
   border-radius: 4px;
-  background: rgba(168, 85, 247, 0.15);
+  background: var(--bg-active);
   color: var(--accent-purple-bright);
   font-family: var(--font-mono);
   font-weight: 500;
+  border: 1px solid var(--border-color);
 }
 
 /* Clean Segmented PR Merge Method Group */
@@ -2964,7 +3791,7 @@ select.dialog-input option {
   padding: 10px 12px;
   border-radius: 8px;
   border: 1px solid var(--border-color);
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--bg-panel-secondary);
   color: var(--color-text-muted);
   cursor: pointer;
   font-size: 0.78rem;
@@ -2973,14 +3800,14 @@ select.dialog-input option {
 }
 
 .settings-segmented-btn:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--bg-hover);
   color: var(--color-text-bright);
-  border-color: rgba(255, 255, 255, 0.12);
+  border-color: var(--border-hover);
 }
 
 .settings-segmented-btn.selected {
   border-color: var(--accent-purple);
-  background: rgba(168, 85, 247, 0.12);
+  background: var(--bg-active);
   color: var(--color-text-bright);
   font-weight: 600;
 }
@@ -2993,7 +3820,7 @@ select.dialog-input option {
   gap: 5px;
   padding: 4px 10px;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--bg-panel-secondary);
   border: 1px solid var(--border-color);
   color: var(--color-text-main);
   font-size: 0.72rem;
@@ -3002,7 +3829,7 @@ select.dialog-input option {
 }
 
 .settings-chip:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--bg-hover);
   color: var(--color-text-bright);
   border-color: var(--border-hover);
 }
@@ -3012,7 +3839,7 @@ select.dialog-input option {
   flex: 1;
   padding: 16px;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--bg-panel-secondary);
   border: 1px solid var(--border-color);
   cursor: pointer;
   text-align: left;
@@ -3025,19 +3852,19 @@ select.dialog-input option {
 
 .settings-provider-card:hover {
   border-color: var(--border-hover);
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--bg-hover);
 }
 
 .settings-provider-card.active {
-  background: rgba(139, 92, 246, 0.12);
+  background: var(--bg-active);
   border-color: var(--accent-purple-bright);
-  box-shadow: 0 0 20px rgba(139, 92, 246, 0.15);
+  box-shadow: 0 0 20px var(--border-glow);
 }
 
 .settings-provider-card.active.openai {
-  background: rgba(16, 185, 129, 0.1);
-  border-color: #10b981;
-  box-shadow: 0 0 20px rgba(16, 185, 129, 0.15);
+  background: var(--bg-active);
+  border-color: var(--color-staged);
+  box-shadow: 0 0 20px var(--color-staged-glow);
 }
 
 /* Primary Gradient Button */
@@ -3047,19 +3874,19 @@ select.dialog-input option {
   gap: 7px;
   padding: 8px 16px;
   border-radius: 8px;
-  background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+  background: var(--accent-purple);
   color: #fff;
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  border: 1px solid var(--accent-purple-bright);
   font-size: 0.8rem;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.18s ease;
-  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.35);
+  box-shadow: 0 4px 12px var(--border-glow);
 }
 
 .settings-btn-primary:hover:not(:disabled) {
-  background: linear-gradient(135deg, #9061f9 0%, #6d75f3 100%);
-  box-shadow: 0 6px 18px rgba(124, 58, 237, 0.45);
+  background: var(--accent-purple-bright);
+  box-shadow: 0 6px 18px var(--border-glow);
   transform: translateY(-1px);
 }
 
@@ -3075,7 +3902,7 @@ select.dialog-input option {
   justify-content: space-between;
   padding: 14px 24px;
   border-top: 1px solid var(--border-color);
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--bg-sidebar);
 }
 
 /* ==========================================================================
