@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - dev
+      - Dev
     tags:
       - 'v*-dev*'
   workflow_dispatch:
@@ -89,4 +90,4 @@ jobs:
             Or navigate to **System Settings > Privacy & Security** and click **Open Anyway**.
           releaseDraft: false
           prerelease: true
-          args: '--config tauri.dev.conf.json --target ${{ matrix.target }}'
+          args: '--config src-tauri/tauri.dev.conf.json --target ${{ matrix.target }}'

@@ -11,7 +11,7 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "tauri:build": "tauri build",
-    "tauri:build:dev": "tauri build -c tauri.dev.conf.json",
+    "tauri:build:dev": "tauri build -c src-tauri/tauri.dev.conf.json",
     "tauri:build:mac-arm": "tauri build --target aarch64-apple-darwin",
     "tauri:build:mac-intel": "tauri build --target x86_64-apple-darwin",
     "tauri:build:universal": "tauri build --target universal-apple-darwin"
