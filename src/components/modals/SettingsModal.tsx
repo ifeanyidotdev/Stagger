@@ -56,6 +56,8 @@ interface SettingsModalProps {
   onClose: () => void;
   repoPath?: string;
   currentBranch?: string;
+  initialTab?: GlobalTab;
+  cachedUpdateInfo?: AppUpdateInfo | null;
   onSettingsSaved?: (settings: GlobalSettings) => void;
   onRemoteUrlUpdated?: (newUrl: string) => void;
 }
@@ -69,13 +71,22 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   onClose,
   repoPath = '',
   currentBranch = 'main',
+  initialTab,
+  cachedUpdateInfo,
   onSettingsSaved,
   onRemoteUrlUpdated,
 }) => {
   // Primary Context Switcher (Global vs Workspace)
   const [activeContext, setActiveContext] = useState<ContextType>('global');
-  const [activeGlobalTab, setActiveGlobalTab] = useState<GlobalTab>('global-git');
+  const [activeGlobalTab, setActiveGlobalTab] = useState<GlobalTab>(initialTab || 'global-git');
   const [activeWorkspaceTab, setActiveWorkspaceTab] = useState<WorkspaceTab>('workspace-remote');
+
+  useEffect(() => {
+    if (isOpen && initialTab) {
+      setActiveContext('global');
+      setActiveGlobalTab(initialTab);
+    }
+  }, [isOpen, initialTab]);
 
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -133,15 +144,19 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
   // App Updates & Version Channel
   const [appBuildInfo, setAppBuildInfo] = useState<AppBuildInfo | null>(null);
-  const [updateChannel, setUpdateChannel] = useState<'main' | 'dev'>('main');
-  const [autoCheckUpdates, setAutoCheckUpdates] = useState(true);
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
-  const [updateInfo, setUpdateInfo] = useState<AppUpdateInfo | null>(null);
+  const [updateInfo, setUpdateInfo] = useState<AppUpdateInfo | null>(cachedUpdateInfo || null);
   const [updateCheckError, setUpdateCheckError] = useState<string | null>(null);
   const [isInstallingUpdate, setIsInstallingUpdate] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState<UpdateDownloadProgress | null>(null);
   const [updateInstalledReady, setUpdateInstalledReady] = useState(false);
   const [installError, setInstallError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (cachedUpdateInfo) {
+      setUpdateInfo(cachedUpdateInfo);
+    }
+  }, [cachedUpdateInfo]);
 
   // Workspace Specific Settings
   const [workspaceData, setWorkspaceData] = useState<WorkspaceSettings | null>(null);
@@ -235,9 +250,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
           if (mounted && bInfo) {
             setAppBuildInfo(bInfo);
           }
-          const chosenChan = (settings.update_channel as 'main' | 'dev') || (bInfo?.default_channel as 'main' | 'dev') || 'main';
-          setUpdateChannel(chosenChan);
-          setAutoCheckUpdates(settings.auto_check_updates ?? true);
         } catch (e) {
           console.warn('Failed to fetch build info:', e);
         }
@@ -430,18 +442,17 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     };
   }, []);
 
-  // Check for updates against selected or overridden channel
-  const handleCheckForUpdates = async (channelOverride?: 'main' | 'dev') => {
+  // Check for updates against build's default channel
+  const handleCheckForUpdates = async () => {
     setIsCheckingUpdate(true);
     setUpdateCheckError(null);
     setUpdateInstalledReady(false);
     setInstallError(null);
     setDownloadProgress(null);
 
-    const targetChan = channelOverride || updateChannel;
     try {
       const result = await invoke<AppUpdateInfo>('check_app_update', {
-        channel: targetChan,
+        channel: null,
       });
       setUpdateInfo(result);
     } catch (err: any) {
@@ -461,7 +472,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
     try {
       await invoke('download_and_install_update', {
-        channel: updateChannel,
+        channel: null,
       });
       setUpdateInstalledReady(true);
     } catch (err: any) {
@@ -539,8 +550,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         auto_open_pull_dialog: autoOpenPullDialog,
         default_pr_merge_method: defaultPrMergeMethod,
         theme: theme,
-        update_channel: updateChannel,
-        auto_check_updates: autoCheckUpdates,
+        update_channel: (appBuildInfo?.default_channel as 'main' | 'dev') || 'main',
+        auto_check_updates: true,
       };
 
       localStorage.setItem('stagenode_theme', theme);
@@ -1708,115 +1719,39 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                       </div>
                     </div>
 
-                    {/* Channel Selection Card */}
+                    {/* Release Channel & Automated Checking Info Card */}
                     <div className="settings-card">
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
                         <div>
-                          <label className="settings-field-label">
-                            <Radio size={14} />
-                            <span>Update Channel</span>
-                          </label>
-                          <p className="settings-field-hint" style={{ marginTop: '2px' }}>
-                            Choose which release stream this app receives updates from. By default, your channel matches whether you installed the Main or Dev build.
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Radio size={14} style={{ color: 'var(--accent-purple-bright)' }} />
+                            <span style={{ fontSize: '0.86rem', fontWeight: 600, color: 'var(--color-text-bright)' }}>
+                              Release Stream: {(appBuildInfo?.default_channel === 'dev' || (appBuildInfo?.app_name && appBuildInfo.app_name.toLowerCase().includes('dev'))) ? 'Dev (Pre-release)' : 'Main (Stable)'}
+                            </span>
+                            <span
+                              className="settings-context-pill"
+                              style={{
+                                background: 'rgba(16, 185, 129, 0.12)',
+                                color: 'var(--color-added)',
+                                borderColor: 'rgba(16, 185, 129, 0.3)',
+                                fontSize: '0.7rem',
+                                fontWeight: 600,
+                              }}
+                            >
+                              Auto-Update Active
+                            </span>
+                          </div>
+                          <p className="settings-field-hint" style={{ marginTop: '4px', marginBottom: 0 }}>
+                            {(appBuildInfo?.default_channel === 'dev' || (appBuildInfo?.app_name && appBuildInfo.app_name.toLowerCase().includes('dev')))
+                              ? 'This build automatically tracks preview releases from the Dev channel. Updates are checked on startup and window focus.'
+                              : 'This build automatically tracks official stable releases from the Main channel. Updates are checked on startup and window focus.'}
                           </p>
                         </div>
 
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '12px' }}>
-                          {/* Main Option */}
-                          <div
-                            onClick={() => {
-                              setUpdateChannel('main');
-                              if (updateInfo) handleCheckForUpdates('main');
-                            }}
-                            style={{
-                              padding: '14px',
-                              borderRadius: '10px',
-                              border: updateChannel === 'main' 
-                                ? '2px solid var(--accent-purple-bright)' 
-                                : '1px solid var(--border-color)',
-                              background: updateChannel === 'main' 
-                                ? 'rgba(139, 92, 246, 0.08)' 
-                                : 'var(--bg-active)',
-                              cursor: 'pointer',
-                              display: 'flex',
-                              flexDirection: 'column',
-                              gap: '6px',
-                              transition: 'all 0.2s ease',
-                            }}
-                          >
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600, color: 'var(--color-text-bright)', fontSize: '0.86rem' }}>
-                                <CheckCircle2 size={15} style={{ color: updateChannel === 'main' ? 'var(--color-added)' : 'var(--color-text-muted)' }} />
-                                <span>Main (Stable)</span>
-                              </div>
-                              <span className="settings-context-pill" style={{ background: 'rgba(16, 185, 129, 0.1)', color: 'var(--color-added)', borderColor: 'rgba(16, 185, 129, 0.25)' }}>
-                                Recommended
-                              </span>
-                            </div>
-                            <p style={{ fontSize: '0.74rem', color: 'var(--color-text-muted)', margin: 0, lineHeight: 1.4 }}>
-                              Production-ready builds vetted for stability. Updates are fetched from the latest official GitHub release.
-                            </p>
-                            <div style={{ fontSize: '0.68rem', fontFamily: 'var(--font-mono)', color: 'var(--color-text-muted)', opacity: 0.8, marginTop: '4px' }}>
-                              Endpoint: releases/latest/download/latest.json
-                            </div>
-                          </div>
-
-                          {/* Dev Option */}
-                          <div
-                            onClick={() => {
-                              setUpdateChannel('dev');
-                              if (updateInfo) handleCheckForUpdates('dev');
-                            }}
-                            style={{
-                              padding: '14px',
-                              borderRadius: '10px',
-                              border: updateChannel === 'dev' 
-                                ? '2px solid var(--accent-purple-bright)' 
-                                : '1px solid var(--border-color)',
-                              background: updateChannel === 'dev' 
-                                ? 'rgba(139, 92, 246, 0.08)' 
-                                : 'var(--bg-active)',
-                              cursor: 'pointer',
-                              display: 'flex',
-                              flexDirection: 'column',
-                              gap: '6px',
-                              transition: 'all 0.2s ease',
-                            }}
-                          >
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600, color: 'var(--color-text-bright)', fontSize: '0.86rem' }}>
-                                <CheckCircle2 size={15} style={{ color: updateChannel === 'dev' ? 'var(--color-modified)' : 'var(--color-text-muted)' }} />
-                                <span>Dev (Pre-release)</span>
-                              </div>
-                              <span className="settings-context-pill" style={{ background: 'rgba(234, 179, 8, 0.1)', color: 'var(--color-modified)', borderColor: 'rgba(234, 179, 8, 0.25)' }}>
-                                Preview
-                              </span>
-                            </div>
-                            <p style={{ fontSize: '0.74rem', color: 'var(--color-text-muted)', margin: 0, lineHeight: 1.4 }}>
-                              Early access builds with new features before stable release. Updates are fetched from the rolling Dev pre-release.
-                            </p>
-                            <div style={{ fontSize: '0.68rem', fontFamily: 'var(--font-mono)', color: 'var(--color-text-muted)', opacity: 0.8, marginTop: '4px' }}>
-                              Endpoint: releases/download/dev/latest.json
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Auto-check toggle */}
-                        <div style={{ paddingTop: '8px', borderTop: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <div>
-                            <div style={{ fontSize: '0.82rem', fontWeight: 500, color: 'var(--color-text-bright)' }}>
-                              Automatic Startup Check
-                            </div>
-                            <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
-                              Silently check for new versions on the selected channel when StageNode opens.
-                            </div>
-                          </div>
-                          <input
-                            type="checkbox"
-                            className="settings-checkbox"
-                            checked={autoCheckUpdates}
-                            onChange={e => setAutoCheckUpdates(e.target.checked)}
-                          />
+                        <div style={{ fontSize: '0.72rem', fontFamily: 'var(--font-mono)', color: 'var(--color-text-muted)', background: 'var(--bg-active)', padding: '6px 12px', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                          {(appBuildInfo?.default_channel === 'dev' || (appBuildInfo?.app_name && appBuildInfo.app_name.toLowerCase().includes('dev')))
+                            ? 'Endpoint: releases/download/dev/latest.json'
+                            : 'Endpoint: releases/latest/download/latest.json'}
                         </div>
                       </div>
                     </div>
@@ -1851,7 +1786,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                   )}
                                 </div>
                                 <div style={{ fontSize: '0.74rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
-                                  Current: v{updateInfo.current_version} • Target Channel: {updateChannel.toUpperCase()}
+                                  Current: v{updateInfo.current_version} • Target Channel: {((appBuildInfo?.default_channel === 'dev' || (appBuildInfo?.app_name && appBuildInfo.app_name.toLowerCase().includes('dev'))) ? 'DEV' : 'MAIN')}
                                 </div>
                               </div>
 
@@ -1956,7 +1891,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                 You&apos;re up to date!
                               </div>
                               <div style={{ fontSize: '0.74rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
-                                Version {updateInfo?.current_version || appBuildInfo?.version} is the latest available on the {updateChannel.toUpperCase()} channel.
+                                Version {updateInfo?.current_version || appBuildInfo?.version} is the latest available on the {((appBuildInfo?.default_channel === 'dev' || (appBuildInfo?.app_name && appBuildInfo.app_name.toLowerCase().includes('dev'))) ? 'DEV' : 'MAIN')} channel.
                               </div>
                             </div>
                           </div>

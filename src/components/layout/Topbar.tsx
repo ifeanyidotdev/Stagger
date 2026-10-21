@@ -1,6 +1,7 @@
 import React from 'react';
-import { ChevronRight, Layers, History, GitPullRequest, FolderSync, LogOut, Sparkles, Settings, ArrowDown, ArrowUp } from 'lucide-react';
+import { ChevronRight, Layers, History, GitPullRequest, FolderSync, LogOut, Sparkles, Settings, ArrowDown, ArrowUp, ArrowUpCircle } from 'lucide-react';
 import type { GitHubUser } from '../../types/git';
+import type { AppUpdateInfo } from '../../types/settings';
 
 interface TopbarProps {
   sidebarCollapsed: boolean;
@@ -18,7 +19,8 @@ interface TopbarProps {
   setDialogInput2: (val: string) => void;
   githubUser: GitHubUser | null;
   handleGitHubSignout: () => void;
-  onOpenSettings?: () => void;
+  availableUpdate?: AppUpdateInfo | null;
+  onOpenSettings?: (tab?: 'global-updates') => void;
 }
 
 const Topbar: React.FC<TopbarProps> = ({
@@ -37,6 +39,7 @@ const Topbar: React.FC<TopbarProps> = ({
   setDialogInput2,
   githubUser,
   handleGitHubSignout,
+  availableUpdate,
   onOpenSettings
 }) => {
   return (
@@ -108,15 +111,50 @@ const Topbar: React.FC<TopbarProps> = ({
           </button>
         )}
 
+        {/* Update Available Indicator Badge */}
+        {availableUpdate?.available && (
+          <button
+            className="topbar-action-btn"
+            onClick={() => onOpenSettings?.('global-updates')}
+            title={`A new update (v${availableUpdate.version}) is available. Click to download and install.`}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              background: "rgba(16, 185, 129, 0.15)",
+              color: "var(--color-added)",
+              border: "1px solid rgba(16, 185, 129, 0.35)",
+              fontWeight: 600,
+              boxShadow: "0 0 10px rgba(16, 185, 129, 0.2)",
+              cursor: "pointer",
+            }}
+          >
+            <ArrowUpCircle size={13} />
+            <span>Update v{availableUpdate.version}</span>
+          </button>
+        )}
+
         {/* Global Settings Trigger */}
         <button 
           className="topbar-action-btn"
-          onClick={onOpenSettings}
-          title="Global Settings (Git, Universal .gitignore, AI Keys)"
-          style={{ display: "flex", alignItems: "center", gap: "6px" }}
+          onClick={() => onOpenSettings?.()}
+          title="Global Settings (Git, Universal .gitignore, AI Keys, Updates)"
+          style={{ display: "flex", alignItems: "center", gap: "6px", position: "relative" }}
         >
           <Settings size={13} />
           <span>Settings</span>
+          {availableUpdate?.available && (
+            <span
+              style={{
+                width: "7px",
+                height: "7px",
+                borderRadius: "50%",
+                background: "var(--color-added)",
+                boxShadow: "0 0 6px var(--color-added)",
+                marginLeft: "-2px",
+              }}
+            />
+          )}
         </button>
 
         {/* GitHub circular avatar connection badge */}

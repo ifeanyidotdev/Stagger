@@ -21,6 +21,7 @@ import CommitBuilder from "./components/staging/CommitBuilder";
 import HistoryView from "./components/history/HistoryView";
 import Dialogs from "./components/modals/Dialogs";
 import SettingsModal from "./components/modals/SettingsModal";
+import type { AppUpdateInfo } from "./types/settings";
 
 function App() {
   // --- REPOSITORY & WORKSPACE STATE ---
@@ -162,6 +163,45 @@ function App() {
   const [dialogInput, setDialogInput] = useState("");
   const [dialogInput2, setDialogInput2] = useState(""); 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [settingsInitialTab, setSettingsInitialTab] = useState<'global-git' | 'global-updates' | undefined>(undefined);
+  const [availableUpdate, setAvailableUpdate] = useState<AppUpdateInfo | null>(null);
+  const lastUpdateCheckRef = useRef<number>(0);
+
+  const checkForRemoteUpdates = async (force: boolean = false) => {
+    const now = Date.now();
+    // Throttle focus checks so we do not spam GitHub API on rapid window switches (at least 3 minutes between auto-checks)
+    if (!force && now - lastUpdateCheckRef.current < 3 * 60 * 1000) {
+      return;
+    }
+    lastUpdateCheckRef.current = now;
+
+    try {
+      const result = await invoke<AppUpdateInfo>("check_app_update", { channel: null });
+      if (result && result.available) {
+        setAvailableUpdate(result);
+      } else {
+        setAvailableUpdate(null);
+      }
+    } catch (err) {
+      console.debug("Background update check:", err);
+    }
+  };
+
+  useEffect(() => {
+    // 1. Check immediately on startup
+    checkForRemoteUpdates(true);
+
+    // 2. Check on focus change (when user returns to the app window)
+    const handleFocus = () => {
+      checkForRemoteUpdates(false);
+    };
+
+    window.addEventListener("focus", handleFocus);
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+    };
+  }, []);
+
   const [targetCommitForBranch, setTargetCommitForBranch] = useState<CommitInfo | null>(null);
   const [checkoutNewBranch, setCheckoutNewBranch] = useState<boolean>(true);
   const [targetCommitForPush, setTargetCommitForPush] = useState<CommitInfo | null>(null);
@@ -2271,7 +2311,11 @@ function App() {
             setDialogInput2={setDialogInput2}
             githubUser={githubUser}
             handleGitHubSignout={handleGitHubSignout}
-            onOpenSettings={() => setIsSettingsOpen(true)}
+            availableUpdate={availableUpdate}
+            onOpenSettings={(tab) => {
+              setSettingsInitialTab(tab);
+              setIsSettingsOpen(true);
+            }}
           />
 
           <div className="view-content">
@@ -2545,9 +2589,14 @@ function App() {
 
       <SettingsModal 
         isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
+        onClose={() => {
+          setIsSettingsOpen(false);
+          setSettingsInitialTab(undefined);
+        }}
         repoPath={workspaces.length > 0 && hasRepo ? repoPath : ""}
         currentBranch={workspaces.length > 0 && hasRepo ? currentBranch : ""}
+        initialTab={settingsInitialTab}
+        cachedUpdateInfo={availableUpdate}
         onRemoteUrlUpdated={(newUrl) => setRemoteUrl(newUrl)}
         onSettingsSaved={() => {
           if (workspaces.length > 0 && repoPath) {
