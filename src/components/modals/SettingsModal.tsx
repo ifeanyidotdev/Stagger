@@ -935,7 +935,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                     >
                       <div style={{ flex: 1 }}>
                         <div style={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--color-text-bright)' }}>
-                          Auto-sync with System Git (<code style={{ fontFamily: 'var(--font-mono)', fontSize: '0.74rem' }}>git config --global</code>)
+                          Auto-sync with System Git
                         </div>
                         <div className="settings-field-hint" style={{ marginTop: '3px' }}>
                           Synchronizes these values directly with your machine&apos;s global git configuration so external CLI tools and IDEs stay in harmony.
@@ -1657,32 +1657,34 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                           <div
                             style={{
-                              width: '42px',
-                              height: '42px',
-                              borderRadius: '12px',
-                              background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.22) 0%, rgba(59, 130, 246, 0.16) 100%)',
-                              border: '1px solid rgba(139, 92, 246, 0.35)',
+                              width: '38px',
+                              height: '38px',
+                              borderRadius: '10px',
+                              background: 'var(--bg-panel-secondary)',
+                              border: '1px solid var(--border-color)',
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'center',
-                              color: 'var(--accent-purple-bright)',
-                              boxShadow: '0 2px 10px rgba(139, 92, 246, 0.15)',
+                              color: 'var(--accent-purple)',
+                              flexShrink: 0,
                             }}
                           >
-                            <ArrowDownToLine size={20} strokeWidth={2.2} />
+                            <ArrowDownToLine size={18} />
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span style={{ fontSize: '1.05rem', fontWeight: 600, color: 'var(--color-text-bright)' }}>
+                            <span style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--color-text-bright)' }}>
                               {appBuildInfo?.app_name || 'Stagger'}
                             </span>
                             <span
-                              className="settings-context-pill"
                               style={{
-                                background: 'rgba(139, 92, 246, 0.15)',
-                                color: 'var(--accent-purple-bright)',
-                                borderColor: 'rgba(139, 92, 246, 0.3)',
-                                fontWeight: 600,
+                                background: 'var(--bg-panel-secondary)',
+                                color: 'var(--color-text-muted)',
+                                border: '1px solid var(--border-color)',
+                                borderRadius: '6px',
+                                padding: '2px 8px',
+                                fontFamily: 'var(--font-mono)',
                                 fontSize: '0.74rem',
+                                fontWeight: 500,
                               }}
                             >
                               v{appBuildInfo?.version || '0.1.1'}
@@ -1695,22 +1697,22 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                           onClick={() => handleCheckForUpdates()}
                           disabled={isCheckingUpdate || isInstallingUpdate}
                           style={{
-                            background: 'var(--accent-purple-bright)',
-                            color: '#fff',
-                            border: 'none',
+                            background: 'var(--bg-panel-secondary)',
+                            color: 'var(--color-text-bright)',
+                            border: '1px solid var(--border-color)',
                             borderRadius: '8px',
-                            padding: '8px 16px',
+                            padding: '7px 14px',
                             fontSize: '0.8rem',
-                            fontWeight: 600,
+                            fontWeight: 500,
                             cursor: isCheckingUpdate || isInstallingUpdate ? 'not-allowed' : 'pointer',
-                            opacity: isCheckingUpdate || isInstallingUpdate ? 0.7 : 1,
+                            opacity: isCheckingUpdate || isInstallingUpdate ? 0.6 : 1,
                             display: 'flex',
                             alignItems: 'center',
-                            gap: '8px',
-                            boxShadow: '0 2px 10px rgba(139, 92, 246, 0.3)',
+                            gap: '7px',
+                            transition: 'var(--transition-quick)',
                           }}
                         >
-                          <RefreshCw size={14} className={isCheckingUpdate ? 'spin-icon' : ''} />
+                          <RefreshCw size={13} className={isCheckingUpdate ? 'spin-icon' : ''} />
                           <span>{isCheckingUpdate ? 'Checking Releases...' : 'Check for Updates'}</span>
                         </button>
                       </div>
@@ -1727,15 +1729,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                       }
 
                       return (
-                        <div className="settings-card" style={{ borderLeft: updateCheckError ? '3px solid var(--color-deleted)' : updateInfo?.available ? '3px solid var(--accent-purple-bright)' : '3px solid var(--color-added)' }}>
+                        <div className="settings-card">
                           {updateCheckError ? (
-                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', color: 'var(--color-deleted)' }}>
-                              <AlertCircle size={18} style={{ flexShrink: 0, marginTop: '2px' }} />
+                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                              <AlertCircle size={17} style={{ flexShrink: 0, marginTop: '2px', color: 'var(--color-deleted)' }} />
                               <div>
-                                <div style={{ fontSize: '0.84rem', fontWeight: 600 }}>Update Check Notice</div>
-                                <div style={{ fontSize: '0.76rem', marginTop: '2px', opacity: 0.9 }}>{updateCheckError}</div>
-                                <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: '4px' }}>
-                                  This usually indicates no releases have been published to this channel yet, or the network is unavailable.
+                                <div style={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--color-text-bright)' }}>Update Notice</div>
+                                <div style={{ fontSize: '0.76rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>{updateCheckError}</div>
+                                <div style={{ fontSize: '0.72rem', color: 'var(--color-text-dark)', marginTop: '4px' }}>
+                                  No releases found on this channel, or network connection is unavailable.
                                 </div>
                               </div>
                             </div>
@@ -1744,9 +1746,23 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
                                 <div>
                                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                    <ArrowUpCircle size={18} style={{ color: 'var(--color-added)' }} />
-                                    <span style={{ fontSize: '0.94rem', fontWeight: 600, color: 'var(--color-text-bright)' }}>
-                                      New Version Available: v{updateInfo.version}
+                                    <ArrowUpCircle size={17} style={{ color: 'var(--accent-purple)' }} />
+                                    <span style={{ fontSize: '0.92rem', fontWeight: 600, color: 'var(--color-text-bright)' }}>
+                                      Update Available
+                                    </span>
+                                    <span
+                                      style={{
+                                        fontFamily: 'var(--font-mono)',
+                                        fontSize: '0.72rem',
+                                        background: 'var(--bg-panel-secondary)',
+                                        padding: '2px 7px',
+                                        borderRadius: '4px',
+                                        color: 'var(--accent-purple)',
+                                        border: '1px solid var(--border-color)',
+                                        fontWeight: 500,
+                                      }}
+                                    >
+                                      v{updateInfo.version}
                                     </span>
                                     {updateInfo.date && (
                                       <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
@@ -1754,8 +1770,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                       </span>
                                     )}
                                   </div>
-                                  <div style={{ fontSize: '0.74rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
-                                    Currently installed: v{updateInfo.current_version}
+                                  <div style={{ fontSize: '0.74rem', color: 'var(--color-text-muted)', marginTop: '3px' }}>
+                                    Installed version: v{updateInfo.current_version}
                                   </div>
                                 </div>
 
@@ -1764,21 +1780,21 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                     type="button"
                                     onClick={handleRestartApp}
                                     style={{
-                                      background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                                      color: '#fff',
-                                      border: 'none',
+                                      background: 'var(--accent-purple)',
+                                      color: '#1e1e2e',
+                                      border: '1px solid var(--accent-purple)',
                                       borderRadius: '8px',
-                                      padding: '8px 16px',
-                                      fontSize: '0.82rem',
+                                      padding: '7px 15px',
+                                      fontSize: '0.8rem',
                                       fontWeight: 600,
                                       cursor: 'pointer',
                                       display: 'flex',
                                       alignItems: 'center',
-                                      gap: '8px',
-                                      boxShadow: '0 2px 10px rgba(16, 185, 129, 0.3)',
+                                      gap: '7px',
+                                      transition: 'var(--transition-quick)',
                                     }}
                                   >
-                                    <RefreshCw size={14} />
+                                    <RefreshCw size={13} />
                                     <span>Restart App to Apply</span>
                                   </button>
                                 ) : isCurrentlyDownloading ? (
@@ -1786,20 +1802,21 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                     type="button"
                                     disabled
                                     style={{
-                                      background: 'rgba(139, 92, 246, 0.25)',
-                                      color: 'var(--accent-purple-bright)',
-                                      border: '1px solid rgba(139, 92, 246, 0.4)',
+                                      background: 'var(--bg-panel-secondary)',
+                                      color: 'var(--color-text-muted)',
+                                      border: '1px solid var(--border-color)',
                                       borderRadius: '8px',
-                                      padding: '8px 16px',
-                                      fontSize: '0.82rem',
-                                      fontWeight: 600,
+                                      padding: '7px 15px',
+                                      fontSize: '0.8rem',
+                                      fontWeight: 500,
                                       cursor: 'not-allowed',
                                       display: 'flex',
                                       alignItems: 'center',
-                                      gap: '8px',
+                                      gap: '7px',
+                                      opacity: 0.7,
                                     }}
                                   >
-                                    <ArrowDownToLine size={14} className="spin-icon" />
+                                    <ArrowDownToLine size={13} className="spin-icon" />
                                     <span>Downloading in Background...</span>
                                   </button>
                                 ) : (
@@ -1807,20 +1824,21 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                     type="button"
                                     onClick={handleInstallUpdate}
                                     style={{
-                                      background: 'var(--accent-purple-bright)',
-                                      color: '#fff',
-                                      border: 'none',
+                                      background: 'var(--accent-purple)',
+                                      color: '#1e1e2e',
+                                      border: '1px solid var(--accent-purple)',
                                       borderRadius: '8px',
-                                      padding: '8px 16px',
-                                      fontSize: '0.82rem',
+                                      padding: '7px 15px',
+                                      fontSize: '0.8rem',
                                       fontWeight: 600,
                                       cursor: 'pointer',
                                       display: 'flex',
                                       alignItems: 'center',
-                                      gap: '8px',
+                                      gap: '7px',
+                                      transition: 'var(--transition-quick)',
                                     }}
                                   >
-                                    <ArrowDownToLine size={14} strokeWidth={2.2} />
+                                    <ArrowDownToLine size={13} />
                                     <span>Download & Install Update</span>
                                   </button>
                                 )}
@@ -1828,11 +1846,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
                               {/* Release notes if available */}
                               {updateInfo.body && (
-                                <div style={{ background: 'var(--bg-active)', borderRadius: '8px', padding: '10px 14px', border: '1px solid var(--border-color)', maxHeight: '160px', overflowY: 'auto' }}>
-                                  <div style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--color-text-muted)', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                <div style={{ background: 'var(--bg-panel-secondary)', borderRadius: '8px', padding: '12px 14px', border: '1px solid var(--border-color)', maxHeight: '160px', overflowY: 'auto' }}>
+                                  <div style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--color-text-muted)', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                                     Release Notes
                                   </div>
-                                  <div style={{ fontSize: '0.78rem', color: 'var(--color-text-bright)', whiteSpace: 'pre-wrap', lineHeight: 1.5, fontFamily: 'var(--font-mono)' }}>
+                                  <div style={{ fontSize: '0.78rem', color: 'var(--color-text-main)', whiteSpace: 'pre-wrap', lineHeight: 1.5, fontFamily: 'var(--font-mono)' }}>
                                     {updateInfo.body}
                                   </div>
                                 </div>
@@ -1843,13 +1861,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
                                     <span>Downloading update in background...</span>
-                                    <span>{effectiveProgress?.percentage ? `${effectiveProgress.percentage}%` : effectiveProgress?.downloaded ? `${(effectiveProgress.downloaded / 1048576).toFixed(1)} MB` : 'In progress'}</span>
+                                    <span style={{ fontFamily: 'var(--font-mono)' }}>
+                                      {effectiveProgress?.percentage ? `${effectiveProgress.percentage}%` : effectiveProgress?.downloaded ? `${(effectiveProgress.downloaded / 1048576).toFixed(1)} MB` : 'In progress'}
+                                    </span>
                                   </div>
-                                  <div style={{ width: '100%', height: '6px', borderRadius: '3px', background: 'var(--bg-active)', overflow: 'hidden' }}>
+                                  <div style={{ width: '100%', height: '4px', borderRadius: '2px', background: 'var(--bg-panel-secondary)', overflow: 'hidden' }}>
                                     <div
                                       style={{
                                         height: '100%',
-                                        background: 'var(--accent-purple-bright)',
+                                        background: 'var(--accent-purple)',
                                         width: `${effectiveProgress?.percentage || 30}%`,
                                         transition: 'width 0.2s ease',
                                       }}
@@ -1860,23 +1880,38 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
                               {installError && (
                                 <div style={{ color: 'var(--color-deleted)', fontSize: '0.76rem' }}>
-                                  Installation error: {installError}
+                                  Installation notice: {installError}
                                 </div>
                               )}
 
                               {isReadyToApply && (
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-added)', fontSize: '0.78rem', fontWeight: 500 }}>
-                                  <CheckCircle2 size={16} />
-                                  <span>Update downloaded and verified successfully! Click &quot;Restart App to Apply&quot; to finish updating.</span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-staged)', fontSize: '0.78rem', fontWeight: 500 }}>
+                                  <CheckCircle2 size={15} />
+                                  <span>Update downloaded and verified. Click &quot;Restart App to Apply&quot; to finish updating.</span>
                                 </div>
                               )}
                             </div>
                           ) : (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                              <CheckCircle2 size={18} style={{ color: 'var(--color-added)', flexShrink: 0 }} />
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                              <div
+                                style={{
+                                  width: '32px',
+                                  height: '32px',
+                                  borderRadius: '8px',
+                                  background: 'var(--bg-panel-secondary)',
+                                  border: '1px solid var(--border-color)',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  color: 'var(--color-staged)',
+                                  flexShrink: 0,
+                                }}
+                              >
+                                <CheckCircle2 size={16} />
+                              </div>
                               <div>
                                 <div style={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--color-text-bright)' }}>
-                                  You&apos;re up to date!
+                                  You&apos;re up to date
                                 </div>
                                 <div style={{ fontSize: '0.74rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
                                   Version {updateInfo?.current_version || appBuildInfo?.version} is the latest release.

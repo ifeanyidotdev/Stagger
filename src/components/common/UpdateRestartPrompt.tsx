@@ -1,5 +1,5 @@
 import React from 'react';
-import { RefreshCw, Sparkles, X } from 'lucide-react';
+import { RefreshCw, ArrowDownToLine, X } from 'lucide-react';
 
 interface UpdateRestartPromptProps {
   isOpen: boolean;
@@ -25,11 +25,10 @@ const UpdateRestartPrompt: React.FC<UpdateRestartPromptProps> = ({
       aria-live="polite"
       aria-label="Application update ready"
     >
-      <div className="update-prompt-glow" />
       <div className="update-prompt-content">
         <div className="update-prompt-header">
           <div className="update-prompt-badge-icon">
-            <Sparkles size={16} />
+            <ArrowDownToLine size={16} />
           </div>
           <div className="update-prompt-titles">
             <div className="update-prompt-title">

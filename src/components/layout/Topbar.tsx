@@ -153,18 +153,10 @@ const Topbar: React.FC<TopbarProps> = ({
             onClick={() => onOpenSettings?.('global-updates')}
             title={`A new update (v${availableUpdate.version}) is available. Click to download and install.`}
             style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "6px",
-              background: "rgba(16, 185, 129, 0.15)",
-              color: "var(--color-added)",
-              border: "1px solid rgba(16, 185, 129, 0.35)",
-              fontWeight: 600,
-              boxShadow: "0 0 10px rgba(16, 185, 129, 0.2)",
-              cursor: "pointer",
+              borderColor: "var(--accent-purple)",
             }}
           >
-            <ArrowUpCircle size={13} />
+            <ArrowUpCircle size={13} style={{ color: "var(--accent-purple)" }} />
             <span>Update v{availableUpdate.version}</span>
           </button>
         )}
@@ -181,11 +173,10 @@ const Topbar: React.FC<TopbarProps> = ({
           {availableUpdate?.available && (
             <span
               style={{
-                width: "7px",
-                height: "7px",
+                width: "6px",
+                height: "6px",
                 borderRadius: "50%",
-                background: "var(--color-added)",
-                boxShadow: "0 0 6px var(--color-added)",
+                background: "var(--accent-purple)",
                 marginLeft: "-2px",
               }}
             />
