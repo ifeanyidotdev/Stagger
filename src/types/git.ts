@@ -97,3 +97,12 @@ export interface GitHubPR {
 }
 
 export type DialogType = "branch" | "checkout" | "clone" | "publish" | "set-remote" | "pr-create" | "login" | "workspace-add" | "git-init-confirm" | "delete-branch-confirm" | "git-delete-force-confirm" | "checkout-conflict" | "stash-name" | "stash-inspector" | "merge-rebase" | "push-commit" | "pull-strategy" | "discard-changes-confirm" | null;
+
+export type ToastType = "success" | "error" | "info" | "warning";
+
+export interface ToastItem {
+  id: string;
+  type: ToastType;
+  title: string;
+  message?: string;
+}

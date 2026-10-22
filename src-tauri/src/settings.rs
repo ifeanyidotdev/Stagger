@@ -51,7 +51,7 @@ pub fn get_stagenode_dir() -> PathBuf {
     let home = std::env::var("HOME")
         .or_else(|_| std::env::var("USERPROFILE"))
         .unwrap_or_else(|_| ".".to_string());
-    Path::new(&home).join(".stagenode")
+    Path::new(&home).join(".stagger")
 }
 
 pub fn get_settings_file_path() -> PathBuf {

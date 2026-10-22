@@ -8,7 +8,7 @@ import "./App.css";
 import type { 
   GitFileStatus, GitStatusResult, BranchInfo, CommitInfo, 
   DiffHunk, DiffInfo, GitCliResult, HunkNode, StashEntry,
-  GitHubUser, GitHubRepo, GitHubPR, DialogType 
+  GitHubUser, GitHubRepo, GitHubPR, DialogType, ToastItem, ToastType 
 } from "./types/git";
 import { isRealBranch } from "./utils/graphUtils";
 
@@ -23,6 +23,8 @@ import HistoryView from "./components/history/HistoryView";
 import Dialogs from "./components/modals/Dialogs";
 import SettingsModal from "./components/modals/SettingsModal";
 import UpdateRestartPrompt from "./components/common/UpdateRestartPrompt";
+import ToastContainer from "./components/common/ToastContainer";
+import { formatGitAlertMessage } from "./utils/gitAlertUtils";
 import type { AppUpdateInfo, UpdateStatus, UpdateDownloadProgress } from "./types/settings";
 
 function App() {
@@ -149,16 +151,43 @@ function App() {
   const [mergeRebaseMode, setMergeRebaseMode] = useState<"merge" | "rebase">("merge");
   const [targetMergeBranch, setTargetMergeBranch] = useState<string>("");
 
+  // --- SNACK BAR / TOAST ALERTS SYSTEM ---
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
+
+  const addToast = (type: ToastType, title: string, message?: string) => {
+    const id = Date.now().toString() + Math.random().toString(36).substring(2, 6);
+    const newToast: ToastItem = { id, type, title, message };
+    setToasts(prev => [...prev.slice(-3), newToast]);
+
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, type === "error" ? 5000 : 3500);
+  };
+
+  const removeToast = (id: string) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  };
+
   // --- ERROR & CLI OUTPUT HANDLERS ---
   const setErrorMessage = (msg: string | null) => {
     if (!msg) return;
     console.error("Git error:", msg);
+    const alert = formatGitAlertMessage(msg, "error");
+    addToast("error", alert.title, alert.message);
   };
 
   const setCliOutput = (res: GitCliResult | null) => {
     if (!res) return;
-    if (res.exit_code !== 0) {
-      console.error("Git CLI error:", res.stderr || res.stdout);
+    if (res.exit_code === 0) {
+      if (res.stdout && res.stdout.trim()) {
+        const alert = formatGitAlertMessage(res.stdout, "success");
+        addToast("success", alert.title, alert.message);
+      }
+    } else {
+      const raw = res.stderr || res.stdout || "Command failed";
+      console.error("Git CLI error:", raw);
+      const alert = formatGitAlertMessage(raw, "error");
+      addToast("error", alert.title, alert.message);
     }
   };
   const [dialogType, setDialogType] = useState<DialogType>(null);
@@ -2756,6 +2785,8 @@ function App() {
           </div>
         </div>
       )}
+      {/* Floating Snack Bar Toast Notifications */}
+      <ToastContainer toasts={toasts} onRemove={removeToast} />
     </div>
   );
 }
