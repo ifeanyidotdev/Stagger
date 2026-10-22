@@ -87,13 +87,13 @@ const Topbar: React.FC<TopbarProps> = ({
             {behindCount > 0 && (
               <span className="topbar-sync-tag behind" title={`Remote origin is ahead by ${behindCount} commit(s). Pull to update.`}>
                 <ArrowDown size={10} />
-                <span>{behindCount} behind</span>
+                <span>{behindCount}</span>
               </span>
             )}
             {unpushedCount > 0 && (
               <span className="topbar-sync-tag ahead" title={`${unpushedCount} unpushed commit(s) ready to push.`}>
                 <ArrowUp size={10} />
-                <span>{unpushedCount} ahead</span>
+                <span>{unpushedCount}</span>
               </span>
             )}
           </div>

@@ -1349,7 +1349,7 @@ button, input, textarea, select, a, .workspace-trigger-btn, .tab-button, .branch
   align-items: center;
   gap: 3px;
   font-size: 0.68rem;
-  font-family: var(--font-sans);
+  font-family: var(--font-mono);
   font-weight: 600;
   padding: 1px 6px;
   border-radius: 4px;
