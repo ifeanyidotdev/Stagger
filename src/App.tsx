@@ -2383,16 +2383,6 @@ function App() {
         )}
 
         <div className="main-panel">
-          {isCollabActive && (
-            <div className="collab-overlay-banner">
-              <div className="collab-user-badge">
-                <div className="collab-user-dot" />
-                <span>Multiplayer Session sharing active with: <strong>Alex (Lead Reviewer)</strong></span>
-              </div>
-              <span style={{ fontSize: "0.75rem", color: "var(--color-conflict)", cursor: "pointer" }} onClick={() => setIsCollabActive(false)}>Disconnect</span>
-            </div>
-          )}
-
           <Topbar 
             sidebarCollapsed={sidebarCollapsed}
             setSidebarCollapsed={setSidebarCollapsed}
