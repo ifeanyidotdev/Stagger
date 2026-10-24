@@ -3,6 +3,15 @@
   "productName": "Stagger (Dev)",
   "version": "0.1.6-dev",
   "identifier": "dev.ifeanyi.stagger",
+  "bundle": {
+    "targets": [
+      "nsis",
+      "dmg",
+      "app",
+      "deb",
+      "appimage"
+    ]
+  },
   "plugins": {
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDQ3NDU2QTI3MkVCMDVDNzUKUldSMVhMQXVKMnBGUi9LQk5TUkN1L3E0cTNiYzJDbHNMZTBxUlVwTFRoLy9NVys1VW1NbGkxRjMK",
