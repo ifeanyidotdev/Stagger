@@ -73,10 +73,10 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: 'dev'
-          releaseName: 'Stagger (Dev Preview)'
+          tagName: ${{ github.ref_type == 'tag' && github.ref_name || 'v__VERSION__' }}
+          releaseName: "Stagger (Dev) ${{ github.ref_type == 'tag' && github.ref_name || 'v__VERSION__' }}"
           releaseBody: |
-            ### 🧪 StageNode (Stagger) Developer Preview Release
+            ### 🧪 Stagger Developer Preview Release (${{ github.ref_type == 'tag' && github.ref_name || 'v__VERSION__' }})
             This is an automated cutting-edge preview build on the **Dev** update channel.
 
             ### Assets
@@ -91,3 +91,47 @@ jobs:
           releaseDraft: false
           prerelease: true
           args: '--config src-tauri/tauri.dev.conf.json --target ${{ matrix.target }} --ignore-version-mismatches'
+
+  finalize-dev-channel:
+    needs: publish-tauri-dev
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Sync Dev Channel Manifest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.ref_type == 'tag' && github.ref_name || '' }}"
+          if [ -z "$TAG" ]; then
+            VERSION=$(node -p "require('./src-tauri/tauri.dev.conf.json').version")
+            TAG="v$VERSION"
+          fi
+
+          echo "Target versioned release tag: $TAG"
+          echo "Downloading latest.json from versioned release $TAG..."
+          gh release download "$TAG" -p "latest.json" -O "latest.json" || true
+
+          if [ -f "latest.json" ]; then
+            echo "Updating dev-channel release with latest.json pointing to $TAG..."
+            if ! gh release view "dev-channel" >/dev/null 2>&1; then
+              gh release create "dev-channel" "latest.json" \
+                --title "Stagger Dev Channel (Latest Manifest)" \
+                --notes "Automated channel distribution manifest for Stagger (Dev) preview updates." \
+                --prerelease
+            else
+              gh release upload "dev-channel" "latest.json" --clobber
+            fi
+
+            # Also update legacy 'dev' tag if present for seamless backward compatibility
+            if gh release view "dev" >/dev/null 2>&1; then
+              echo "Syncing legacy dev release asset..."
+              gh release upload "dev" "latest.json" --clobber || true
+            fi
+            echo "Successfully updated Dev channel distribution manifest!"
+          else
+            echo "Warning: latest.json was not generated or downloaded for tag $TAG"
+          fi

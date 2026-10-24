@@ -28,7 +28,7 @@ pub struct UpdateDownloadProgressPayload {
     pub percentage: Option<f64>,
 }
 
-fn resolve_channel_endpoint(channel: Option<String>, app: &tauri::AppHandle) -> String {
+fn resolve_channel_endpoints(channel: Option<String>, app: &tauri::AppHandle) -> Vec<String> {
     let target_channel = channel.unwrap_or_else(|| {
         let name = app.package_info().name.to_lowercase();
         if name.contains("dev") {
@@ -39,9 +39,14 @@ fn resolve_channel_endpoint(channel: Option<String>, app: &tauri::AppHandle) -> 
     });
 
     if target_channel == "dev" {
-        "https://github.com/ifeanyidotdev/Stagger/releases/download/dev/latest.json".to_string()
+        vec![
+            "https://github.com/ifeanyidotdev/Stagger/releases/download/dev-channel/latest.json".to_string(),
+            "https://github.com/ifeanyidotdev/Stagger/releases/download/dev/latest.json".to_string(),
+        ]
     } else {
-        "https://github.com/ifeanyidotdev/Stagger/releases/latest/download/latest.json".to_string()
+        vec![
+            "https://github.com/ifeanyidotdev/Stagger/releases/latest/download/latest.json".to_string(),
+        ]
     }
 }
 
@@ -66,15 +71,23 @@ pub async fn check_app_update(
     app: tauri::AppHandle,
     channel: Option<String>,
 ) -> Result<AppUpdateInfo, String> {
-    let endpoint_url = resolve_channel_endpoint(channel, &app);
-    let parsed_url = url::Url::parse(&endpoint_url)
-        .map_err(|e| format!("Invalid update endpoint URL ({}): {}", endpoint_url, e))?;
+    let endpoint_strings = resolve_channel_endpoints(channel, &app);
+    let mut parsed_urls = Vec::new();
+    for endpoint_url in &endpoint_strings {
+        if let Ok(u) = url::Url::parse(endpoint_url) {
+            parsed_urls.push(u);
+        }
+    }
+
+    if parsed_urls.is_empty() {
+        return Err("No valid update endpoints configured.".to_string());
+    }
 
     let current_version = app.package_info().version.to_string();
 
     let updater = app
         .updater_builder()
-        .endpoints(vec![parsed_url])
+        .endpoints(parsed_urls)
         .map_err(|e| format!("Failed to configure updater endpoints: {}", e))?
         .build()
         .map_err(|e| format!("Failed to build updater: {}", e))?;
@@ -115,13 +128,21 @@ pub async fn download_and_install_update(
     }
     let _guard = DownloadGuard;
 
-    let endpoint_url = resolve_channel_endpoint(channel, &app);
-    let parsed_url = url::Url::parse(&endpoint_url)
-        .map_err(|e| format!("Invalid update endpoint URL ({}): {}", endpoint_url, e))?;
+    let endpoint_strings = resolve_channel_endpoints(channel, &app);
+    let mut parsed_urls = Vec::new();
+    for endpoint_url in &endpoint_strings {
+        if let Ok(u) = url::Url::parse(endpoint_url) {
+            parsed_urls.push(u);
+        }
+    }
+
+    if parsed_urls.is_empty() {
+        return Err("No valid update endpoints configured.".to_string());
+    }
 
     let updater = app
         .updater_builder()
-        .endpoints(vec![parsed_url])
+        .endpoints(parsed_urls)
         .map_err(|e| format!("Failed to configure updater endpoints: {}", e))?
         .build()
         .map_err(|e| format!("Failed to build updater: {}", e))?;
