@@ -1,5 +1,5 @@
 import React from 'react';
-import { ChevronRight, Layers, History, GitPullRequest, FolderSync, LogOut, Sparkles, Settings, ArrowDown, ArrowUp, ArrowUpCircle, ArrowDownToLine, RefreshCw } from 'lucide-react';
+import { ChevronRight, Layers, History, FolderSync, LogOut, Sparkles, Settings, ArrowDown, ArrowUp, ArrowUpCircle, ArrowDownToLine, RefreshCw } from 'lucide-react';
 import type { GitHubUser } from '../../types/git';
 import type { AppUpdateInfo, UpdateStatus, UpdateDownloadProgress } from '../../types/settings';
 
@@ -22,8 +22,9 @@ interface TopbarProps {
   availableUpdate?: AppUpdateInfo | null;
   updateStatus?: UpdateStatus;
   updateProgress?: UpdateDownloadProgress | null;
+  onStartDownload?: () => void;
   onRestartApp?: () => void;
-  onOpenSettings?: (tab?: 'global-updates') => void;
+  onOpenSettings?: (tab?: any) => void;
 }
 
 const Topbar: React.FC<TopbarProps> = ({
@@ -36,7 +37,7 @@ const Topbar: React.FC<TopbarProps> = ({
   unpushedCount = 0,
   behindCount = 0,
   githubToken,
-  remoteUrl,
+  remoteUrl: _remoteUrl,
   setDialogType,
   setDialogInput,
   setDialogInput2,
@@ -45,8 +46,9 @@ const Topbar: React.FC<TopbarProps> = ({
   availableUpdate,
   updateStatus = 'idle',
   updateProgress,
+  onStartDownload,
   onRestartApp,
-  onOpenSettings
+  onOpenSettings,
 }) => {
   return (
     <div className={`topbar ${sidebarCollapsed ? "sidebar-collapsed-topbar" : ""}`} data-tauri-drag-region>
@@ -102,32 +104,19 @@ const Topbar: React.FC<TopbarProps> = ({
 
       {/* Restored GitHub Auth Badge & Global Settings (Topbar Right-Side) */}
       <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-        
-        {githubToken && remoteUrl && (
-          <button 
-            className="topbar-action-btn"
-            onClick={() => {
-              setDialogType("pr-create");
-              setDialogInput("");
-              setDialogInput2("");
-            }}
-          >
-            <GitPullRequest size={13} />
-            <span>Create PR</span>
-          </button>
-        )}
-
         {/* Update Indicators & Restart Trigger */}
-        {updateStatus === 'ready' && availableUpdate?.version && (
+        {updateStatus === 'ready' && (
           <button
             type="button"
             className="topbar-action-btn topbar-restart-btn"
-            onClick={onRestartApp || (() => onOpenSettings?.('global-updates'))}
-            title={`Stagger v${availableUpdate.version} is downloaded and ready! Click to restart and apply update.`}
+            onClick={onRestartApp}
+            title={availableUpdate?.version ? `Stagger v${availableUpdate.version} is downloaded and ready! Click to restart and apply update now.` : 'Update is downloaded and ready! Click to restart and apply update now.'}
           >
             <RefreshCw size={13} className="spin-icon-hover" />
-            <span>Restart to Update</span>
-            <span className="topbar-update-version-tag">v{availableUpdate.version}</span>
+            <span>Restart to Apply Update</span>
+            {availableUpdate?.version && (
+              <span className="topbar-update-version-tag">v{availableUpdate.version}</span>
+            )}
           </button>
         )}
 
@@ -135,13 +124,13 @@ const Topbar: React.FC<TopbarProps> = ({
           <button
             type="button"
             className="topbar-action-btn topbar-downloading-btn"
-            onClick={() => onOpenSettings?.('global-updates')}
-            title="Downloading update in background... Click to view details."
+            title={`Downloading update v${availableUpdate?.version || ''} in background...`}
+            style={{ cursor: "default" }}
           >
             <ArrowDownToLine size={13} className="spin-icon" />
             <span>
               Downloading{availableUpdate?.version ? ` v${availableUpdate.version}` : ''}
-              {updateProgress?.percentage !== undefined && updateProgress?.percentage !== null ? ` (${updateProgress.percentage}%)` : ''}
+              {updateProgress?.percentage !== undefined && updateProgress?.percentage !== null ? ` (${updateProgress.percentage}%)` : '...'}
             </span>
           </button>
         )}
@@ -150,8 +139,8 @@ const Topbar: React.FC<TopbarProps> = ({
           <button
             type="button"
             className="topbar-action-btn"
-            onClick={() => onOpenSettings?.('global-updates')}
-            title={`A new update (v${availableUpdate.version}) is available. Click to download and install.`}
+            onClick={onStartDownload}
+            title={`A new update (v${availableUpdate.version}) is available. Click to download in background.`}
             style={{
               borderColor: "var(--accent-purple)",
             }}
@@ -165,22 +154,11 @@ const Topbar: React.FC<TopbarProps> = ({
         <button 
           className="topbar-action-btn"
           onClick={() => onOpenSettings?.()}
-          title="Global Settings (Git, Universal .gitignore, AI Keys, Updates)"
-          style={{ display: "flex", alignItems: "center", gap: "6px", position: "relative" }}
+          title="Global Settings (Git Identity, Appearance, Pull Strategy, AI Keys)"
+          style={{ display: "flex", alignItems: "center", gap: "6px" }}
         >
           <Settings size={13} />
           <span>Settings</span>
-          {availableUpdate?.available && (
-            <span
-              style={{
-                width: "6px",
-                height: "6px",
-                borderRadius: "50%",
-                background: "var(--accent-purple)",
-                marginLeft: "-2px",
-              }}
-            />
-          )}
         </button>
 
         {/* GitHub circular avatar connection badge */}

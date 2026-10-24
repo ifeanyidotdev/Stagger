@@ -21,11 +21,12 @@ import StagingCanvas from "./components/staging/StagingCanvas";
 import CommitBuilder from "./components/staging/CommitBuilder";
 import HistoryView from "./components/history/HistoryView";
 import Dialogs from "./components/modals/Dialogs";
-import SettingsModal from "./components/modals/SettingsModal";
+import SettingsModal, { type GlobalTab } from "./components/modals/SettingsModal";
+import { CreatePRModal } from "./components/modals/CreatePRModal";
 import UpdateRestartPrompt from "./components/common/UpdateRestartPrompt";
 import ToastContainer from "./components/common/ToastContainer";
 import { formatGitAlertMessage } from "./utils/gitAlertUtils";
-import type { AppUpdateInfo, UpdateStatus, UpdateDownloadProgress } from "./types/settings";
+import type { AppUpdateInfo, UpdateStatus, UpdateDownloadProgress, GlobalSettings, WorkspaceHostingConfig } from "./types/settings";
 
 function App() {
   // --- REPOSITORY & WORKSPACE STATE ---
@@ -194,12 +195,24 @@ function App() {
   const [dialogInput, setDialogInput] = useState("");
   const [dialogInput2, setDialogInput2] = useState(""); 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [settingsInitialTab, setSettingsInitialTab] = useState<'global-git' | 'global-updates' | undefined>(undefined);
+  const [settingsInitialTab, setSettingsInitialTab] = useState<GlobalTab | undefined>(undefined);
+  const [globalSettings, setGlobalSettings] = useState<GlobalSettings | null>(null);
+  const [workspaceHostingConfig, setWorkspaceHostingConfig] = useState<WorkspaceHostingConfig | null>(null);
+  const [isCreatePROpen, setIsCreatePROpen] = useState(false);
+  const [prSourceBranch, setPrSourceBranch] = useState<string | undefined>(undefined);
+
+  const handleOpenCreatePR = (sourceBranch?: string) => {
+    setPrSourceBranch(sourceBranch || currentBranch);
+    setIsCreatePROpen(true);
+  };
+
   const [availableUpdate, setAvailableUpdate] = useState<AppUpdateInfo | null>(null);
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>('idle');
   const [updateProgress, setUpdateProgress] = useState<UpdateDownloadProgress | null>(null);
   const [showRestartPrompt, setShowRestartPrompt] = useState(false);
   const isDownloadingRef = useRef(false);
+  const updateStatusRef = useRef<UpdateStatus>('idle');
+  const updateReadyRef = useRef<boolean>(false);
   const lastUpdateCheckRef = useRef<number>(0);
 
   const handleRestartApp = async () => {
@@ -211,20 +224,30 @@ function App() {
   };
 
   const startBackgroundDownload = async (_update: AppUpdateInfo) => {
-    if (isDownloadingRef.current || updateStatus === 'downloading' || updateStatus === 'ready') {
+    if (updateReadyRef.current || isDownloadingRef.current || updateStatusRef.current === 'downloading' || updateStatusRef.current === 'ready') {
       return;
     }
     isDownloadingRef.current = true;
+    updateStatusRef.current = 'downloading';
     setUpdateStatus('downloading');
     setUpdateProgress(null);
 
     try {
       await invoke('download_and_install_update', { channel: null });
+      updateReadyRef.current = true;
+      updateStatusRef.current = 'ready';
       setUpdateStatus('ready');
       setShowRestartPrompt(true);
     } catch (err: any) {
       console.error("Background update download failed:", err);
-      if (!String(err).includes("already in progress")) {
+      const errMsg = String(err);
+      if (errMsg.includes("already installed") || errMsg.includes("ready")) {
+        updateReadyRef.current = true;
+        updateStatusRef.current = 'ready';
+        setUpdateStatus('ready');
+        setShowRestartPrompt(true);
+      } else if (!errMsg.includes("already in progress")) {
+        updateStatusRef.current = 'error';
         setUpdateStatus('error');
       }
     } finally {
@@ -235,7 +258,7 @@ function App() {
   const checkForRemoteUpdates = async (force: boolean = false) => {
     const now = Date.now();
     // Do not disrupt an in-flight download or ready state
-    if (isDownloadingRef.current || updateStatus === 'downloading' || updateStatus === 'ready') {
+    if (updateReadyRef.current || isDownloadingRef.current || updateStatusRef.current === 'downloading' || updateStatusRef.current === 'ready') {
       return;
     }
     // Throttle focus checks so we do not spam GitHub API on rapid window switches (at least 3 minutes between auto-checks)
@@ -245,19 +268,30 @@ function App() {
     lastUpdateCheckRef.current = now;
 
     try {
-      setUpdateStatus(prev => (prev === 'idle' ? 'checking' : prev));
+      if (updateStatusRef.current === 'idle') {
+        updateStatusRef.current = 'checking';
+        setUpdateStatus('checking');
+      }
       const result = await invoke<AppUpdateInfo>("check_app_update", { channel: null });
       if (result && result.available) {
         setAvailableUpdate(result);
-        // Automatically download update in the background!
-        await startBackgroundDownload(result);
+        if (!updateReadyRef.current && !isDownloadingRef.current) {
+          // Automatically download update in the background!
+          await startBackgroundDownload(result);
+        }
       } else {
-        setAvailableUpdate(null);
-        setUpdateStatus('idle');
+        if (!updateReadyRef.current) {
+          setAvailableUpdate(null);
+          updateStatusRef.current = 'idle';
+          setUpdateStatus('idle');
+        }
       }
     } catch (err) {
       console.debug("Background update check:", err);
-      setUpdateStatus('idle');
+      if (!updateReadyRef.current && updateStatusRef.current === 'checking') {
+        updateStatusRef.current = 'idle';
+        setUpdateStatus('idle');
+      }
     }
   };
 
@@ -267,8 +301,11 @@ function App() {
     let unlistenReady: (() => void) | undefined;
 
     listen<UpdateDownloadProgress>('update-progress', (event) => {
-      setUpdateProgress(event.payload);
-      setUpdateStatus('downloading');
+      if (!updateReadyRef.current) {
+        setUpdateProgress(event.payload);
+        updateStatusRef.current = 'downloading';
+        setUpdateStatus('downloading');
+      }
     }).then((fn) => {
       unlistenProgress = fn;
     }).catch(err => {
@@ -276,6 +313,8 @@ function App() {
     });
 
     listen('update-ready', () => {
+      updateReadyRef.current = true;
+      updateStatusRef.current = 'ready';
       setUpdateStatus('ready');
       setShowRestartPrompt(true);
     }).then((fn) => {
@@ -287,7 +326,12 @@ function App() {
     // 2. Check immediately on startup
     checkForRemoteUpdates(true);
 
-    // 3. Check on focus change (when user returns to the app window)
+    // 3. Load Global Settings
+    invoke<GlobalSettings>('get_global_settings')
+      .then(settings => setGlobalSettings(settings))
+      .catch(err => console.warn('Could not load global settings:', err));
+
+    // 4. Check on focus change (when user returns to the app window)
     const handleFocus = () => {
       checkForRemoteUpdates(false);
     };
@@ -644,6 +688,7 @@ function App() {
       setCommits([]);
       setBranchList([]);
       setRemoteUrl(null);
+      setWorkspaceHostingConfig(null);
       resetWorkspaceScopedState();
     } else if (repoPath === path) {
       resetWorkspaceScopedState();
@@ -818,6 +863,13 @@ function App() {
         setRemoteUrl(remoteRes.stdout.trim());
       } else {
         setRemoteUrl(null);
+      }
+
+      try {
+        const wsHost = await invoke<WorkspaceHostingConfig>("get_workspace_hosting_settings", { repoPath: path });
+        setWorkspaceHostingConfig(wsHost);
+      } catch (_) {
+        setWorkspaceHostingConfig(null);
       }
 
       const cPaths = new Set<string>();
@@ -1150,7 +1202,10 @@ function App() {
   const openMergeRebaseModal = (initialTarget: string = "", mode: "merge" | "rebase" = "merge") => {
     setMergeRebaseMode(mode);
     const available = branchList.filter(b => b !== currentBranch);
-    setTargetMergeBranch(initialTarget || available[0] || remoteBranches[0] || "");
+    const validTarget = (initialTarget && initialTarget !== currentBranch)
+      ? initialTarget
+      : (available[0] || remoteBranches[0] || "");
+    setTargetMergeBranch(validTarget);
     setDialogType("merge-rebase");
   };
 
@@ -1297,7 +1352,7 @@ function App() {
     try {
       const stashRes = await invoke<GitCliResult>("run_git_cli_cmd", {
         repoPath,
-        args: ["stash", "push", "-m", `Auto-stashed from StageNode before switching to ${pendingCheckoutBranch}`]
+        args: ["stash", "push", "-m", `Auto-stashed from Stagger before switching to ${pendingCheckoutBranch}`]
       });
       if (stashRes.exit_code !== 0) {
         setErrorMessage(`Failed to stash changes:\n${stashRes.stderr || stashRes.stdout}`);
@@ -1745,7 +1800,7 @@ function App() {
     try {
       const body = JSON.stringify({
         title: dialogInput,
-        body: dialogInput2 || "Created automatically from StageNode client",
+        body: dialogInput2 || "Created automatically from Stagger client",
         head: currentBranch,
         base: "main"
       });
@@ -2221,7 +2276,7 @@ function App() {
     }
   }, []);
 
-  // Auto-refresh when switching window focus or visibility back to StageNode
+  // Auto-refresh when switching window focus or visibility back to Stagger
   useEffect(() => {
     const handleFocusOrVisible = () => {
       if (repoPath && document.visibilityState === "visible") {
@@ -2275,7 +2330,7 @@ function App() {
     // Auto-check periodically in background every 25 seconds
     const interval = setInterval(checkRemoteChanges, 25000);
 
-    // Auto-check whenever user refocuses StageNode window
+    // Auto-check whenever user refocuses Stagger window
     const handleFocus = () => {
       if (document.visibilityState === "visible") {
         checkRemoteChanges();
@@ -2373,6 +2428,7 @@ function App() {
         unpushedCount={unpushedCount}
         behindCount={behindCount}
         allBranches={allBranches}
+        onOpenCreatePRModal={handleOpenCreatePR}
       />
 
         {!sidebarCollapsed && (
@@ -2402,9 +2458,14 @@ function App() {
             availableUpdate={availableUpdate}
             updateStatus={updateStatus}
             updateProgress={updateProgress}
+            onStartDownload={() => {
+              if (availableUpdate) {
+                startBackgroundDownload(availableUpdate);
+              }
+            }}
             onRestartApp={handleRestartApp}
-            onOpenSettings={(tab) => {
-              setSettingsInitialTab(tab);
+            onOpenSettings={() => {
+              setSettingsInitialTab(undefined);
               setIsSettingsOpen(true);
             }}
           />
@@ -2686,16 +2747,49 @@ function App() {
         }}
         repoPath={workspaces.length > 0 && hasRepo ? repoPath : ""}
         currentBranch={workspaces.length > 0 && hasRepo ? currentBranch : ""}
-        initialTab={settingsInitialTab}
-        cachedUpdateInfo={availableUpdate}
-        updateStatus={updateStatus}
-        updateProgress={updateProgress}
-        onTriggerUpdateCheck={() => checkForRemoteUpdates(true)}
-        onRestartApp={handleRestartApp}
+        initialTab={settingsInitialTab as any}
         onRemoteUrlUpdated={(newUrl) => setRemoteUrl(newUrl)}
-        onSettingsSaved={() => {
+        onSettingsSaved={(savedGlobal) => {
+          if (savedGlobal) {
+            setGlobalSettings(savedGlobal);
+          }
           if (workspaces.length > 0 && repoPath) {
             refreshRepository(repoPath);
+          }
+        }}
+      />
+
+      <CreatePRModal
+        isOpen={isCreatePROpen}
+        onClose={() => {
+          setIsCreatePROpen(false);
+          setPrSourceBranch(undefined);
+        }}
+        repoPath={workspaces.length > 0 && hasRepo ? repoPath : ""}
+        initialSourceBranch={prSourceBranch}
+        currentBranch={currentBranch}
+        branchList={branchList}
+        remoteBranches={remoteBranches}
+        remoteUrl={remoteUrl}
+        globalSettings={globalSettings}
+        workspaceHostingConfig={workspaceHostingConfig}
+        onOpenSettings={() => {
+          setIsCreatePROpen(false);
+          setSettingsInitialTab('global-hosting' as any);
+          setIsSettingsOpen(true);
+        }}
+        onSuccess={(_prUrl, prNumber) => {
+          addToast("success", "Pull Request Created!", prNumber ? `PR #${prNumber} opened successfully` : "Opened in browser");
+          if (workspaces.length > 0 && repoPath) {
+            refreshRepository(repoPath);
+          }
+        }}
+        onError={(msg) => {
+          addToast("error", "Failed to create PR", msg);
+        }}
+        refreshRepository={async () => {
+          if (workspaces.length > 0 && repoPath) {
+            await refreshRepository(repoPath);
           }
         }}
       />
@@ -2705,11 +2799,6 @@ function App() {
         version={availableUpdate?.version}
         onRestart={handleRestartApp}
         onDismiss={() => setShowRestartPrompt(false)}
-        onOpenDetails={() => {
-          setShowRestartPrompt(false);
-          setSettingsInitialTab('global-updates');
-          setIsSettingsOpen(true);
-        }}
       />
 
       {activeDetailHunk && (

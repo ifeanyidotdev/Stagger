@@ -26,22 +26,17 @@ import {
   GitCommit,
   GitPullRequest,
   Workflow,
-  Palette,
-  ArrowDownToLine,
-  ArrowUpCircle
+  Palette
 } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
-import { listen } from '@tauri-apps/api/event';
 import { openUrl, revealItemInDir } from '@tauri-apps/plugin-opener';
 import type { 
   GlobalSettings, 
   SystemGitConfig, 
   WorkspaceSettings, 
   AppTheme,
-  AppBuildInfo,
-  AppUpdateInfo,
-  UpdateStatus,
-  UpdateDownloadProgress
+  GitHostingProvider,
+  WorkspaceHostingConfig
 } from '../../types/settings';
 import type { GitCliResult } from '../../types/git';
 import { 
@@ -56,18 +51,13 @@ interface SettingsModalProps {
   repoPath?: string;
   currentBranch?: string;
   initialTab?: GlobalTab;
-  cachedUpdateInfo?: AppUpdateInfo | null;
-  updateStatus?: UpdateStatus;
-  updateProgress?: UpdateDownloadProgress | null;
-  onTriggerUpdateCheck?: () => Promise<void>;
-  onRestartApp?: () => void;
   onSettingsSaved?: (settings: GlobalSettings) => void;
   onRemoteUrlUpdated?: (newUrl: string) => void;
 }
 
-type ContextType = 'global' | 'workspace';
-type GlobalTab = 'global-git' | 'global-appearance' | 'global-pull' | 'global-gitignore' | 'global-ai' | 'global-updates';
-type WorkspaceTab = 'workspace-remote' | 'workspace-pull' | 'workspace-identity' | 'workspace-overview';
+export type ContextType = 'global' | 'workspace';
+export type GlobalTab = 'global-git' | 'global-appearance' | 'global-pull' | 'global-hosting' | 'global-gitignore' | 'global-ai';
+export type WorkspaceTab = 'workspace-remote' | 'workspace-hosting' | 'workspace-pull' | 'workspace-identity' | 'workspace-overview';
 
 const SettingsModal: React.FC<SettingsModalProps> = ({
   isOpen,
@@ -75,11 +65,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   repoPath = '',
   currentBranch = 'main',
   initialTab,
-  cachedUpdateInfo,
-  updateStatus = 'idle',
-  updateProgress,
-  onTriggerUpdateCheck,
-  onRestartApp,
   onSettingsSaved,
   onRemoteUrlUpdated,
 }) => {
@@ -127,6 +112,32 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   // Workspace Pull Strategy
   const [workspacePullStrategy, setWorkspacePullStrategy] = useState<'inherit' | 'prompt' | 'merge' | 'rebase'>('inherit');
 
+  // Global Hosting Provider & Credentials
+  const [gitHostingProvider, setGitHostingProvider] = useState<GitHostingProvider>('github');
+  const [githubToken, setGithubToken] = useState('');
+  const [githubHost, setGithubHost] = useState('https://github.com');
+  const [gitlabToken, setGitlabToken] = useState('');
+  const [gitlabHost, setGitlabHost] = useState('https://gitlab.com');
+  const [bitbucketUsername, setBitbucketUsername] = useState('');
+  const [bitbucketAppPassword, setBitbucketAppPassword] = useState('');
+  const [giteaToken, setGiteaToken] = useState('');
+  const [giteaHost, setGiteaHost] = useState('https://codeberg.org');
+  const [defaultPrBaseBranch, setDefaultPrBaseBranch] = useState('main');
+
+  // Workspace Hosting Override
+  const [overrideWorkspaceHosting, setOverrideWorkspaceHosting] = useState(false);
+  const [wsHostingProvider, setWsHostingProvider] = useState<GitHostingProvider>('github');
+  const [wsHostingHostUrl, setWsHostingHostUrl] = useState('');
+  const [wsHostingToken, setWsHostingToken] = useState('');
+  const [wsHostingBitbucketUser, setWsHostingBitbucketUser] = useState('');
+  const [wsHostingBaseBranch, setWsHostingBaseBranch] = useState('main');
+
+  const [showGithubToken, setShowGithubToken] = useState(false);
+  const [showGitlabToken, setShowGitlabToken] = useState(false);
+  const [showBitbucketPassword, setShowBitbucketPassword] = useState(false);
+  const [showGiteaToken, setShowGiteaToken] = useState(false);
+  const [showWsToken, setShowWsToken] = useState(false);
+
   // Universal Gitignore
   const [globalGitignorePath, setGlobalGitignorePath] = useState('~/.gitignore_global');
   const [globalGitignoreContent, setGlobalGitignoreContent] = useState('');
@@ -149,21 +160,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   const [isTestingAI, setIsTestingAI] = useState(false);
   const [aiTestResult, setAiTestResult] = useState<{ success: boolean; message: string; response?: string } | null>(null);
 
-  // App Updates & Version Channel
-  const [appBuildInfo, setAppBuildInfo] = useState<AppBuildInfo | null>(null);
-  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
-  const [updateInfo, setUpdateInfo] = useState<AppUpdateInfo | null>(cachedUpdateInfo || null);
-  const [updateCheckError, setUpdateCheckError] = useState<string | null>(null);
-  const [isInstallingUpdate, setIsInstallingUpdate] = useState(false);
-  const [downloadProgress, setDownloadProgress] = useState<UpdateDownloadProgress | null>(null);
-  const [updateInstalledReady, setUpdateInstalledReady] = useState(false);
-  const [installError, setInstallError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (cachedUpdateInfo) {
-      setUpdateInfo(cachedUpdateInfo);
-    }
-  }, [cachedUpdateInfo]);
 
   // Workspace Specific Settings
   const [workspaceData, setWorkspaceData] = useState<WorkspaceSettings | null>(null);
@@ -231,6 +227,18 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         setOpenaiModel(settings.openai_model || 'gpt-4o');
         setOpenaiBaseUrl(settings.openai_base_url || '');
 
+        // Load Git Hosting & PR Settings
+        setGitHostingProvider(settings.git_hosting_provider || 'github');
+        setGithubToken(settings.github_token || localStorage.getItem('gh_token') || '');
+        setGithubHost(settings.github_host || 'https://github.com');
+        setGitlabToken(settings.gitlab_token || '');
+        setGitlabHost(settings.gitlab_host || 'https://gitlab.com');
+        setBitbucketUsername(settings.bitbucket_username || '');
+        setBitbucketAppPassword(settings.bitbucket_app_password || '');
+        setGiteaToken(settings.gitea_token || '');
+        setGiteaHost(settings.gitea_host || 'https://codeberg.org');
+        setDefaultPrBaseBranch(settings.default_pr_base_branch || settings.git_default_branch || 'main');
+
         // Load Pull Strategy & PR Settings
         const storedPull = localStorage.getItem('stagenode_pull_strategy');
         const loadedPullStrategy = settings.default_pull_strategy || (storedPull as any) || (sysGit?.pull_rebase === 'true' ? 'rebase' : sysGit?.pull_rebase === 'false' ? 'merge' : 'prompt');
@@ -249,16 +257,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         document.documentElement.setAttribute('data-theme', storedTheme);
         if (document.body) {
           document.body.setAttribute('data-theme', storedTheme);
-        }
-
-        // Load App Build & Updater Configuration
-        try {
-          const bInfo = await invoke<AppBuildInfo>('get_app_build_info').catch(() => null);
-          if (mounted && bInfo) {
-            setAppBuildInfo(bInfo);
-          }
-        } catch (e) {
-          console.warn('Failed to fetch build info:', e);
         }
 
         // Load universal gitignore content
@@ -310,6 +308,20 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 if (mounted) setWorkspacePullStrategy('inherit');
               }
             }
+            // Load workspace hosting configuration
+            try {
+              const wsHost = await invoke<WorkspaceHostingConfig>('get_workspace_hosting_settings', { repoPath });
+              if (mounted && wsHost) {
+                setOverrideWorkspaceHosting(wsHost.override_global);
+                setWsHostingProvider(wsHost.provider || 'github');
+                setWsHostingHostUrl(wsHost.host_url || '');
+                setWsHostingToken(wsHost.access_token || '');
+                setWsHostingBitbucketUser(wsHost.bitbucket_username || '');
+                setWsHostingBaseBranch(wsHost.default_base_branch || 'main');
+              }
+            } catch (err) {
+              console.warn('Could not load workspace hosting settings:', err);
+            }
           } catch (err) {
             console.warn('Could not load workspace settings:', err);
           }
@@ -321,6 +333,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
             setWorkspaceUserName('');
             setWorkspaceUserEmail('');
             setWorkspacePullStrategy('inherit');
+            setOverrideWorkspaceHosting(false);
+            setWsHostingProvider('github');
+            setWsHostingHostUrl('');
+            setWsHostingToken('');
+            setWsHostingBitbucketUser('');
+            setWsHostingBaseBranch('main');
           }
         }
       } catch (err) {
@@ -433,82 +451,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     }
   };
 
-  // Listen to background download progress events
-  useEffect(() => {
-    let unlisten: (() => void) | undefined;
-    listen<UpdateDownloadProgress>('update-progress', (event) => {
-      setDownloadProgress(event.payload);
-    }).then((fn) => {
-      unlisten = fn;
-    }).catch(err => {
-      console.warn('Could not register update-progress listener:', err);
-    });
-
-    return () => {
-      if (unlisten) unlisten();
-    };
-  }, []);
-
-  // Check for updates against build's default channel
-  const handleCheckForUpdates = async () => {
-    setIsCheckingUpdate(true);
-    setUpdateCheckError(null);
-    setUpdateInstalledReady(false);
-    setInstallError(null);
-    setDownloadProgress(null);
-
-    try {
-      if (onTriggerUpdateCheck) {
-        await onTriggerUpdateCheck();
-      } else {
-        const result = await invoke<AppUpdateInfo>('check_app_update', {
-          channel: null,
-        });
-        setUpdateInfo(result);
-        if (result?.available) {
-          await handleInstallUpdate();
-        }
-      }
-    } catch (err: any) {
-      setUpdateCheckError(err?.message || String(err));
-      setUpdateInfo(null);
-    } finally {
-      setIsCheckingUpdate(false);
-    }
-  };
-
-  // Download and install available update
-  const handleInstallUpdate = async () => {
-    if (!updateInfo?.available) return;
-    setIsInstallingUpdate(true);
-    setInstallError(null);
-    setUpdateInstalledReady(false);
-
-    try {
-      await invoke('download_and_install_update', {
-        channel: null,
-      });
-      setUpdateInstalledReady(true);
-    } catch (err: any) {
-      setInstallError(err?.message || String(err));
-    } finally {
-      setIsInstallingUpdate(false);
-    }
-  };
-
-  // Relaunch the app to apply the installed update
-  const handleRestartApp = async () => {
-    if (onRestartApp) {
-      onRestartApp();
-      return;
-    }
-    try {
-      await invoke('restart_app');
-    } catch (err) {
-      console.error('Failed to restart app:', err);
-    }
-  };
-
   // Apply & Update Remote Origin URL
   const handleApplyRemoteUrl = async () => {
     if (!repoPath || !workspaceRemoteUrl.trim()) return;
@@ -568,9 +510,25 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         auto_open_pull_dialog: autoOpenPullDialog,
         default_pr_merge_method: defaultPrMergeMethod,
         theme: theme,
-        update_channel: (appBuildInfo?.default_channel as 'main' | 'dev') || 'main',
+        update_channel: 'main',
         auto_check_updates: true,
+        git_hosting_provider: gitHostingProvider,
+        github_token: githubToken.trim() || null,
+        github_host: githubHost.trim() || null,
+        gitlab_token: gitlabToken.trim() || null,
+        gitlab_host: gitlabHost.trim() || null,
+        bitbucket_username: bitbucketUsername.trim() || null,
+        bitbucket_app_password: bitbucketAppPassword.trim() || null,
+        gitea_token: giteaToken.trim() || null,
+        gitea_host: giteaHost.trim() || null,
+        default_pr_base_branch: defaultPrBaseBranch.trim() || null,
       };
+
+      if (githubToken.trim()) {
+        localStorage.setItem('gh_token', githubToken.trim());
+      } else {
+        localStorage.removeItem('gh_token');
+      }
 
       localStorage.setItem('stagenode_theme', theme);
       document.documentElement.setAttribute('data-theme', theme);
@@ -640,6 +598,19 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         if (onRemoteUrlUpdated && workspaceRemoteUrl.trim()) {
           onRemoteUrlUpdated(workspaceRemoteUrl.trim());
         }
+
+        // Save workspace hosting override
+        await invoke('save_workspace_hosting_settings', {
+          repoPath,
+          config: {
+            override_global: overrideWorkspaceHosting,
+            provider: wsHostingProvider,
+            host_url: wsHostingHostUrl.trim() || null,
+            access_token: wsHostingToken.trim() || null,
+            bitbucket_username: wsHostingBitbucketUser.trim() || null,
+            default_base_branch: wsHostingBaseBranch.trim() || null,
+          },
+        }).catch(err => console.warn('Failed to save workspace hosting config:', err));
       }
 
       setSaveStatus({
@@ -779,6 +750,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
                 <button
                   type="button"
+                  className={`settings-nav-btn ${activeGlobalTab === 'global-hosting' ? 'active' : ''}`}
+                  onClick={() => setActiveGlobalTab('global-hosting')}
+                >
+                  <GitPullRequest size={15} className="settings-nav-icon" style={{ color: 'var(--accent-blue)' }} />
+                  <span>Git Hosting & PRs</span>
+                </button>
+
+                <button
+                  type="button"
                   className={`settings-nav-btn ${activeGlobalTab === 'global-gitignore' ? 'active' : ''}`}
                   onClick={() => setActiveGlobalTab('global-gitignore')}
                 >
@@ -793,15 +773,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 >
                   <Sparkles size={15} className="settings-nav-icon" style={{ color: 'var(--color-modified)' }} />
                   <span>AI Settings</span>
-                </button>
-
-                <button
-                  type="button"
-                  className={`settings-nav-btn ${activeGlobalTab === 'global-updates' ? 'active' : ''}`}
-                  onClick={() => setActiveGlobalTab('global-updates')}
-                >
-                  <ArrowDownToLine size={15} className="settings-nav-icon" style={{ color: 'var(--color-added)' }} />
-                  <span>App Updates</span>
                 </button>
               </div>
             ) : (
@@ -818,6 +789,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 >
                   <Globe size={15} className="settings-nav-icon" />
                   <span>Remote & Origin URL</span>
+                </button>
+
+                <button
+                  type="button"
+                  className={`settings-nav-btn ${activeWorkspaceTab === 'workspace-hosting' ? 'active' : ''}`}
+                  onClick={() => setActiveWorkspaceTab('workspace-hosting')}
+                >
+                  <GitPullRequest size={15} className="settings-nav-icon" style={{ color: 'var(--accent-blue)' }} />
+                  <span>Project Hosting & PRs</span>
                 </button>
 
                 <button
@@ -961,7 +941,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         Appearance
                       </h3>
                       <p className="settings-field-hint">
-                        Choose the color theme and visual style for StageNode. Changes apply immediately.
+                        Choose the color theme and visual style for Stagger. Changes apply immediately.
                       </p>
                     </div>
 
@@ -1073,7 +1053,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         Pull & Integration Strategy
                       </h3>
                       <p className="settings-field-hint">
-                        Configure how StageNode integrates remote commits when pulling changes, and set your default GitHub PR merge method.
+                        Configure how Stagger integrates remote commits when pulling changes, and set your default GitHub PR merge method.
                       </p>
                     </div>
 
@@ -1085,7 +1065,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                           <span>Default Pull Integration Method</span>
                         </label>
                         <span className="settings-field-hint">
-                          How StageNode settles incoming commits when pulling or synchronizing with origin.
+                          How Stagger settles incoming commits when pulling or synchronizing with origin.
                         </span>
                       </div>
 
@@ -1235,6 +1215,277 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                   </>
                 )}
 
+                {/* GIT HOSTING & PRs */}
+                {activeContext === 'global' && activeGlobalTab === 'global-hosting' && (
+                  <>
+                    <div>
+                      <h3 style={{ fontSize: '0.96rem', fontWeight: 600, color: 'var(--color-text-bright)' }}>
+                        Git Hosting & Pull / Merge Requests
+                      </h3>
+                      <p className="settings-field-hint">
+                        Configure your Git hosting services and personal access tokens to create and inspect Pull Requests / Merge Requests directly from Stagger.
+                      </p>
+                    </div>
+
+                    {/* Provider Selector Cards */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px' }}>
+                      {[
+                        { id: 'github' as GitHostingProvider, name: 'GitHub', desc: 'github.com & Enterprise' },
+                        { id: 'gitlab' as GitHostingProvider, name: 'GitLab', desc: 'gitlab.com & Self-hosted' },
+                        { id: 'bitbucket' as GitHostingProvider, name: 'Bitbucket', desc: 'bitbucket.org' },
+                        { id: 'gitea' as GitHostingProvider, name: 'Gitea / Forgejo', desc: 'Codeberg & Self-hosted' },
+                      ].map(p => (
+                        <button
+                          key={p.id}
+                          type="button"
+                          className={`settings-provider-card ${gitHostingProvider === p.id ? 'active' : ''}`}
+                          onClick={() => setGitHostingProvider(p.id)}
+                          style={{ minHeight: '82px', padding: '12px' }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--color-text-bright)' }}>
+                              {p.name}
+                            </span>
+                            {gitHostingProvider === p.id && (
+                              <span className="settings-context-pill">Active</span>
+                            )}
+                          </div>
+                          <span style={{ fontSize: '0.70rem', color: 'var(--color-text-muted)', lineHeight: 1.3, marginTop: '4px' }}>
+                            {p.desc}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Active Provider Configuration Card */}
+                    <div className="settings-card">
+                      {gitHostingProvider === 'github' && (
+                        <>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <label className="settings-field-label">GitHub Host URL</label>
+                            <input
+                              className="dialog-input"
+                              type="text"
+                              placeholder="https://github.com"
+                              value={githubHost}
+                              onChange={e => setGithubHost(e.target.value)}
+                              style={{ fontFamily: 'var(--font-mono)' }}
+                            />
+                            <span className="settings-field-hint">
+                              Use https://github.com or your GitHub Enterprise Server URL (e.g. https://github.mycompany.com).
+                            </span>
+                          </div>
+
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <label className="settings-field-label">Personal Access Token (classic or fine-grained)</label>
+                              <button
+                                type="button"
+                                onClick={() => openUrl('https://github.com/settings/tokens').catch(() => window.open('https://github.com/settings/tokens', '_blank'))}
+                                style={{ background: 'transparent', border: 'none', color: 'var(--accent-purple-bright)', fontSize: '0.72rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                              >
+                                <span>Generate Token</span>
+                                <ExternalLink size={11} />
+                              </button>
+                            </div>
+                            <div style={{ position: 'relative' }}>
+                              <input
+                                className="dialog-input"
+                                type={showGithubToken ? 'text' : 'password'}
+                                placeholder="ghp_xxxxxxxxxxxx"
+                                value={githubToken}
+                                onChange={e => setGithubToken(e.target.value)}
+                                style={{ fontFamily: 'var(--font-mono)', paddingRight: '36px' }}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setShowGithubToken(!showGithubToken)}
+                                style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer' }}
+                              >
+                                {showGithubToken ? <EyeOff size={15} /> : <Eye size={15} />}
+                              </button>
+                            </div>
+                            <span className="settings-field-hint">
+                              Requires <code>repo</code> scope to create pull requests for private repositories.
+                            </span>
+                          </div>
+                        </>
+                      )}
+
+                      {gitHostingProvider === 'gitlab' && (
+                        <>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <label className="settings-field-label">GitLab Host URL</label>
+                            <input
+                              className="dialog-input"
+                              type="text"
+                              placeholder="https://gitlab.com"
+                              value={gitlabHost}
+                              onChange={e => setGitlabHost(e.target.value)}
+                              style={{ fontFamily: 'var(--font-mono)' }}
+                            />
+                            <span className="settings-field-hint">
+                              Use https://gitlab.com or your self-hosted GitLab instance URL (e.g. https://gitlab.mycompany.com).
+                            </span>
+                          </div>
+
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <label className="settings-field-label">Personal Access Token</label>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const url = gitlabHost.trim() ? `${gitlabHost.trim().replace(/\/$/, '')}/-/user_settings/personal_access_tokens` : 'https://gitlab.com/-/user_settings/personal_access_tokens';
+                                  openUrl(url).catch(() => window.open(url, '_blank'));
+                                }}
+                                style={{ background: 'transparent', border: 'none', color: 'var(--accent-purple-bright)', fontSize: '0.72rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                              >
+                                <span>Generate Token</span>
+                                <ExternalLink size={11} />
+                              </button>
+                            </div>
+                            <div style={{ position: 'relative' }}>
+                              <input
+                                className="dialog-input"
+                                type={showGitlabToken ? 'text' : 'password'}
+                                placeholder="glpat-xxxxxxxxxxxx"
+                                value={gitlabToken}
+                                onChange={e => setGitlabToken(e.target.value)}
+                                style={{ fontFamily: 'var(--font-mono)', paddingRight: '36px' }}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setShowGitlabToken(!showGitlabToken)}
+                                style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer' }}
+                              >
+                                {showGitlabToken ? <EyeOff size={15} /> : <Eye size={15} />}
+                              </button>
+                            </div>
+                            <span className="settings-field-hint">
+                              Requires <code>api</code> or <code>write_repository</code> scope to create Merge Requests.
+                            </span>
+                          </div>
+                        </>
+                      )}
+
+                      {gitHostingProvider === 'bitbucket' && (
+                        <>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <label className="settings-field-label">Bitbucket Username</label>
+                            <input
+                              className="dialog-input"
+                              type="text"
+                              placeholder="e.g. your-username"
+                              value={bitbucketUsername}
+                              onChange={e => setBitbucketUsername(e.target.value)}
+                              style={{ fontFamily: 'var(--font-mono)' }}
+                            />
+                            <span className="settings-field-hint">
+                              Your Bitbucket Atlassian account username.
+                            </span>
+                          </div>
+
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <label className="settings-field-label">App Password</label>
+                              <button
+                                type="button"
+                                onClick={() => openUrl('https://bitbucket.org/account/settings/app-passwords/').catch(() => window.open('https://bitbucket.org/account/settings/app-passwords/', '_blank'))}
+                                style={{ background: 'transparent', border: 'none', color: 'var(--accent-purple-bright)', fontSize: '0.72rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                              >
+                                <span>Generate App Password</span>
+                                <ExternalLink size={11} />
+                              </button>
+                            </div>
+                            <div style={{ position: 'relative' }}>
+                              <input
+                                className="dialog-input"
+                                type={showBitbucketPassword ? 'text' : 'password'}
+                                placeholder="Bitbucket App Password"
+                                value={bitbucketAppPassword}
+                                onChange={e => setBitbucketAppPassword(e.target.value)}
+                                style={{ fontFamily: 'var(--font-mono)', paddingRight: '36px' }}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setShowBitbucketPassword(!showBitbucketPassword)}
+                                style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer' }}
+                              >
+                                {showBitbucketPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                              </button>
+                            </div>
+                            <span className="settings-field-hint">
+                              Requires <code>Pull requests: Read & Write</code> and <code>Repositories: Read</code> permissions.
+                            </span>
+                          </div>
+                        </>
+                      )}
+
+                      {gitHostingProvider === 'gitea' && (
+                        <>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <label className="settings-field-label">Gitea / Forgejo Host URL</label>
+                            <input
+                              className="dialog-input"
+                              type="text"
+                              placeholder="https://codeberg.org"
+                              value={giteaHost}
+                              onChange={e => setGiteaHost(e.target.value)}
+                              style={{ fontFamily: 'var(--font-mono)' }}
+                            />
+                            <span className="settings-field-hint">
+                              Use https://codeberg.org or your self-hosted Gitea / Forgejo domain.
+                            </span>
+                          </div>
+
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <label className="settings-field-label">Access Token</label>
+                            <div style={{ position: 'relative' }}>
+                              <input
+                                className="dialog-input"
+                                type={showGiteaToken ? 'text' : 'password'}
+                                placeholder="Gitea Personal Access Token"
+                                value={giteaToken}
+                                onChange={e => setGiteaToken(e.target.value)}
+                                style={{ fontFamily: 'var(--font-mono)', paddingRight: '36px' }}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setShowGiteaToken(!showGiteaToken)}
+                                style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer' }}
+                              >
+                                {showGiteaToken ? <EyeOff size={15} /> : <Eye size={15} />}
+                              </button>
+                            </div>
+                            <span className="settings-field-hint">
+                              Requires <code>repo</code> permissions.
+                            </span>
+                          </div>
+                        </>
+                      )}
+
+                      {/* Default PR Base Branch */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', paddingTop: '12px', borderTop: '1px solid var(--border-color)' }}>
+                        <label className="settings-field-label">
+                          <GitBranch size={13} />
+                          <span>Default Target / Base Branch</span>
+                        </label>
+                        <input
+                          className="dialog-input"
+                          type="text"
+                          placeholder="main"
+                          value={defaultPrBaseBranch}
+                          onChange={e => setDefaultPrBaseBranch(e.target.value)}
+                          style={{ fontFamily: 'var(--font-mono)', width: '240px' }}
+                        />
+                        <span className="settings-field-hint">
+                          The default branch into which new Pull Requests or Merge Requests are proposed to be merged (e.g. <code>main</code>, <code>master</code>, <code>develop</code>).
+                        </span>
+                      </div>
+                    </div>
+                  </>
+                )}
+
                 {/* 3. UNIVERSAL GITIGNORE */}
                 {activeContext === 'global' && activeGlobalTab === 'global-gitignore' && (
                   <>
@@ -1243,7 +1494,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         Universal Global .gitignore
                       </h3>
                       <p className="settings-field-hint">
-                        Rules specified here are automatically respected by every single project and workspace opened in StageNode.
+                        Rules specified here are automatically respected by every single project and workspace opened in Stagger.
                       </p>
                     </div>
 
@@ -1639,291 +1890,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                   </>
                 )}
 
-                {/* 6. APP UPDATES & CHANNELS */}
-                {activeContext === 'global' && activeGlobalTab === 'global-updates' && (
-                  <>
-                    <div>
-                      <h3 style={{ fontSize: '0.96rem', fontWeight: 600, color: 'var(--color-text-bright)' }}>
-                        Application Updates
-                      </h3>
-                      <p className="settings-field-hint">
-                        Ensure your desktop application is running the latest features, improvements, and fixes.
-                      </p>
-                    </div>
 
-                    {/* Current Version Card */}
-                    <div className="settings-card">
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                          <div
-                            style={{
-                              width: '38px',
-                              height: '38px',
-                              borderRadius: '10px',
-                              background: 'var(--bg-panel-secondary)',
-                              border: '1px solid var(--border-color)',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              color: 'var(--accent-purple)',
-                              flexShrink: 0,
-                            }}
-                          >
-                            <ArrowDownToLine size={18} />
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--color-text-bright)' }}>
-                              {appBuildInfo?.app_name || 'Stagger'}
-                            </span>
-                            <span
-                              style={{
-                                background: 'var(--bg-panel-secondary)',
-                                color: 'var(--color-text-muted)',
-                                border: '1px solid var(--border-color)',
-                                borderRadius: '6px',
-                                padding: '2px 8px',
-                                fontFamily: 'var(--font-mono)',
-                                fontSize: '0.74rem',
-                                fontWeight: 500,
-                              }}
-                            >
-                              v{appBuildInfo?.version || '0.1.1'}
-                            </span>
-                          </div>
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={() => handleCheckForUpdates()}
-                          disabled={isCheckingUpdate || isInstallingUpdate}
-                          style={{
-                            background: 'var(--bg-panel-secondary)',
-                            color: 'var(--color-text-bright)',
-                            border: '1px solid var(--border-color)',
-                            borderRadius: '8px',
-                            padding: '7px 14px',
-                            fontSize: '0.8rem',
-                            fontWeight: 500,
-                            cursor: isCheckingUpdate || isInstallingUpdate ? 'not-allowed' : 'pointer',
-                            opacity: isCheckingUpdate || isInstallingUpdate ? 0.6 : 1,
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '7px',
-                            transition: 'var(--transition-quick)',
-                          }}
-                        >
-                          <RefreshCw size={13} className={isCheckingUpdate ? 'spin-icon' : ''} />
-                          <span>{isCheckingUpdate ? 'Checking Releases...' : 'Check for Updates'}</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Update Result / Download Status Card */}
-                    {(() => {
-                      const isReadyToApply = updateStatus === 'ready' || updateInstalledReady;
-                      const isCurrentlyDownloading = updateStatus === 'downloading' || isInstallingUpdate;
-                      const effectiveProgress = updateProgress || downloadProgress;
-
-                      if (!updateCheckError && !updateInfo && !isCurrentlyDownloading && !isReadyToApply) {
-                        return null;
-                      }
-
-                      return (
-                        <div className="settings-card">
-                          {updateCheckError ? (
-                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
-                              <AlertCircle size={17} style={{ flexShrink: 0, marginTop: '2px', color: 'var(--color-deleted)' }} />
-                              <div>
-                                <div style={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--color-text-bright)' }}>Update Notice</div>
-                                <div style={{ fontSize: '0.76rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>{updateCheckError}</div>
-                                <div style={{ fontSize: '0.72rem', color: 'var(--color-text-dark)', marginTop: '4px' }}>
-                                  No releases found on this channel, or network connection is unavailable.
-                                </div>
-                              </div>
-                            </div>
-                          ) : updateInfo?.available ? (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
-                                <div>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                    <ArrowUpCircle size={17} style={{ color: 'var(--accent-purple)' }} />
-                                    <span style={{ fontSize: '0.92rem', fontWeight: 600, color: 'var(--color-text-bright)' }}>
-                                      Update Available
-                                    </span>
-                                    <span
-                                      style={{
-                                        fontFamily: 'var(--font-mono)',
-                                        fontSize: '0.72rem',
-                                        background: 'var(--bg-panel-secondary)',
-                                        padding: '2px 7px',
-                                        borderRadius: '4px',
-                                        color: 'var(--accent-purple)',
-                                        border: '1px solid var(--border-color)',
-                                        fontWeight: 500,
-                                      }}
-                                    >
-                                      v{updateInfo.version}
-                                    </span>
-                                    {updateInfo.date && (
-                                      <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
-                                        ({updateInfo.date.split('T')[0]})
-                                      </span>
-                                    )}
-                                  </div>
-                                  <div style={{ fontSize: '0.74rem', color: 'var(--color-text-muted)', marginTop: '3px' }}>
-                                    Installed version: v{updateInfo.current_version}
-                                  </div>
-                                </div>
-
-                                {isReadyToApply ? (
-                                  <button
-                                    type="button"
-                                    onClick={handleRestartApp}
-                                    style={{
-                                      background: 'var(--accent-purple)',
-                                      color: '#1e1e2e',
-                                      border: '1px solid var(--accent-purple)',
-                                      borderRadius: '8px',
-                                      padding: '7px 15px',
-                                      fontSize: '0.8rem',
-                                      fontWeight: 600,
-                                      cursor: 'pointer',
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      gap: '7px',
-                                      transition: 'var(--transition-quick)',
-                                    }}
-                                  >
-                                    <RefreshCw size={13} />
-                                    <span>Restart App to Apply</span>
-                                  </button>
-                                ) : isCurrentlyDownloading ? (
-                                  <button
-                                    type="button"
-                                    disabled
-                                    style={{
-                                      background: 'var(--bg-panel-secondary)',
-                                      color: 'var(--color-text-muted)',
-                                      border: '1px solid var(--border-color)',
-                                      borderRadius: '8px',
-                                      padding: '7px 15px',
-                                      fontSize: '0.8rem',
-                                      fontWeight: 500,
-                                      cursor: 'not-allowed',
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      gap: '7px',
-                                      opacity: 0.7,
-                                    }}
-                                  >
-                                    <ArrowDownToLine size={13} className="spin-icon" />
-                                    <span>Downloading in Background...</span>
-                                  </button>
-                                ) : (
-                                  <button
-                                    type="button"
-                                    onClick={handleInstallUpdate}
-                                    style={{
-                                      background: 'var(--accent-purple)',
-                                      color: '#1e1e2e',
-                                      border: '1px solid var(--accent-purple)',
-                                      borderRadius: '8px',
-                                      padding: '7px 15px',
-                                      fontSize: '0.8rem',
-                                      fontWeight: 600,
-                                      cursor: 'pointer',
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      gap: '7px',
-                                      transition: 'var(--transition-quick)',
-                                    }}
-                                  >
-                                    <ArrowDownToLine size={13} />
-                                    <span>Download & Install Update</span>
-                                  </button>
-                                )}
-                              </div>
-
-                              {/* Release notes if available */}
-                              {updateInfo.body && (
-                                <div style={{ background: 'var(--bg-panel-secondary)', borderRadius: '8px', padding: '12px 14px', border: '1px solid var(--border-color)', maxHeight: '160px', overflowY: 'auto' }}>
-                                  <div style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--color-text-muted)', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                                    Release Notes
-                                  </div>
-                                  <div style={{ fontSize: '0.78rem', color: 'var(--color-text-main)', whiteSpace: 'pre-wrap', lineHeight: 1.5, fontFamily: 'var(--font-mono)' }}>
-                                    {updateInfo.body}
-                                  </div>
-                                </div>
-                              )}
-
-                              {/* Download Progress Bar */}
-                              {isCurrentlyDownloading && (
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
-                                    <span>Downloading update in background...</span>
-                                    <span style={{ fontFamily: 'var(--font-mono)' }}>
-                                      {effectiveProgress?.percentage ? `${effectiveProgress.percentage}%` : effectiveProgress?.downloaded ? `${(effectiveProgress.downloaded / 1048576).toFixed(1)} MB` : 'In progress'}
-                                    </span>
-                                  </div>
-                                  <div style={{ width: '100%', height: '4px', borderRadius: '2px', background: 'var(--bg-panel-secondary)', overflow: 'hidden' }}>
-                                    <div
-                                      style={{
-                                        height: '100%',
-                                        background: 'var(--accent-purple)',
-                                        width: `${effectiveProgress?.percentage || 30}%`,
-                                        transition: 'width 0.2s ease',
-                                      }}
-                                    />
-                                  </div>
-                                </div>
-                              )}
-
-                              {installError && (
-                                <div style={{ color: 'var(--color-deleted)', fontSize: '0.76rem' }}>
-                                  Installation notice: {installError}
-                                </div>
-                              )}
-
-                              {isReadyToApply && (
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-staged)', fontSize: '0.78rem', fontWeight: 500 }}>
-                                  <CheckCircle2 size={15} />
-                                  <span>Update downloaded and verified. Click &quot;Restart App to Apply&quot; to finish updating.</span>
-                                </div>
-                              )}
-                            </div>
-                          ) : (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                              <div
-                                style={{
-                                  width: '32px',
-                                  height: '32px',
-                                  borderRadius: '8px',
-                                  background: 'var(--bg-panel-secondary)',
-                                  border: '1px solid var(--border-color)',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  color: 'var(--color-staged)',
-                                  flexShrink: 0,
-                                }}
-                              >
-                                <CheckCircle2 size={16} />
-                              </div>
-                              <div>
-                                <div style={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--color-text-bright)' }}>
-                                  You&apos;re up to date
-                                </div>
-                                <div style={{ fontSize: '0.74rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
-                                  Version {updateInfo?.current_version || appBuildInfo?.version} is the latest release.
-                                </div>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })()}
-                  </>
-                )}
 
                 {/* ========================================================
                     WORKSPACE CONTEXT TABS (NO AI & NO GITIGNORE AS REQUESTED)
@@ -2060,6 +2027,184 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         )}
                       </div>
                     </div>
+                  </>
+                )}
+
+                {/* WORKSPACE: HOSTING & PRS */}
+                {activeContext === 'workspace' && activeWorkspaceTab === 'workspace-hosting' && (
+                  <>
+                    <div>
+                      <h3 style={{ fontSize: '0.96rem', fontWeight: 600, color: 'var(--color-text-bright)' }}>
+                        Project Git Hosting & Pull Requests
+                      </h3>
+                      <p className="settings-field-hint">
+                        Customize hosting provider credentials, API endpoints, or target base branches for <strong>{workspaceName}</strong>.
+                      </p>
+                    </div>
+
+                    {/* Override Switch */}
+                    <div 
+                      className="settings-card"
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '16px',
+                        background: 'var(--bg-panel-secondary)',
+                        padding: '16px 20px',
+                      }}
+                    >
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--color-text-bright)' }}>
+                          Override Git Hosting Settings for this Project
+                        </div>
+                        <div className="settings-field-hint" style={{ marginTop: '2px' }}>
+                          Enable if this repository uses a different provider (e.g., company GitLab or Bitbucket) or dedicated access token.
+                        </div>
+                      </div>
+                      <label className="settings-switch" title="Toggle project hosting override">
+                        <input
+                          type="checkbox"
+                          checked={overrideWorkspaceHosting}
+                          onChange={e => setOverrideWorkspaceHosting(e.target.checked)}
+                        />
+                        <span className="settings-switch-slider" />
+                      </label>
+                    </div>
+
+                    {!overrideWorkspaceHosting ? (
+                      <div className="settings-card" style={{ background: 'rgba(255, 255, 255, 0.02)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <div
+                            style={{
+                              width: '32px',
+                              height: '32px',
+                              borderRadius: '8px',
+                              background: 'rgba(139, 92, 246, 0.12)',
+                              border: '1px solid rgba(139, 92, 246, 0.25)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              color: 'var(--accent-purple-bright)',
+                              flexShrink: 0,
+                            }}
+                          >
+                            <Globe size={16} />
+                          </div>
+                          <div>
+                            <div style={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--color-text-bright)' }}>
+                              Inheriting Global Hosting Configuration
+                            </div>
+                            <div style={{ fontSize: '0.74rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+                              Using global provider: <strong>{gitHostingProvider.toUpperCase()}</strong>. Target branch: <strong>{defaultPrBaseBranch || 'main'}</strong>.
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="settings-card">
+                        {/* Workspace Provider Choice */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          <label className="settings-field-label">Project Provider</label>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px' }}>
+                            {[
+                              { id: 'github' as GitHostingProvider, name: 'GitHub' },
+                              { id: 'gitlab' as GitHostingProvider, name: 'GitLab' },
+                              { id: 'bitbucket' as GitHostingProvider, name: 'Bitbucket' },
+                              { id: 'gitea' as GitHostingProvider, name: 'Gitea' },
+                            ].map(p => (
+                              <button
+                                key={p.id}
+                                type="button"
+                                className={`settings-segmented-btn ${wsHostingProvider === p.id ? 'selected' : ''}`}
+                                onClick={() => setWsHostingProvider(p.id)}
+                              >
+                                <span>{p.name}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Workspace Host URL */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          <label className="settings-field-label">Host URL (Optional / Self-hosted)</label>
+                          <input
+                            className="dialog-input"
+                            type="text"
+                            placeholder={
+                              wsHostingProvider === 'github' ? 'https://github.com' :
+                              wsHostingProvider === 'gitlab' ? 'https://gitlab.com' :
+                              wsHostingProvider === 'bitbucket' ? 'https://bitbucket.org' :
+                              'https://codeberg.org'
+                            }
+                            value={wsHostingHostUrl}
+                            onChange={e => setWsHostingHostUrl(e.target.value)}
+                            style={{ fontFamily: 'var(--font-mono)' }}
+                          />
+                          <span className="settings-field-hint">
+                            Leave blank to use default cloud URL or enter your self-hosted instance.
+                          </span>
+                        </div>
+
+                        {/* If Bitbucket: Username */}
+                        {wsHostingProvider === 'bitbucket' && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <label className="settings-field-label">Bitbucket Username</label>
+                            <input
+                              className="dialog-input"
+                              type="text"
+                              placeholder="Username"
+                              value={wsHostingBitbucketUser}
+                              onChange={e => setWsHostingBitbucketUser(e.target.value)}
+                              style={{ fontFamily: 'var(--font-mono)' }}
+                            />
+                          </div>
+                        )}
+
+                        {/* Workspace Access Token */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          <label className="settings-field-label">
+                            {wsHostingProvider === 'bitbucket' ? 'App Password' : 'Personal Access Token'}
+                          </label>
+                          <div style={{ position: 'relative' }}>
+                            <input
+                              className="dialog-input"
+                              type={showWsToken ? 'text' : 'password'}
+                              placeholder="Enter workspace-specific token"
+                              value={wsHostingToken}
+                              onChange={e => setWsHostingToken(e.target.value)}
+                              style={{ fontFamily: 'var(--font-mono)', paddingRight: '36px' }}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowWsToken(!showWsToken)}
+                              style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer' }}
+                            >
+                              {showWsToken ? <EyeOff size={15} /> : <Eye size={15} />}
+                            </button>
+                          </div>
+                          <span className="settings-field-hint">
+                            Securely saved in Stagger config for this repository.
+                          </span>
+                        </div>
+
+                        {/* Workspace Default Base Branch */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          <label className="settings-field-label">Default Target / Base Branch</label>
+                          <input
+                            className="dialog-input"
+                            type="text"
+                            placeholder="main"
+                            value={wsHostingBaseBranch}
+                            onChange={e => setWsHostingBaseBranch(e.target.value)}
+                            style={{ fontFamily: 'var(--font-mono)', width: '240px' }}
+                          />
+                          <span className="settings-field-hint">
+                            Target branch for pull requests in this repository (e.g. <code>main</code>, <code>master</code>, <code>develop</code>).
+                          </span>
+                        </div>
+                      </div>
+                    )}
                   </>
                 )}
 

@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
+#[serde(default)]
 pub struct GlobalSettings {
     pub git_user_name: Option<String>,
     pub git_user_email: Option<String>,
@@ -21,6 +22,27 @@ pub struct GlobalSettings {
     pub default_pr_merge_method: Option<String>, // "merge" | "squash" | "rebase"
     pub update_channel: Option<String>, // "main" | "dev"
     pub auto_check_updates: Option<bool>,
+    pub git_hosting_provider: Option<String>, // "github" | "gitlab" | "bitbucket" | "gitea"
+    pub github_token: Option<String>,
+    pub github_host: Option<String>,
+    pub gitlab_token: Option<String>,
+    pub gitlab_host: Option<String>,
+    pub bitbucket_username: Option<String>,
+    pub bitbucket_app_password: Option<String>,
+    pub gitea_token: Option<String>,
+    pub gitea_host: Option<String>,
+    pub default_pr_base_branch: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+#[serde(default)]
+pub struct WorkspaceHostingConfig {
+    pub override_global: bool,
+    pub provider: Option<String>,
+    pub host_url: Option<String>,
+    pub access_token: Option<String>,
+    pub bitbucket_username: Option<String>,
+    pub default_base_branch: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
@@ -140,14 +162,27 @@ pub fn get_global_settings_impl() -> Result<GlobalSettings, String> {
         if settings.default_pr_merge_method.is_none() {
             settings.default_pr_merge_method = Some("merge".to_string());
         }
+        if settings.git_hosting_provider.is_none() {
+            settings.git_hosting_provider = Some("github".to_string());
+        }
+        if settings.github_host.is_none() {
+            settings.github_host = Some("https://github.com".to_string());
+        }
+        if settings.gitlab_host.is_none() {
+            settings.gitlab_host = Some("https://gitlab.com".to_string());
+        }
+        if settings.default_pr_base_branch.is_none() {
+            settings.default_pr_base_branch = settings.git_default_branch.clone().or(Some("main".to_string()));
+        }
 
         Ok(settings)
     } else {
         let sys = get_system_git_config_impl();
+        let def_branch = sys.default_branch.or(Some("main".to_string()));
         let default_settings = GlobalSettings {
             git_user_name: sys.user_name,
             git_user_email: sys.user_email,
-            git_default_branch: sys.default_branch.or(Some("main".to_string())),
+            git_default_branch: def_branch.clone(),
             global_gitignore_path: sys.excludes_file.or(Some("~/.gitignore_global".to_string())),
             sync_git_global_config: Some(true),
             ai_provider: Some("gemini".to_string()),
@@ -165,6 +200,16 @@ pub fn get_global_settings_impl() -> Result<GlobalSettings, String> {
             default_pr_merge_method: Some("merge".to_string()),
             update_channel: Some("main".to_string()),
             auto_check_updates: Some(true),
+            git_hosting_provider: Some("github".to_string()),
+            github_token: None,
+            github_host: Some("https://github.com".to_string()),
+            gitlab_token: None,
+            gitlab_host: Some("https://gitlab.com".to_string()),
+            bitbucket_username: None,
+            bitbucket_app_password: None,
+            gitea_token: None,
+            gitea_host: None,
+            default_pr_base_branch: def_branch,
         };
 
         // Attempt initial save
@@ -338,6 +383,48 @@ pub fn save_workspace_settings_impl(
     }
 
     get_workspace_settings_impl(repo_path)
+}
+
+pub fn get_workspace_hosting_file_path() -> PathBuf {
+    get_stagenode_dir().join("workspaces_hosting.json")
+}
+
+pub fn get_workspace_hosting_settings_impl(repo_path: &str) -> Result<WorkspaceHostingConfig, String> {
+    let file_path = get_workspace_hosting_file_path();
+    if !file_path.exists() {
+        return Ok(WorkspaceHostingConfig::default());
+    }
+    let content = fs::read_to_string(&file_path)
+        .map_err(|e| format!("Failed to read workspace hosting file: {}", e))?;
+    let map: std::collections::HashMap<String, WorkspaceHostingConfig> =
+        serde_json::from_str(&content).unwrap_or_default();
+    Ok(map.get(repo_path).cloned().unwrap_or_default())
+}
+
+pub fn save_workspace_hosting_settings_impl(
+    repo_path: &str,
+    config: &WorkspaceHostingConfig,
+) -> Result<WorkspaceHostingConfig, String> {
+    let dir = get_stagenode_dir();
+    if !dir.exists() {
+        fs::create_dir_all(&dir)
+            .map_err(|e| format!("Failed to create config directory: {}", e))?;
+    }
+    let file_path = get_workspace_hosting_file_path();
+    let mut map: std::collections::HashMap<String, WorkspaceHostingConfig> = if file_path.exists() {
+        let content = fs::read_to_string(&file_path).unwrap_or_default();
+        serde_json::from_str(&content).unwrap_or_default()
+    } else {
+        std::collections::HashMap::new()
+    };
+
+    map.insert(repo_path.to_string(), config.clone());
+    let json = serde_json::to_string_pretty(&map)
+        .map_err(|e| format!("Failed to serialize workspace hosting settings: {}", e))?;
+    fs::write(&file_path, json)
+        .map_err(|e| format!("Failed to write workspace hosting file: {}", e))?;
+
+    Ok(config.clone())
 }
 
 

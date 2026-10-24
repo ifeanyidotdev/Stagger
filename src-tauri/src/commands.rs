@@ -175,6 +175,41 @@ pub fn save_workspace_settings(
     crate::settings::save_workspace_settings_impl(&repo_path, remote_url, local_user_name, local_user_email)
 }
 
+#[tauri::command]
+pub fn get_workspace_hosting_settings(repo_path: String) -> Result<crate::settings::WorkspaceHostingConfig, String> {
+    crate::settings::get_workspace_hosting_settings_impl(&repo_path)
+}
+
+#[tauri::command]
+pub fn save_workspace_hosting_settings(
+    repo_path: String,
+    config: crate::settings::WorkspaceHostingConfig,
+) -> Result<crate::settings::WorkspaceHostingConfig, String> {
+    crate::settings::save_workspace_hosting_settings_impl(&repo_path, &config)
+}
+
+#[tauri::command]
+pub async fn create_pull_request(
+    payload: github::CreatePullRequestPayload,
+) -> Result<github::PullRequestResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        github::create_pull_request_impl(&payload)
+    })
+    .await
+    .map_err(|e| format!("Task execution error: {}", e))?
+}
+
+#[tauri::command]
+pub async fn fetch_pull_requests(
+    payload: github::FetchPullRequestsPayload,
+) -> Result<Vec<github::PullRequestResult>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        github::fetch_pull_requests_impl(&payload)
+    })
+    .await
+    .map_err(|e| format!("Task execution error: {}", e))?
+}
+
 
 
 

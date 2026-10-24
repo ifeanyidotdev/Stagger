@@ -137,7 +137,7 @@ const Dialogs: React.FC<DialogsProps> = ({
   handleDialogSubmit,
   mergeRebaseMode,
   setMergeRebaseMode,
-  allBranches,
+  allBranches: _allBranches,
   targetMergeBranch,
   setTargetMergeBranch,
   branchList,
@@ -1173,9 +1173,9 @@ const Dialogs: React.FC<DialogsProps> = ({
 
             <div style={{ fontSize: "0.78rem", color: "var(--color-text-muted)" }}>
               {mergeRebaseMode === "merge" ? (
-                <span>Integrate changes from target branch into current branch (<strong>{currentBranch}</strong>). ({allBranches.length} branches registered)</span>
+                <span>Integrate changes from selected branch into current branch (<strong>{currentBranch}</strong>).</span>
               ) : (
-                <span>Reapply commits from current branch (<strong>{currentBranch}</strong>) onto top of target branch. ({allBranches.length} branches registered)</span>
+                <span>Reapply commits from current branch (<strong>{currentBranch}</strong>) onto top of selected branch.</span>
               )}
             </div>
 
@@ -1189,7 +1189,7 @@ const Dialogs: React.FC<DialogsProps> = ({
               return (
                 <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
                   <label style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", fontWeight: 500, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <span>Select Target Branch:</span>
+                    <span>{mergeRebaseMode === "merge" ? `Select branch to merge into '${currentBranch}':` : `Select branch to rebase '${currentBranch}' onto:`}</span>
                     {targetMergeBranch && (
                       <span style={{ fontSize: "0.7rem", color: isTargetRemote ? "var(--accent-blue)" : "var(--accent-purple-bright)", fontFamily: "var(--font-mono)" }}>
                         {isTargetRemote ? "remote" : "local"}

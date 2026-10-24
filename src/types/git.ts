@@ -90,10 +90,39 @@ export interface GitHubPR {
   number: number;
   title: string;
   state: string;
+  draft?: boolean;
   html_url: string;
-  user: { login: string; avatar_url: string };
+  user?: { login: string; avatar_url?: string };
   head: { ref: string };
   base: { ref: string };
+  provider?: 'github' | 'gitlab' | 'bitbucket' | 'gitea';
+}
+
+export type PullRequestItem = GitHubPR;
+
+export interface CreatePullRequestPayload {
+  provider: 'github' | 'gitlab' | 'bitbucket' | 'gitea';
+  host_url: string;
+  owner: string;
+  repo: string;
+  full_path: string;
+  token: string;
+  bitbucket_username?: string | null;
+  title: string;
+  body: string;
+  head: string;
+  base: string;
+  draft: boolean;
+}
+
+export interface FetchPullRequestsPayload {
+  provider: 'github' | 'gitlab' | 'bitbucket' | 'gitea';
+  host_url: string;
+  owner: string;
+  repo: string;
+  full_path: string;
+  token: string;
+  bitbucket_username?: string | null;
 }
 
 export type DialogType = "branch" | "checkout" | "clone" | "publish" | "set-remote" | "pr-create" | "login" | "workspace-add" | "git-init-confirm" | "delete-branch-confirm" | "git-delete-force-confirm" | "checkout-conflict" | "stash-name" | "stash-inspector" | "merge-rebase" | "push-commit" | "pull-strategy" | "discard-changes-confirm" | null;

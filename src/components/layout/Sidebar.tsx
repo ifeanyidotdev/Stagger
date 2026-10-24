@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Layers,
   ChevronDown,
@@ -20,7 +20,8 @@ import {
   GitBranch,
   Users,
   Archive,
-  RefreshCw
+  RefreshCw,
+  GitPullRequest
 } from "lucide-react";
 import type { GitHubPR, StashEntry, BranchInfo } from '../../types/git';
 
@@ -80,6 +81,7 @@ interface SidebarProps {
   behindCount: number;
   allBranches: BranchInfo[];
   onOpenFolderPicker?: () => void;
+  onOpenCreatePRModal?: (sourceBranch?: string) => void;
 }
 
 const Sidebar: React.FC<SidebarProps> = ({
@@ -90,6 +92,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   activeWorkspaceName,
   workspaces,
   onOpenFolderPicker,
+  onOpenCreatePRModal,
   selectWorkspace,
   repoPath,
   removeWorkspace,
@@ -142,6 +145,25 @@ const Sidebar: React.FC<SidebarProps> = ({
   const branchOpsMenuRef = useRef<HTMLDivElement>(null);
   const branchOpsBtnRef = useRef<HTMLSpanElement>(null);
   const workspaceDropdownRef = useRef<HTMLDivElement>(null);
+  const branchContextMenuRef = useRef<HTMLDivElement>(null);
+
+  const [branchContextMenu, setBranchContextMenu] = useState<{
+    x: number;
+    y: number;
+    branch: string;
+    isRemote: boolean;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!branchContextMenu) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (branchContextMenuRef.current && !branchContextMenuRef.current.contains(e.target as Node)) {
+        setBranchContextMenu(null);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [branchContextMenu]);
 
   useEffect(() => {
     if (!isBranchOpsDropdownOpen) return;
@@ -482,6 +504,17 @@ const Sidebar: React.FC<SidebarProps> = ({
                   className="dropdown-menu-item"
                   onClick={() => {
                     setIsBranchOpsDropdownOpen(false);
+                    onOpenCreatePRModal?.();
+                  }}
+                >
+                  <GitPullRequest size={13} style={{ color: "var(--accent-purple-bright)" }} />
+                  <span>Create Pull / Merge Request...</span>
+                </div>
+
+                <div 
+                  className="dropdown-menu-item"
+                  onClick={() => {
+                    setIsBranchOpsDropdownOpen(false);
                     openMergeRebaseModal();
                   }}
                 >
@@ -516,6 +549,16 @@ const Sidebar: React.FC<SidebarProps> = ({
                     onDragOver={handleDragOverBranch}
                     onDrop={handleDropOnBranch}
                     onClick={() => startCheckoutBranch(bName)}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setBranchContextMenu({
+                        x: Math.min(e.clientX, window.innerWidth - 220),
+                        y: Math.min(e.clientY, window.innerHeight - 200),
+                        branch: bName,
+                        isRemote: false
+                      });
+                    }}
                     style={{
                       border: draggedCommitSha ? "1px dashed var(--color-conflict)" : "1px solid transparent"
                     }}
@@ -547,11 +590,33 @@ const Sidebar: React.FC<SidebarProps> = ({
                     )}
 
                     {currentBranch === bName ? (
-                      <span className="branch-tick" title="Focused Branch">✓</span>
+                      <div style={{ display: "flex", alignItems: "center", gap: "4px", marginLeft: "auto" }}>
+                        <span className="branch-tick" title="Focused Branch">✓</span>
+                        <button
+                          className="branch-action-icon-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onOpenCreatePRModal?.(bName);
+                          }}
+                          title={`Create Pull / Merge Request from '${bName}'`}
+                        >
+                          <GitPullRequest size={12} style={{ color: "var(--accent-purple-bright)" }} />
+                        </button>
+                      </div>
                     ) : draggedCommitSha ? (
                       <span style={{ marginLeft: "auto", fontSize: "0.65rem", color: "var(--color-conflict)" }}>Merge Drop</span>
                     ) : (
                       <div className="branch-item-actions" style={{ display: "flex", gap: "4px", alignItems: "center", marginLeft: (ahead > 0 || behind > 0) ? "4px" : "auto" }}>
+                        <button
+                          className="branch-action-icon-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onOpenCreatePRModal?.(bName);
+                          }}
+                          title={`Create Pull / Merge Request from '${bName}'`}
+                        >
+                          <GitPullRequest size={12} style={{ color: "var(--accent-purple-bright)" }} />
+                        </button>
                         <button
                           className="branch-action-icon-btn"
                           onClick={(e) => {
@@ -626,6 +691,16 @@ const Sidebar: React.FC<SidebarProps> = ({
                       key={rName} 
                       className="branch-item remote-branch-item"
                       onClick={() => handleCheckoutRemoteBranch(rName)}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setBranchContextMenu({
+                          x: Math.min(e.clientX, window.innerWidth - 220),
+                          y: Math.min(e.clientY, window.innerHeight - 200),
+                          branch: rName,
+                          isRemote: true
+                        });
+                      }}
                       title={`Click to checkout local branch tracking ${rName}`}
                     >
                       <Globe size={13} style={{ color: "var(--accent-blue)", flexShrink: 0 }} />
@@ -816,6 +891,112 @@ const Sidebar: React.FC<SidebarProps> = ({
               </button>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Floating Branch Context Menu (Triggered by Right-Clicking Any Branch) */}
+      {branchContextMenu && (
+        <div
+          ref={branchContextMenuRef}
+          className="branch-ops-dropdown"
+          style={{
+            position: "fixed",
+            top: branchContextMenu.y,
+            left: branchContextMenu.x,
+            zIndex: 9999,
+            minWidth: "220px",
+            boxShadow: "0 8px 24px rgba(0,0,0,0.55)",
+            background: "var(--bg-panel-secondary)",
+            border: "1px solid var(--border-color)",
+            borderRadius: "8px",
+            padding: "4px"
+          }}
+        >
+          <div className="dropdown-section-header" style={{ textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
+            BRANCH: {branchContextMenu.branch}
+          </div>
+
+          {!branchContextMenu.isRemote && (
+            <div
+              className="dropdown-menu-item"
+              onClick={() => {
+                const b = branchContextMenu.branch;
+                setBranchContextMenu(null);
+                onOpenCreatePRModal?.(b);
+              }}
+            >
+              <GitPullRequest size={13} style={{ color: "var(--accent-purple-bright)" }} />
+              <span>Create Pull / Merge Request...</span>
+            </div>
+          )}
+
+          {branchContextMenu.branch !== currentBranch && (
+            <div
+              className="dropdown-menu-item"
+              onClick={() => {
+                const b = branchContextMenu.branch;
+                setBranchContextMenu(null);
+                if (branchContextMenu.isRemote) {
+                  handleCheckoutRemoteBranch(b);
+                } else {
+                  startCheckoutBranch(b);
+                }
+              }}
+            >
+              <GitBranch size={13} style={{ color: "var(--color-staged)" }} />
+              <span>Checkout '{branchContextMenu.branch}'</span>
+            </div>
+          )}
+
+          <div
+            className="dropdown-menu-item"
+            onClick={() => {
+              const b = branchContextMenu.branch;
+              setBranchContextMenu(null);
+              openMergeRebaseModal(b === currentBranch ? "" : b, "merge");
+            }}
+          >
+            <GitMerge size={13} style={{ color: "var(--color-modified)" }} />
+            <span>
+              {branchContextMenu.branch === currentBranch
+                ? `Merge into '${currentBranch}'...`
+                : `Merge '${branchContextMenu.branch}' into '${currentBranch}'...`}
+            </span>
+          </div>
+
+          <div
+            className="dropdown-menu-item"
+            onClick={() => {
+              const b = branchContextMenu.branch;
+              setBranchContextMenu(null);
+              openMergeRebaseModal(b === currentBranch ? "" : b, "rebase");
+            }}
+          >
+            <GitCommit size={13} style={{ color: "var(--accent-purple-bright)" }} />
+            <span>
+              {branchContextMenu.branch === currentBranch
+                ? `Rebase '${currentBranch}' onto...`
+                : `Rebase '${currentBranch}' onto '${branchContextMenu.branch}'...`}
+            </span>
+          </div>
+
+          {!branchContextMenu.isRemote && branchContextMenu.branch !== currentBranch && (
+            <>
+              <div className="dropdown-divider" />
+              <div
+                className="dropdown-menu-item"
+                onClick={() => {
+                  const b = branchContextMenu.branch;
+                  setBranchContextMenu(null);
+                  startDeleteBranch(b);
+                }}
+                style={{ color: "var(--color-deleted)" }}
+              >
+                <Trash2 size={13} style={{ color: "var(--color-deleted)" }} />
+                <span>Delete Branch</span>
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>

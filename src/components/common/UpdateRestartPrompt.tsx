@@ -73,7 +73,7 @@ const UpdateRestartPrompt: React.FC<UpdateRestartPromptProps> = ({
             onClick={onRestart}
           >
             <RefreshCw size={13} />
-            <span>Restart to Update</span>
+            <span>Restart to Apply Update</span>
           </button>
         </div>
       </div>

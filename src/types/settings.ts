@@ -1,5 +1,7 @@
 export type AppTheme = 'catppuccin-mocha' | 'catppuccin-latte' | 'cosmic-dark';
 
+export type GitHostingProvider = 'github' | 'gitlab' | 'bitbucket' | 'gitea';
+
 export interface GlobalSettings {
   git_user_name?: string | null;
   git_user_email?: string | null;
@@ -18,6 +20,25 @@ export interface GlobalSettings {
   theme?: AppTheme | null;
   update_channel?: 'main' | 'dev' | null;
   auto_check_updates?: boolean | null;
+  git_hosting_provider?: GitHostingProvider | null;
+  github_token?: string | null;
+  github_host?: string | null;
+  gitlab_token?: string | null;
+  gitlab_host?: string | null;
+  bitbucket_username?: string | null;
+  bitbucket_app_password?: string | null;
+  gitea_token?: string | null;
+  gitea_host?: string | null;
+  default_pr_base_branch?: string | null;
+}
+
+export interface WorkspaceHostingConfig {
+  override_global: boolean;
+  provider?: GitHostingProvider | null;
+  host_url?: string | null;
+  access_token?: string | null;
+  bitbucket_username?: string | null;
+  default_base_branch?: string | null;
 }
 
 export interface AppBuildInfo {
