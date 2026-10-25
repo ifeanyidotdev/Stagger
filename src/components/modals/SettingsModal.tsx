@@ -1230,19 +1230,19 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                     {/* Provider Selector Cards */}
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px' }}>
                       {[
-                        { id: 'github' as GitHostingProvider, name: 'GitHub', desc: 'github.com & Enterprise' },
-                        { id: 'gitlab' as GitHostingProvider, name: 'GitLab', desc: 'gitlab.com & Self-hosted' },
-                        { id: 'bitbucket' as GitHostingProvider, name: 'Bitbucket', desc: 'bitbucket.org' },
-                        { id: 'gitea' as GitHostingProvider, name: 'Gitea / Forgejo', desc: 'Codeberg & Self-hosted' },
+                        { id: 'github' as GitHostingProvider, name: 'GitHub' },
+                        { id: 'gitlab' as GitHostingProvider, name: 'GitLab' },
+                        { id: 'bitbucket' as GitHostingProvider, name: 'Bitbucket' },
+                        { id: 'gitea' as GitHostingProvider, name: 'Gitea / Forgejo' },
                       ].map(p => (
                         <button
                           key={p.id}
                           type="button"
                           className={`settings-provider-card ${gitHostingProvider === p.id ? 'active' : ''}`}
                           onClick={() => setGitHostingProvider(p.id)}
-                          style={{ minHeight: '82px', padding: '12px' }}
+                          style={{ padding: '12px 14px', justifyContent: 'center' }}
                         >
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
                             <span style={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--color-text-bright)' }}>
                               {p.name}
                             </span>
@@ -1250,9 +1250,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                               <span className="settings-context-pill">Active</span>
                             )}
                           </div>
-                          <span style={{ fontSize: '0.70rem', color: 'var(--color-text-muted)', lineHeight: 1.3, marginTop: '4px' }}>
-                            {p.desc}
-                          </span>
                         </button>
                       ))}
                     </div>
