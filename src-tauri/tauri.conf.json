@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Stagger",
-  "version": "0.1.1",
-  "identifier": "com.melodyfidel.tauri-app",
+  "version": "0.1.2",
+  "identifier": "dev.ifeanyi.stagger",
   "build": {
     "beforeDevCommand": "bun run dev",
     "devUrl": "http://localhost:1420",
@@ -26,7 +26,13 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": [
+      "nsis",
+      "dmg",
+      "app",
+      "deb",
+      "appimage"
+    ],
     "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",

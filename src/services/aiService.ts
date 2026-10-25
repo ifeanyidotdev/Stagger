@@ -73,3 +73,62 @@ export async function testAIConnection(settings: GlobalSettings): Promise<{ succ
     };
   }
 }
+
+export async function generatePullRequestContent(
+  settings: GlobalSettings,
+  params: {
+    baseBranch: string;
+    headBranch: string;
+    commits: { shortId: string; message: string; author: string }[];
+    diffStat?: string;
+    term?: 'Pull Request' | 'Merge Request';
+  }
+): Promise<{ title: string; body: string }> {
+  const model = getAIModel(settings);
+  const commitLines =
+    params.commits.length > 0
+      ? params.commits.map(c => `- [${c.shortId}] ${c.message} (${c.author})`).join('\n')
+      : '(No commit log available)';
+
+  const prompt = `You are an expert software engineer writing a clear, concise ${params.term || 'Pull Request'} to merge branch "${params.headBranch}" into "${params.baseBranch}".
+
+Commits in this branch:
+${commitLines}
+
+${params.diffStat ? `Changed files / diff summary:\n${params.diffStat}\n` : ''}
+
+Return your response in the following exact format (first line starting with TITLE:, followed by BODY:):
+TITLE: <concise, descriptive title under 72 characters>
+BODY:
+## Summary
+<1-3 sentences explaining the purpose and impact of these changes>
+
+## Key Changes
+<bulleted list of main technical changes>
+`;
+
+  const result = await generateText({
+    model,
+    prompt,
+  });
+
+  const raw = result.text.trim();
+  const titleMatch = raw.match(/^TITLE:\s*(.+)$/m);
+  const bodyMatch = raw.match(/BODY:\s*([\s\S]+)$/m);
+
+  if (titleMatch && bodyMatch) {
+    return {
+      title: titleMatch[1].trim().replace(/^["']|["']$/g, ''),
+      body: bodyMatch[1].trim(),
+    };
+  }
+
+  const lines = raw.split('\n');
+  const firstLine = (lines[0] || '').replace(/^#+\s*/, '').replace(/^TITLE:\s*/i, '').trim();
+  const rest = lines.slice(1).join('\n').replace(/^BODY:\s*/i, '').trim();
+
+  return {
+    title: firstLine || `Merge ${params.headBranch} into ${params.baseBranch}`,
+    body: rest || raw,
+  };
+}

@@ -1,6 +1,7 @@
 import React from 'react';
-import { ChevronRight, Layers, History, GitPullRequest, FolderSync, LogOut, Sparkles, Settings, ArrowDown, ArrowUp } from 'lucide-react';
+import { ChevronRight, Layers, History, FolderSync, LogOut, Sparkles, Settings, ArrowDown, ArrowUp, ArrowUpCircle, ArrowDownToLine, RefreshCw } from 'lucide-react';
 import type { GitHubUser } from '../../types/git';
+import type { AppUpdateInfo, UpdateStatus, UpdateDownloadProgress } from '../../types/settings';
 
 interface TopbarProps {
   sidebarCollapsed: boolean;
@@ -18,7 +19,12 @@ interface TopbarProps {
   setDialogInput2: (val: string) => void;
   githubUser: GitHubUser | null;
   handleGitHubSignout: () => void;
-  onOpenSettings?: () => void;
+  availableUpdate?: AppUpdateInfo | null;
+  updateStatus?: UpdateStatus;
+  updateProgress?: UpdateDownloadProgress | null;
+  onStartDownload?: () => void;
+  onRestartApp?: () => void;
+  onOpenSettings?: (tab?: any) => void;
 }
 
 const Topbar: React.FC<TopbarProps> = ({
@@ -31,13 +37,18 @@ const Topbar: React.FC<TopbarProps> = ({
   unpushedCount = 0,
   behindCount = 0,
   githubToken,
-  remoteUrl,
+  remoteUrl: _remoteUrl,
   setDialogType,
   setDialogInput,
   setDialogInput2,
   githubUser,
   handleGitHubSignout,
-  onOpenSettings
+  availableUpdate,
+  updateStatus = 'idle',
+  updateProgress,
+  onStartDownload,
+  onRestartApp,
+  onOpenSettings,
 }) => {
   return (
     <div className={`topbar ${sidebarCollapsed ? "sidebar-collapsed-topbar" : ""}`} data-tauri-drag-region>
@@ -78,13 +89,13 @@ const Topbar: React.FC<TopbarProps> = ({
             {behindCount > 0 && (
               <span className="topbar-sync-tag behind" title={`Remote origin is ahead by ${behindCount} commit(s). Pull to update.`}>
                 <ArrowDown size={10} />
-                <span>{behindCount} behind</span>
+                <span>{behindCount}</span>
               </span>
             )}
             {unpushedCount > 0 && (
               <span className="topbar-sync-tag ahead" title={`${unpushedCount} unpushed commit(s) ready to push.`}>
                 <ArrowUp size={10} />
-                <span>{unpushedCount} ahead</span>
+                <span>{unpushedCount}</span>
               </span>
             )}
           </div>
@@ -93,26 +104,57 @@ const Topbar: React.FC<TopbarProps> = ({
 
       {/* Restored GitHub Auth Badge & Global Settings (Topbar Right-Side) */}
       <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-        
-        {githubToken && remoteUrl && (
-          <button 
+        {/* Update Indicators & Restart Trigger */}
+        {updateStatus === 'ready' && (
+          <button
+            type="button"
+            className="topbar-action-btn topbar-restart-btn"
+            onClick={onRestartApp}
+            title={availableUpdate?.version ? `Stagger v${availableUpdate.version} is downloaded and ready! Click to restart and apply update now.` : 'Update is downloaded and ready! Click to restart and apply update now.'}
+          >
+            <RefreshCw size={13} className="spin-icon-hover" />
+            <span>Restart to Apply Update</span>
+            {availableUpdate?.version && (
+              <span className="topbar-update-version-tag">v{availableUpdate.version}</span>
+            )}
+          </button>
+        )}
+
+        {updateStatus === 'downloading' && (
+          <button
+            type="button"
+            className="topbar-action-btn topbar-downloading-btn"
+            title={`Downloading update v${availableUpdate?.version || ''} in background...`}
+            style={{ cursor: "default" }}
+          >
+            <ArrowDownToLine size={13} className="spin-icon" />
+            <span>
+              Downloading{availableUpdate?.version ? ` v${availableUpdate.version}` : ''}
+              {updateProgress?.percentage !== undefined && updateProgress?.percentage !== null ? ` (${updateProgress.percentage}%)` : '...'}
+            </span>
+          </button>
+        )}
+
+        {updateStatus !== 'ready' && updateStatus !== 'downloading' && availableUpdate?.available && (
+          <button
+            type="button"
             className="topbar-action-btn"
-            onClick={() => {
-              setDialogType("pr-create");
-              setDialogInput("");
-              setDialogInput2("");
+            onClick={onStartDownload}
+            title={`A new update (v${availableUpdate.version}) is available. Click to download in background.`}
+            style={{
+              borderColor: "var(--accent-purple)",
             }}
           >
-            <GitPullRequest size={13} />
-            <span>Create PR</span>
+            <ArrowUpCircle size={13} style={{ color: "var(--accent-purple)" }} />
+            <span>Update v{availableUpdate.version}</span>
           </button>
         )}
 
         {/* Global Settings Trigger */}
         <button 
           className="topbar-action-btn"
-          onClick={onOpenSettings}
-          title="Global Settings (Git, Universal .gitignore, AI Keys)"
+          onClick={() => onOpenSettings?.()}
+          title="Global Settings (Git Identity, Appearance, Pull Strategy, AI Keys)"
           style={{ display: "flex", alignItems: "center", gap: "6px" }}
         >
           <Settings size={13} />

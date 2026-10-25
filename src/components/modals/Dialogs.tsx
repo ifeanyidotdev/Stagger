@@ -137,7 +137,7 @@ const Dialogs: React.FC<DialogsProps> = ({
   handleDialogSubmit,
   mergeRebaseMode,
   setMergeRebaseMode,
-  allBranches,
+  allBranches: _allBranches,
   targetMergeBranch,
   setTargetMergeBranch,
   branchList,
@@ -163,6 +163,27 @@ const Dialogs: React.FC<DialogsProps> = ({
   const [pushTargetBranch, setPushTargetBranch] = useState(currentBranch || '');
   const targetBranchDropdownRef = useRef<HTMLDivElement>(null);
   const branchSearchInputRef = useRef<HTMLInputElement>(null);
+  const restoreDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isRestoreDropdownOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        restoreDropdownRef.current &&
+        !restoreDropdownRef.current.contains(e.target as Node)
+      ) {
+        setIsRestoreDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isRestoreDropdownOpen]);
+
+  useEffect(() => {
+    setIsRestoreDropdownOpen(false);
+  }, [dialogType]);
 
   useEffect(() => {
     if (targetCommitForPush) {
@@ -215,7 +236,7 @@ const Dialogs: React.FC<DialogsProps> = ({
 
   return (
     <div className="dialog-overlay">
-      <div className={`dialog-content${dialogType === "stash-inspector" ? " dialog-content--wide" : ""}${dialogType === "merge-rebase" ? " dialog-content--visible-overflow" : ""}`}>
+      <div className={`dialog-content${dialogType === "stash-inspector" ? " dialog-content--wide dialog-content--stash-inspector" : ""}${dialogType === "merge-rebase" ? " dialog-content--visible-overflow" : ""}`}>
         <div className="dialog-title">
           <span>
             {dialogType === "branch" && (targetCommitForBranch ? "Create Branch from Commit" : "Create Branch")}
@@ -244,17 +265,35 @@ const Dialogs: React.FC<DialogsProps> = ({
                 <span>Push up to Selected Commit</span>
               </span>
             )}
-            {dialogType === "stash-inspector" && (
-              <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <Archive size={16} style={{ color: "var(--accent-purple-bright)" }} />
-                <span>Stash Inspector</span>
-                {selectedStashIndex !== null && (
-                  <span className="stash-badge" style={{ fontSize: "0.72rem", background: "rgba(168, 85, 247, 0.12)", color: "var(--accent-purple-bright)", padding: "2px 8px", borderRadius: "10px", border: "1px solid rgba(168, 85, 247, 0.25)", fontFamily: "var(--font-mono)" }}>
-                    {stashes.find(s => s.originalIndex === selectedStashIndex)?.displayTitle || `stash@{${selectedStashIndex}}`}
+            {dialogType === "stash-inspector" && (() => {
+              const currentStash = stashes.find(s => s.originalIndex === selectedStashIndex);
+              return (
+                <div className="stash-header-badge-container">
+                  <span className="stash-header-main-title">
+                    <Archive size={16} className="stash-header-icon" />
+                    <span>Stash Inspector</span>
                   </span>
-                )}
-              </span>
-            )}
+                  {selectedStashIndex !== null && (
+                    <div className="stash-header-tag" title={currentStash?.displayTitle || `stash@{${selectedStashIndex}}`}>
+                      <span className="stash-header-tag-ref">stash@{`{${selectedStashIndex}}`}</span>
+                      {currentStash?.displayTitle && currentStash.displayTitle !== `stash@{${selectedStashIndex}}` && (
+                        <>
+                          <span className="stash-header-tag-dot">•</span>
+                          <span className="stash-header-tag-title">
+                            {currentStash.displayTitle}
+                          </span>
+                        </>
+                      )}
+                      {currentStash?.branchName && (
+                        <span className="stash-header-branch-pill">
+                          {currentStash.branchName}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </span>
           <button 
             className="dialog-close-btn"
@@ -313,7 +352,10 @@ const Dialogs: React.FC<DialogsProps> = ({
               {/* Left: file list */}
               <div className="stash-file-sidebar">
                 <div className="stash-sidebar-header">
-                  <span className="stash-sidebar-title">Changed Files ({stashFiles.length})</span>
+                  <div className="stash-sidebar-title-group">
+                    <span className="stash-sidebar-title">Changed Files</span>
+                    <span className="stash-sidebar-count-badge">{stashFiles.length}</span>
+                  </div>
                   {stashFiles.length > 0 && (
                     <button 
                       type="button" 
@@ -350,17 +392,18 @@ const Dialogs: React.FC<DialogsProps> = ({
                         className={`stash-file-item ${isSelected ? "active" : ""} ${isChecked ? "checked" : ""}`}
                         onClick={() => fetchStashFileDiff(selectedStashIndex, f.path)}
                       >
-                        <input
-                          type="checkbox"
-                          className="stash-item-checkbox"
-                          checked={isChecked}
-                          onClick={e => e.stopPropagation()}
-                          onChange={e => {
-                            const next = new Set(checkedStashFiles);
-                            e.target.checked ? next.add(f.path) : next.delete(f.path);
-                            setCheckedStashFiles(next);
-                          }}
-                        />
+                        <div className="stash-checkbox-wrapper" onClick={e => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            className="stash-item-checkbox"
+                            checked={isChecked}
+                            onChange={e => {
+                              const next = new Set(checkedStashFiles);
+                              e.target.checked ? next.add(f.path) : next.delete(f.path);
+                              setCheckedStashFiles(next);
+                            }}
+                          />
+                        </div>
                         
                         <div className="stash-file-details">
                           <span className="stash-file-name" title={f.path}>{name}</span>
@@ -382,20 +425,20 @@ const Dialogs: React.FC<DialogsProps> = ({
                   {selectedStashFile ? (
                     <>
                       <div className="stash-diff-header-info">
-                        <FileCode size={14} className="stash-file-icon" />
+                        <FileCode size={15} className="stash-diff-file-icon" />
                         <span className="stash-diff-filepath" title={selectedStashFile}>{selectedStashFile}</span>
                         <span className={`stash-status-pill ${stashFiles.find(f => f.path === selectedStashFile)?.status === "A" ? "added" : stashFiles.find(f => f.path === selectedStashFile)?.status === "D" ? "deleted" : "modified"}`}>
                           {stashFiles.find(f => f.path === selectedStashFile)?.status === "A" ? "ADDED" : stashFiles.find(f => f.path === selectedStashFile)?.status === "D" ? "DELETED" : "MODIFIED"}
                         </span>
                       </div>
-                      {stashFileDiff && (() => {
+                      {stashFileDiff && !stashFileDiff.includes("Binary files") && stashFileDiff !== "(Empty file or binary content)" && (() => {
                         const lines = stashFileDiff.split("\n");
                         const additions = lines.filter(l => l.startsWith("+") && !l.startsWith("+++")).length;
                         const deletions = lines.filter(l => l.startsWith("-") && !l.startsWith("---")).length;
                         return (
                           <div className="stash-diff-stats">
                             <span className="stat-add">+{additions}</span>
-                            <span className="stat-del">-{deletions}</span>
+                            <span className="stat-del">−{deletions}</span>
                           </div>
                         );
                       })()}
@@ -411,60 +454,84 @@ const Dialogs: React.FC<DialogsProps> = ({
                     <span>Fetching stash file diff…</span>
                   </div>
                 ) : stashFileDiff ? (
-                  <div className="stash-diff-viewer">
-                    {(() => {
-                      const lines = stashFileDiff.split("\n");
-                      let oldLine = 0;
-                      let newLine = 0;
-                      const hunkHeaderPattern = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/;
-                      return lines.map((line, i) => {
-                        const isAddition = line.startsWith("+") && !line.startsWith("+++");
-                        const isDeletion = line.startsWith("-") && !line.startsWith("---");
-                        const isHunk = line.startsWith("@@");
-                        const isFileHeader = line.startsWith("diff ") || line.startsWith("index ") || line.startsWith("---") || line.startsWith("+++");
+                  stashFileDiff.includes("Binary files") || stashFileDiff === "(Empty file or binary content)" ? (
+                    <div className="stash-diff-state-container">
+                      <div className="stash-diff-binary-card">
+                        <div className="stash-diff-binary-icon">
+                          <FileCode size={28} />
+                        </div>
+                        <div className="stash-diff-binary-title">Binary File</div>
+                        <div className="stash-diff-binary-desc">
+                          Git detected this as a binary or non-text file ({selectedStashFile?.split("/").pop()}). Direct diff preview is not supported.
+                        </div>
+                        <div className="stash-diff-binary-filename">
+                          {selectedStashFile}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="stash-diff-viewer">
+                      {(() => {
+                        const lines = stashFileDiff.split("\n");
+                        let oldLine = 0;
+                        let newLine = 0;
+                        const hunkHeaderPattern = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/;
+                        return lines.map((line, i) => {
+                          const isAddition = line.startsWith("+") && !line.startsWith("+++");
+                          const isDeletion = line.startsWith("-") && !line.startsWith("---");
+                          const isHunk = line.startsWith("@@");
+                          const isFileHeader = line.startsWith("diff ") || 
+                            line.startsWith("index ") || 
+                            line.startsWith("---") || 
+                            line.startsWith("+++") || 
+                            line.startsWith("new file mode") || 
+                            line.startsWith("deleted file mode") || 
+                            line.startsWith("old mode") || 
+                            line.startsWith("new mode") || 
+                            line.startsWith("similarity index") ||
+                            line.startsWith("rename ");
 
-                        if (isHunk) {
-                          const m = line.match(hunkHeaderPattern);
-                          if (m) {
-                            oldLine = parseInt(m[1], 10) - 1;
-                            newLine = parseInt(m[2], 10) - 1;
+                          if (isHunk) {
+                            const m = line.match(hunkHeaderPattern);
+                            if (m) {
+                              oldLine = parseInt(m[1], 10) - 1;
+                              newLine = parseInt(m[2], 10) - 1;
+                            }
+                          } else if (isAddition) {
+                            newLine++;
+                          } else if (isDeletion) {
+                            oldLine++;
+                          } else if (!isFileHeader) {
+                            oldLine++;
+                            newLine++;
                           }
-                        } else if (isAddition) {
-                          newLine++;
-                        } else if (isDeletion) {
-                          oldLine++;
-                        } else if (!isFileHeader) {
-                          oldLine++;
-                          newLine++;
-                        }
 
-                        const lineClass = isAddition ? "addition" : isDeletion ? "deletion" : isHunk ? "hunk" : isFileHeader ? "file-header" : "";
+                          const lineClass = isAddition ? "addition" : isDeletion ? "deletion" : isHunk ? "hunk" : isFileHeader ? "file-header" : "";
+                          const oldNum = (!isHunk && !isFileHeader && !isAddition && oldLine > 0) ? oldLine : "";
+                          const newNum = (!isHunk && !isFileHeader && !isDeletion && newLine > 0) ? newLine : "";
 
-                        return (
-                          <div key={i} className={`stash-diff-line ${lineClass}`}>
-                            <span className="stash-diff-gutter old-ln">
-                              {!isHunk && !isFileHeader && (isDeletion || (!isAddition)) && !isAddition ? (oldLine > 0 ? oldLine : "") : ""}
-                            </span>
-                            <span className="stash-diff-gutter new-ln">
-                              {!isHunk && !isFileHeader && (isAddition || (!isDeletion)) && !isDeletion ? (newLine > 0 ? newLine : "") : ""}
-                            </span>
-                            <span className="stash-diff-marker">
-                              {isAddition ? "+" : isDeletion ? "−" : isHunk ? "" : " "}
-                            </span>
-                            <span className="stash-diff-content">{line.substring(isAddition || isDeletion ? 1 : 0)}</span>
-                          </div>
-                        );
-                      });
-                    })()}
-                  </div>
+                          return (
+                            <div key={i} className={`stash-diff-line ${lineClass}`}>
+                              <span className="stash-diff-gutter old-ln">{oldNum}</span>
+                              <span className="stash-diff-gutter new-ln">{newNum}</span>
+                              <span className="stash-diff-marker">
+                                {isAddition ? "+" : isDeletion ? "−" : isHunk ? "" : " "}
+                              </span>
+                              <span className="stash-diff-content">{line.substring(isAddition || isDeletion ? 1 : 0)}</span>
+                            </div>
+                          );
+                        });
+                      })()}
+                    </div>
+                  )
                 ) : selectedStashFile ? (
                   <div className="stash-diff-state-container">
-                    <FileCode size={32} />
+                    <FileCode size={32} className="stash-diff-state-icon" />
                     <span>No diff available for this file</span>
                   </div>
                 ) : (
                   <div className="stash-diff-state-container">
-                    <Eye size={32} />
+                    <Eye size={32} className="stash-diff-state-icon" />
                     <span>Select a file from the list to view diff</span>
                   </div>
                 )}
@@ -472,7 +539,7 @@ const Dialogs: React.FC<DialogsProps> = ({
             </div>
 
             <div className="stash-footer-actions">
-              <div className="stash-footer-group left">
+              <div className="stash-footer-group left" ref={restoreDropdownRef}>
                 <div className="split-dropdown-container">
                   <button 
                     className="stash-action-btn primary split-main-btn"
@@ -502,7 +569,7 @@ const Dialogs: React.FC<DialogsProps> = ({
                     title="More restore options"
                     type="button"
                   >
-                    <ChevronDown size={13} />
+                    <ChevronDown size={14} />
                   </button>
 
                   {isRestoreDropdownOpen && (
@@ -516,10 +583,10 @@ const Dialogs: React.FC<DialogsProps> = ({
                           setIsRestoreDropdownOpen(false);
                         }}
                       >
-                        <Archive size={14} style={{ color: "var(--accent-purple-bright)" }} />
+                        <Archive size={15} style={{ color: "var(--accent-purple-bright)" }} />
                         <div className="split-dropdown-item-text">
-                          <span className="title">Restore & Remove Stash</span>
-                          <span className="desc">Restores changes & deletes stash from list</span>
+                          <span className="title">Apply Stash</span>
+                          <span className="desc">Restores changes and keeps stash in your list</span>
                         </div>
                       </div>
 
@@ -532,10 +599,10 @@ const Dialogs: React.FC<DialogsProps> = ({
                           setIsRestoreDropdownOpen(false);
                         }}
                       >
-                        <FolderSync size={14} style={{ color: "var(--accent-blue-bright, #38bdf8)" }} />
+                        <FolderSync size={15} style={{ color: "var(--accent-blue, #89b4fa)" }} />
                         <div className="split-dropdown-item-text">
-                          <span className="title">Pop & Remove Stash</span>
-                          <span className="desc">Restores changes & deletes stash from list</span>
+                          <span className="title">Pop Stash</span>
+                          <span className="desc">Restores changes and deletes stash from list</span>
                         </div>
                       </div>
 
@@ -547,10 +614,10 @@ const Dialogs: React.FC<DialogsProps> = ({
                             setIsRestoreDropdownOpen(false);
                           }}
                         >
-                          <RefreshCcw size={14} style={{ color: "var(--color-staged)" }} />
+                          <RefreshCcw size={15} style={{ color: "var(--color-staged)" }} />
                           <div className="split-dropdown-item-text">
                             <span className="title">Restore Selected ({checkedStashFiles.size})</span>
-                            <span className="desc">Restores only checked files to working tree</span>
+                            <span className="desc">Restores only checked files into working tree</span>
                           </div>
                         </div>
                       )}
@@ -566,7 +633,7 @@ const Dialogs: React.FC<DialogsProps> = ({
                   title="Discard stash entry permanently"
                 >
                   <Trash2 size={14} />
-                  <span>Discard</span>
+                  <span>Discard Stash</span>
                 </button>
                 <button 
                   className="stash-action-btn close" 
@@ -1106,9 +1173,9 @@ const Dialogs: React.FC<DialogsProps> = ({
 
             <div style={{ fontSize: "0.78rem", color: "var(--color-text-muted)" }}>
               {mergeRebaseMode === "merge" ? (
-                <span>Integrate changes from target branch into current branch (<strong>{currentBranch}</strong>). ({allBranches.length} branches registered)</span>
+                <span>Integrate changes from selected branch into current branch (<strong>{currentBranch}</strong>).</span>
               ) : (
-                <span>Reapply commits from current branch (<strong>{currentBranch}</strong>) onto top of target branch. ({allBranches.length} branches registered)</span>
+                <span>Reapply commits from current branch (<strong>{currentBranch}</strong>) onto top of selected branch.</span>
               )}
             </div>
 
@@ -1122,7 +1189,7 @@ const Dialogs: React.FC<DialogsProps> = ({
               return (
                 <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
                   <label style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", fontWeight: 500, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <span>Select Target Branch:</span>
+                    <span>{mergeRebaseMode === "merge" ? `Select branch to merge into '${currentBranch}':` : `Select branch to rebase '${currentBranch}' onto:`}</span>
                     {targetMergeBranch && (
                       <span style={{ fontSize: "0.7rem", color: isTargetRemote ? "var(--accent-blue)" : "var(--accent-purple-bright)", fontFamily: "var(--font-mono)" }}>
                         {isTargetRemote ? "remote" : "local"}

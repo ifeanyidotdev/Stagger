@@ -1,6 +1,9 @@
+use std::sync::atomic::{AtomicBool, Ordering};
 use serde::Serialize;
 use tauri::Emitter;
 use tauri_plugin_updater::UpdaterExt;
+
+static IS_DOWNLOADING: AtomicBool = AtomicBool::new(false);
 
 #[derive(Serialize, Clone, Debug)]
 pub struct AppBuildInfo {
@@ -21,11 +24,11 @@ pub struct AppUpdateInfo {
 #[derive(Serialize, Clone, Debug)]
 pub struct UpdateDownloadProgressPayload {
     pub downloaded: usize,
-    pub total: Option<usize>,
+    pub total: Option<u64>,
     pub percentage: Option<f64>,
 }
 
-fn resolve_channel_endpoint(channel: Option<String>, app: &tauri::AppHandle) -> String {
+fn resolve_channel_endpoints(channel: Option<String>, app: &tauri::AppHandle) -> Vec<String> {
     let target_channel = channel.unwrap_or_else(|| {
         let name = app.package_info().name.to_lowercase();
         if name.contains("dev") {
@@ -36,9 +39,14 @@ fn resolve_channel_endpoint(channel: Option<String>, app: &tauri::AppHandle) -> 
     });
 
     if target_channel == "dev" {
-        "https://github.com/ifeanyidotdev/Stagger/releases/download/dev/latest.json".to_string()
+        vec![
+            "https://github.com/ifeanyidotdev/Stagger/releases/download/dev-channel/latest.json".to_string(),
+            "https://github.com/ifeanyidotdev/Stagger/releases/download/dev/latest.json".to_string(),
+        ]
     } else {
-        "https://github.com/ifeanyidotdev/Stagger/releases/latest/download/latest.json".to_string()
+        vec![
+            "https://github.com/ifeanyidotdev/Stagger/releases/latest/download/latest.json".to_string(),
+        ]
     }
 }
 
@@ -63,15 +71,23 @@ pub async fn check_app_update(
     app: tauri::AppHandle,
     channel: Option<String>,
 ) -> Result<AppUpdateInfo, String> {
-    let endpoint_url = resolve_channel_endpoint(channel, &app);
-    let parsed_url = url::Url::parse(&endpoint_url)
-        .map_err(|e| format!("Invalid update endpoint URL ({}): {}", endpoint_url, e))?;
+    let endpoint_strings = resolve_channel_endpoints(channel, &app);
+    let mut parsed_urls = Vec::new();
+    for endpoint_url in &endpoint_strings {
+        if let Ok(u) = url::Url::parse(endpoint_url) {
+            parsed_urls.push(u);
+        }
+    }
+
+    if parsed_urls.is_empty() {
+        return Err("No valid update endpoints configured.".to_string());
+    }
 
     let current_version = app.package_info().version.to_string();
 
     let updater = app
         .updater_builder()
-        .endpoints(vec![parsed_url])
+        .endpoints(parsed_urls)
         .map_err(|e| format!("Failed to configure updater endpoints: {}", e))?
         .build()
         .map_err(|e| format!("Failed to build updater: {}", e))?;
@@ -100,13 +116,33 @@ pub async fn download_and_install_update(
     app: tauri::AppHandle,
     channel: Option<String>,
 ) -> Result<(), String> {
-    let endpoint_url = resolve_channel_endpoint(channel, &app);
-    let parsed_url = url::Url::parse(&endpoint_url)
-        .map_err(|e| format!("Invalid update endpoint URL ({}): {}", endpoint_url, e))?;
+    if IS_DOWNLOADING.swap(true, Ordering::SeqCst) {
+        return Err("Update download already in progress.".to_string());
+    }
+
+    struct DownloadGuard;
+    impl Drop for DownloadGuard {
+        fn drop(&mut self) {
+            IS_DOWNLOADING.store(false, Ordering::SeqCst);
+        }
+    }
+    let _guard = DownloadGuard;
+
+    let endpoint_strings = resolve_channel_endpoints(channel, &app);
+    let mut parsed_urls = Vec::new();
+    for endpoint_url in &endpoint_strings {
+        if let Ok(u) = url::Url::parse(endpoint_url) {
+            parsed_urls.push(u);
+        }
+    }
+
+    if parsed_urls.is_empty() {
+        return Err("No valid update endpoints configured.".to_string());
+    }
 
     let updater = app
         .updater_builder()
-        .endpoints(vec![parsed_url])
+        .endpoints(parsed_urls)
         .map_err(|e| format!("Failed to configure updater endpoints: {}", e))?
         .build()
         .map_err(|e| format!("Failed to build updater: {}", e))?;
@@ -147,6 +183,8 @@ pub async fn download_and_install_update(
         )
         .await
         .map_err(|e| format!("Failed to download and install update: {}", e))?;
+
+    let _ = app.emit("update-ready", ());
 
     Ok(())
 }

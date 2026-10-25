@@ -36,11 +36,14 @@ pub fn run() {
             commands::select_file,
             commands::get_workspace_settings,
             commands::save_workspace_settings,
+            commands::get_workspace_hosting_settings,
+            commands::save_workspace_hosting_settings,
+            commands::create_pull_request,
+            commands::fetch_pull_requests,
             updater::get_app_build_info,
             updater::check_app_update,
             updater::download_and_install_update,
             updater::restart_app
-        ])
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

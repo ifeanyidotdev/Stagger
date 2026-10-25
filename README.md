@@ -5,7 +5,9 @@
 [![React](https://img.shields.io/badge/React-v19-61DAFB.svg?logo=react)](https://react.dev)
 [![TypeScript](https://img.shields.io/badge/TypeScript-v5-3178C6.svg?logo=typescript)](https://www.typescriptlang.org)
 
-**Stagger** is a modern, lightweight desktop Git GUI client built for speed, clarity, and seamless workflow management. Powered by **Tauri v2**, **React 19**, **TypeScript**, and **Rust**, StageNode provides a visual workspace for staging changes, switching branches, stashing work, and creating pull requests without leaving your desktop interface.
+**Stagger** is a modern, lightweight desktop Git GUI client built for speed, clarity, and seamless workflow management. Powered by **Tauri v2**, **React 19**, **TypeScript**, and **Rust**, Stagger provides a visual workspace for staging changes, switching branches, stashing work, and creating pull requests without leaving your desktop interface.
+
+![Stagger Preview](assets/screenshot.png)
 
 ---
 
