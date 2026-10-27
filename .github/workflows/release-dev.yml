@@ -36,9 +36,17 @@ jobs:
             target: 'x86_64-unknown-linux-gnu'
             arch_name: 'Linux x64'
             bundles: 'deb,appimage'
+          - platform: 'ubuntu-24.04-arm'
+            target: 'aarch64-unknown-linux-gnu'
+            arch_name: 'Linux ARM64'
+            bundles: 'deb,appimage'
           - platform: 'windows-latest'
             target: 'x86_64-pc-windows-msvc'
             arch_name: 'Windows x64'
+            bundles: 'nsis'
+          - platform: 'windows-latest'
+            target: 'aarch64-pc-windows-msvc'
+            arch_name: 'Windows ARM64'
             bundles: 'nsis'
 
     runs-on: ${{ matrix.platform }}
@@ -56,13 +64,19 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
+      - name: Enable MSVC Developer Command Prompt (ARM64 Cross-compilation)
+        if: matrix.platform == 'windows-latest' && matrix.target == 'aarch64-pc-windows-msvc'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: amd64_arm64
+
       - name: Setup Rust cache
         uses: swatinem/rust-cache@v2
         with:
           workspaces: './src-tauri -> target'
 
       - name: Install Linux dependencies
-        if: matrix.platform == 'ubuntu-22.04'
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf
@@ -94,6 +108,7 @@ jobs:
             Or navigate to **System Settings > Privacy & Security** and click **Open Anyway**.
           releaseDraft: false
           prerelease: true
+          uploadUpdaterSignatures: false
           args: '--config src-tauri/tauri.dev.conf.json --target ${{ matrix.target }} --bundles ${{ matrix.bundles }} --ignore-version-mismatches'
 
   finalize-dev-channel:
@@ -116,6 +131,15 @@ jobs:
           fi
 
           echo "Target versioned release tag: $TAG"
+
+          # Remove any stray .sig files if present from the release assets
+          gh release view "$TAG" --json assets --jq '.assets[].name | select(endswith(".sig"))' 2>/dev/null | while read -r sig_asset; do
+            if [ -n "$sig_asset" ]; then
+              echo "Removing signature asset $sig_asset from release $TAG..."
+              gh release delete-asset "$TAG" "$sig_asset" -y || true
+            fi
+          done
+
           echo "Downloading latest.json from versioned release $TAG..."
           gh release download "$TAG" -p "latest.json" -O "latest.json" || true
 
