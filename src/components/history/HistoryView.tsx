@@ -211,27 +211,28 @@ const HistoryView: React.FC<HistoryViewProps> = ({
                             </span>
                           );
                         })}
-                        <span style={{ 
-                          fontSize: "0.8rem", 
-                          fontWeight: 500, 
-                          whiteSpace: "nowrap", 
-                          overflow: "hidden", 
-                          textOverflow: "ellipsis",
-                          color: selectedCommit?.id === commit.id ? "var(--color-text-bright)" : "var(--color-text-main)"
-                        }}>
+                        <span 
+                          className="commit-row-message"
+                          style={{ 
+                            flex: 1,
+                            minWidth: 0,
+                            fontSize: "0.82rem", 
+                            fontWeight: 500, 
+                            whiteSpace: "nowrap", 
+                            overflow: "hidden", 
+                            textOverflow: "ellipsis",
+                            color: selectedCommit?.id === commit.id ? "var(--color-text-bright)" : "var(--color-text-main)"
+                          }}
+                          title={commit.message}
+                        >
                           {commit.message}
                         </span>
-                        <span style={{ 
-                          fontSize: "0.75rem", 
-                          color: "var(--color-text-muted)", 
-                          marginLeft: "auto", 
-                          paddingRight: "16px",
-                          flexShrink: 0,
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: "8px"
-                        }}>
-                          <span>{commit.author} • {new Date(commit.timestamp * 1000).toLocaleDateString()}</span>
+                        <span className="commit-row-meta">
+                          <span className="commit-author-meta" title={`${commit.author} • ${new Date(commit.timestamp * 1000).toLocaleString()}`}>
+                            <span className="commit-author-name">{commit.author.split(' ')[0] || commit.author}</span>
+                            <span className="commit-meta-dot">•</span>
+                            <span className="commit-meta-date">{new Date(commit.timestamp * 1000).toLocaleDateString()}</span>
+                          </span>
                           {onOpenCreateBranchFromCommit && (
                             <button
                               type="button"
