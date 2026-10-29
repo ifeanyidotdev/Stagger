@@ -2368,68 +2368,101 @@ function App() {
 
   return (
     <div className="app-container">
-      <Sidebar 
+      <Topbar 
         sidebarCollapsed={sidebarCollapsed}
-        sidebarWidth={sidebarWidth}
-        isWorkspaceDropdownOpen={isWorkspaceDropdownOpen}
-        setIsWorkspaceDropdownOpen={setIsWorkspaceDropdownOpen}
+        setSidebarCollapsed={setSidebarCollapsed}
         activeWorkspaceName={activeWorkspaceName}
         workspaces={workspaces}
-        onOpenFolderPicker={openFolderPickerAndAddWorkspace}
         selectWorkspace={selectWorkspace}
         repoPath={repoPath}
         removeWorkspace={removeWorkspace}
-        setDialogType={setDialogType}
-        setDialogInput={setDialogInput}
-        setSidebarCollapsed={setSidebarCollapsed}
-        isBranchListExpanded={isBranchListExpanded}
-        setIsBranchListExpanded={setIsBranchListExpanded}
-        isBranchOpsDropdownOpen={isBranchOpsDropdownOpen}
-        setIsBranchOpsDropdownOpen={setIsBranchOpsDropdownOpen}
-        handleGitFetch={handleGitFetch}
-        isPullingRemote={isPullingRemote}
-        handleGitPull={handleGitPull}
-        onOpenPullStrategy={handleFooterPullClick}
-        hasUpstream={hasUpstream}
-        handleGitPush={handleGitPush}
-        isPushingRemote={isPushingRemote}
-        upstreamBranchName={upstreamBranchName}
-        openMergeRebaseModal={openMergeRebaseModal}
-        branchList={branchList}
+        isWorkspaceDropdownOpen={isWorkspaceDropdownOpen}
+        setIsWorkspaceDropdownOpen={setIsWorkspaceDropdownOpen}
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
         currentBranch={currentBranch}
-        handleDragOverBranch={handleDragOverBranch}
-        handleDropOnBranch={handleDropOnBranch}
-        startCheckoutBranch={startCheckoutBranch}
-        draggedCommitSha={draggedCommitSha}
-        startDeleteBranch={startDeleteBranch}
+        upstreamBranchName={upstreamBranchName}
         hasRepo={hasRepo}
-        isRemoteBranchListExpanded={isRemoteBranchListExpanded}
-        setIsRemoteBranchListExpanded={setIsRemoteBranchListExpanded}
-        remoteBranches={remoteBranches}
-        isFetchingRemote={isFetchingRemote}
-        handleCheckoutRemoteBranch={handleCheckoutRemoteBranch}
-        githubToken={githubToken}
-        remoteUrl={remoteUrl}
-        githubPRs={githubPRs}
-        isStashListExpanded={isStashListExpanded}
-        setIsStashListExpanded={setIsStashListExpanded}
-        startPushStash={startPushStash}
-        stashes={stashes.filter(s => {
-          const normCurrent = currentBranch.replace(/^refs\/heads\//, "").toLowerCase().trim();
-          const normStashBranch = s.branchName.replace(/^refs\/heads\//, "").toLowerCase().trim();
-          return normStashBranch === normCurrent;
-        })}
-        selectedStashIndex={selectedStashIndex}
-        dialogType={dialogType}
-        openStashInspector={openStashInspector}
-        dropStash={dropStash}
-        isCollabActive={isCollabActive}
-        setIsCollabActive={setIsCollabActive}
         unpushedCount={unpushedCount}
         behindCount={behindCount}
-        allBranches={allBranches}
-        onOpenCreatePRModal={handleOpenCreatePR}
+        githubToken={githubToken}
+        remoteUrl={remoteUrl}
+        setDialogType={setDialogType}
+        setDialogInput={setDialogInput}
+        setDialogInput2={setDialogInput2}
+        githubUser={githubUser}
+        handleGitHubSignout={handleGitHubSignout}
+        availableUpdate={availableUpdate}
+        updateStatus={updateStatus}
+        updateProgress={updateProgress}
+        onStartDownload={() => {
+          if (availableUpdate) {
+            startBackgroundDownload(availableUpdate);
+          }
+        }}
+        onRestartApp={handleRestartApp}
+        onOpenSettings={() => {
+          setSettingsInitialTab(undefined);
+          setIsSettingsOpen(true);
+        }}
       />
+
+      <div className="app-body">
+        <Sidebar 
+          sidebarCollapsed={sidebarCollapsed}
+          sidebarWidth={sidebarWidth}
+          workspaces={workspaces}
+          onOpenFolderPicker={openFolderPickerAndAddWorkspace}
+          setDialogType={setDialogType}
+          setDialogInput={setDialogInput}
+          isBranchListExpanded={isBranchListExpanded}
+          setIsBranchListExpanded={setIsBranchListExpanded}
+          isBranchOpsDropdownOpen={isBranchOpsDropdownOpen}
+          setIsBranchOpsDropdownOpen={setIsBranchOpsDropdownOpen}
+          handleGitFetch={handleGitFetch}
+          isPullingRemote={isPullingRemote}
+          handleGitPull={handleGitPull}
+          onOpenPullStrategy={handleFooterPullClick}
+          hasUpstream={hasUpstream}
+          handleGitPush={handleGitPush}
+          isPushingRemote={isPushingRemote}
+          upstreamBranchName={upstreamBranchName}
+          openMergeRebaseModal={openMergeRebaseModal}
+          branchList={branchList}
+          currentBranch={currentBranch}
+          handleDragOverBranch={handleDragOverBranch}
+          handleDropOnBranch={handleDropOnBranch}
+          startCheckoutBranch={startCheckoutBranch}
+          draggedCommitSha={draggedCommitSha}
+          startDeleteBranch={startDeleteBranch}
+          hasRepo={hasRepo}
+          isRemoteBranchListExpanded={isRemoteBranchListExpanded}
+          setIsRemoteBranchListExpanded={setIsRemoteBranchListExpanded}
+          remoteBranches={remoteBranches}
+          isFetchingRemote={isFetchingRemote}
+          handleCheckoutRemoteBranch={handleCheckoutRemoteBranch}
+          githubToken={githubToken}
+          remoteUrl={remoteUrl}
+          githubPRs={githubPRs}
+          isStashListExpanded={isStashListExpanded}
+          setIsStashListExpanded={setIsStashListExpanded}
+          startPushStash={startPushStash}
+          stashes={stashes.filter(s => {
+            const normCurrent = currentBranch.replace(/^refs\/heads\//, "").toLowerCase().trim();
+            const normStashBranch = s.branchName.replace(/^refs\/heads\//, "").toLowerCase().trim();
+            return normStashBranch === normCurrent;
+          })}
+          selectedStashIndex={selectedStashIndex}
+          dialogType={dialogType}
+          openStashInspector={openStashInspector}
+          dropStash={dropStash}
+          isCollabActive={isCollabActive}
+          setIsCollabActive={setIsCollabActive}
+          unpushedCount={unpushedCount}
+          behindCount={behindCount}
+          allBranches={allBranches}
+          onOpenCreatePRModal={handleOpenCreatePR}
+        />
 
         {!sidebarCollapsed && (
           <div 
@@ -2439,37 +2472,6 @@ function App() {
         )}
 
         <div className="main-panel">
-          <Topbar 
-            sidebarCollapsed={sidebarCollapsed}
-            setSidebarCollapsed={setSidebarCollapsed}
-            activeTab={activeTab}
-            setActiveTab={setActiveTab}
-            currentBranch={currentBranch}
-            hasRepo={hasRepo}
-            unpushedCount={unpushedCount}
-            behindCount={behindCount}
-            githubToken={githubToken}
-            remoteUrl={remoteUrl}
-            setDialogType={setDialogType}
-            setDialogInput={setDialogInput}
-            setDialogInput2={setDialogInput2}
-            githubUser={githubUser}
-            handleGitHubSignout={handleGitHubSignout}
-            availableUpdate={availableUpdate}
-            updateStatus={updateStatus}
-            updateProgress={updateProgress}
-            onStartDownload={() => {
-              if (availableUpdate) {
-                startBackgroundDownload(availableUpdate);
-              }
-            }}
-            onRestartApp={handleRestartApp}
-            onOpenSettings={() => {
-              setSettingsInitialTab(undefined);
-              setIsSettingsOpen(true);
-            }}
-          />
-
           <div className="view-content">
             {workspaces.length === 0 || !repoPath ? (
               <div className="welcome-screen">
@@ -2661,6 +2663,7 @@ function App() {
             )}
           </div>
         </div>
+      </div>
 
       <Dialogs 
         dialogType={dialogType}
