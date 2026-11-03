@@ -1829,9 +1829,15 @@ function App() {
         method: "GET",
         body: null
       });
-      setGithubPRs(JSON.parse(responseStr) as GitHubPR[]);
+      const data = JSON.parse(responseStr);
+      if (Array.isArray(data)) {
+        setGithubPRs(data as GitHubPR[]);
+      } else {
+        setGithubPRs([]);
+      }
     } catch (err: any) {
       console.error(err);
+      setGithubPRs([]);
     }
   };
 
