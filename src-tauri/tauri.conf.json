@@ -15,6 +15,7 @@
         "title": "Stagger",
         "hiddenTitle": true,
         "titleBarStyle": "Overlay",
+        "backgroundColor": "#1e1e2e",
         "width": 1280,
         "height": 800,
         "minWidth": 900,

@@ -138,17 +138,17 @@ const Topbar: React.FC<TopbarProps> = ({
     return () => { isMounted = false; };
   }, [repoPath]);
 
-  const activeAuthor = githubUser ? {
+  const activeAuthor = (githubUser && typeof githubUser.login === "string") ? {
     fullName: githubUser.name || githubUser.login,
-    displayName: (githubUser.name ? githubUser.name.split(' ')[0] : githubUser.login),
+    displayName: (githubUser.name ? String(githubUser.name).split(' ')[0] : githubUser.login),
     avatarUrl: githubUser.avatar_url,
-    initial: (githubUser.name || githubUser.login || 'U').slice(0, 1).toUpperCase(),
+    initial: String(githubUser.name || githubUser.login || 'U').slice(0, 1).toUpperCase(),
     badgeLabel: `@${githubUser.login}`,
   } : gitIdentity ? {
     fullName: gitIdentity.name || (gitIdentity.handle ? `@${gitIdentity.handle}` : 'Git Author'),
-    displayName: gitIdentity.name ? gitIdentity.name.split(' ')[0] : (gitIdentity.handle || 'Git User'),
+    displayName: gitIdentity.name ? String(gitIdentity.name).split(' ')[0] : (gitIdentity.handle || 'Git User'),
     avatarUrl: gitIdentity.avatarUrl,
-    initial: (gitIdentity.name || gitIdentity.handle || 'G').slice(0, 1).toUpperCase(),
+    initial: String(gitIdentity.name || gitIdentity.handle || 'G').slice(0, 1).toUpperCase(),
     badgeLabel: gitIdentity.handle ? `@${gitIdentity.handle}` : 'Git Author',
   } : null;
 

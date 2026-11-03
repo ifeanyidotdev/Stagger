@@ -41,7 +41,7 @@ export const calculateGraphPaths = (commitsList: CommitInfo[]): { paths: GraphPa
     const nodeY = index * 48 + 24;
     nodes.push({ id: commit.id, x: nodeX, y: nodeY, col });
 
-    commit.parents.forEach((parentId) => {
+    (commit.parents || []).forEach((parentId) => {
       const parentIdx = commitsList.findIndex(c => c.id === parentId);
       if (parentIdx !== -1) {
         let parentCol = activeColumns.indexOf(parentId);

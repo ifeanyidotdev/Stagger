@@ -26,6 +26,7 @@ import { CreatePRModal } from "./components/modals/CreatePRModal";
 import UpdateRestartPrompt from "./components/common/UpdateRestartPrompt";
 import ToastContainer from "./components/common/ToastContainer";
 import { formatGitAlertMessage } from "./utils/gitAlertUtils";
+import { safeGetItem } from "./utils/storageUtils";
 import type { AppUpdateInfo, UpdateStatus, UpdateDownloadProgress, GlobalSettings, WorkspaceHostingConfig } from "./types/settings";
 
 function App() {
@@ -116,7 +117,7 @@ function App() {
   const [stashNameInput, setStashNameInput] = useState("");
   
   // --- GITHUB INTEGRATION STATE ---
-  const [githubToken, setGithubToken] = useState<string | null>(localStorage.getItem("gh_token"));
+  const [githubToken, setGithubToken] = useState<string | null>(() => safeGetItem("gh_token"));
   const [githubUser, setGithubUser] = useState<GitHubUser | null>(null);
   const [githubRepos, setGithubRepos] = useState<GitHubRepo[]>([]);
   const [githubPRs, setGithubPRs] = useState<GitHubPR[]>([]);
@@ -1666,8 +1667,12 @@ function App() {
         method: "GET",
         body: null
       });
-      const user = JSON.parse(responseStr) as GitHubUser;
-      setGithubUser(user);
+      const user = JSON.parse(responseStr);
+      if (user && typeof user.login === "string") {
+        setGithubUser(user as GitHubUser);
+      } else {
+        setGithubUser(null);
+      }
       
       const reposStr = await invoke<string>("run_github_api_request", {
         token,
@@ -1675,9 +1680,16 @@ function App() {
         method: "GET",
         body: null
       });
-      setGithubRepos(JSON.parse(reposStr) as GitHubRepo[]);
+      const repos = JSON.parse(reposStr);
+      if (Array.isArray(repos)) {
+        setGithubRepos(repos as GitHubRepo[]);
+      } else {
+        setGithubRepos([]);
+      }
     } catch (err: any) {
       setErrorMessage("Failed to fetch GitHub Profile: " + err.toString());
+      setGithubUser(null);
+      setGithubRepos([]);
     }
   };
 
@@ -2353,18 +2365,20 @@ function App() {
     if (!historySearchQuery.trim()) return commits;
     const q = historySearchQuery.toLowerCase();
     return commits.filter(commit =>
-      commit.message.toLowerCase().includes(q) ||
-      commit.author.toLowerCase().includes(q) ||
-      commit.short_id.toLowerCase().includes(q) ||
-      commit.id.toLowerCase().includes(q) ||
-      commit.branches.some(b => b.toLowerCase().includes(q))
+      (commit.message || "").toLowerCase().includes(q) ||
+      (commit.author || "").toLowerCase().includes(q) ||
+      (commit.short_id || "").toLowerCase().includes(q) ||
+      (commit.id || "").toLowerCase().includes(q) ||
+      (Array.isArray(commit.branches) && commit.branches.some(b => (b || "").toLowerCase().includes(q)))
     );
   }, [commits, historySearchQuery]);
 
   const { paths: graphPaths, nodes: graphNodes } = calculateGraphPaths(filteredCommits);
 
   // Active workspace directory name
-  const activeWorkspaceName = (workspaces.length > 0 && repoPath) ? (repoPath.split("/").pop() || repoPath) : "No Workspace";
+  const activeWorkspaceName = (workspaces.length > 0 && repoPath) 
+    ? (repoPath.replace(/[/\\]+$/, "").split(/[/\\]/).pop() || repoPath) 
+    : "No Workspace";
 
   return (
     <div className="app-container">
@@ -2448,7 +2462,8 @@ function App() {
           setIsStashListExpanded={setIsStashListExpanded}
           startPushStash={startPushStash}
           stashes={stashes.filter(s => {
-            const normCurrent = currentBranch.replace(/^refs\/heads\//, "").toLowerCase().trim();
+            if (!s || typeof s.branchName !== "string") return false;
+            const normCurrent = (currentBranch || "").replace(/^refs\/heads\//, "").toLowerCase().trim();
             const normStashBranch = s.branchName.replace(/^refs\/heads\//, "").toLowerCase().trim();
             return normStashBranch === normCurrent;
           })}

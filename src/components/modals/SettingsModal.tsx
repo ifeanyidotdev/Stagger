@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { safeGetItem } from '../../utils/storageUtils';
 import { 
   Settings, 
   X, 
@@ -86,7 +87,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
   // Appearance & Theme Settings
   const [theme, setTheme] = useState<AppTheme>(() => {
-    return (localStorage.getItem('stagenode_theme') as AppTheme) || 'catppuccin-mocha';
+    return (safeGetItem('stagenode_theme') as AppTheme) || 'catppuccin-mocha';
   });
 
   const handleThemeChange = (newTheme: AppTheme) => {
@@ -229,7 +230,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
         // Load Git Hosting & PR Settings
         setGitHostingProvider(settings.git_hosting_provider || 'github');
-        setGithubToken(settings.github_token || localStorage.getItem('gh_token') || '');
+        setGithubToken(settings.github_token || safeGetItem('gh_token') || '');
         setGithubHost(settings.github_host || 'https://github.com');
         setGitlabToken(settings.gitlab_token || '');
         setGitlabHost(settings.gitlab_host || 'https://gitlab.com');
@@ -240,19 +241,19 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         setDefaultPrBaseBranch(settings.default_pr_base_branch || settings.git_default_branch || 'main');
 
         // Load Pull Strategy & PR Settings
-        const storedPull = localStorage.getItem('stagenode_pull_strategy');
+        const storedPull = safeGetItem('stagenode_pull_strategy');
         const loadedPullStrategy = settings.default_pull_strategy || (storedPull as any) || (sysGit?.pull_rebase === 'true' ? 'rebase' : sysGit?.pull_rebase === 'false' ? 'merge' : 'prompt');
         setDefaultPullStrategy(loadedPullStrategy);
 
-        const autoPromptStored = localStorage.getItem('stagenode_auto_open_pull_dialog');
+        const autoPromptStored = safeGetItem('stagenode_auto_open_pull_dialog');
         setAutoOpenPullDialog(settings.auto_open_pull_dialog ?? (autoPromptStored !== null ? autoPromptStored === 'true' : true));
 
-        const storedPr = localStorage.getItem('stagenode_pr_merge_method');
+        const storedPr = safeGetItem('stagenode_pr_merge_method');
         const loadedPrMethod = settings.default_pr_merge_method || (storedPr as any) || 'merge';
         setDefaultPrMergeMethod(loadedPrMethod);
 
         // Load Theme
-        const storedTheme = (localStorage.getItem('stagenode_theme') as AppTheme) || settings.theme || 'catppuccin-mocha';
+        const storedTheme = (safeGetItem('stagenode_theme') as AppTheme) || settings.theme || 'catppuccin-mocha';
         setTheme(storedTheme);
         document.documentElement.setAttribute('data-theme', storedTheme);
         if (document.body) {
