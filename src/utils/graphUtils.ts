@@ -21,9 +21,19 @@ export interface GraphNode {
 }
 
 export const calculateGraphPaths = (commitsList: CommitInfo[]): { paths: GraphPath[]; nodes: GraphNode[] } => {
+  if (!commitsList || commitsList.length === 0) {
+    return { paths: [], nodes: [] };
+  }
+
   const paths: GraphPath[] = [];
   const nodes: GraphNode[] = [];
   const activeColumns: (string | null)[] = [];
+
+  // O(1) index lookup map replacing O(N) findIndex on every parent for massive speedup
+  const commitIndexMap = new Map<string, number>();
+  for (let i = 0; i < commitsList.length; i++) {
+    commitIndexMap.set(commitsList[i].id, i);
+  }
 
   commitsList.forEach((commit, index) => {
     let col = activeColumns.indexOf(commit.id);
@@ -41,9 +51,9 @@ export const calculateGraphPaths = (commitsList: CommitInfo[]): { paths: GraphPa
     const nodeY = index * 48 + 24;
     nodes.push({ id: commit.id, x: nodeX, y: nodeY, col });
 
-    commit.parents.forEach((parentId) => {
-      const parentIdx = commitsList.findIndex(c => c.id === parentId);
-      if (parentIdx !== -1) {
+    (commit.parents || []).forEach((parentId) => {
+      const parentIdx = commitIndexMap.get(parentId);
+      if (parentIdx !== undefined) {
         let parentCol = activeColumns.indexOf(parentId);
         if (parentCol === -1) {
           parentCol = activeColumns.indexOf(null);

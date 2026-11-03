@@ -2548,4 +2548,4 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   );
 };
 
-export default SettingsModal;
+export default React.memo(SettingsModal);

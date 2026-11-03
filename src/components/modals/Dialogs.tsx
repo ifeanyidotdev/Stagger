@@ -1742,4 +1742,4 @@ const Dialogs: React.FC<DialogsProps> = ({
   );
 };
 
-export default Dialogs;
+export default React.memo(Dialogs);

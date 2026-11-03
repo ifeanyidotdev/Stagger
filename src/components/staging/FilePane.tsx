@@ -29,13 +29,14 @@ interface FilePaneProps {
   requestDiscardSelected: () => void;
   hasRepo: boolean;
   initializeGitRepo: () => void;
+  onSelectConflictFile?: (file: string) => void;
 }
 
 const FilePane: React.FC<FilePaneProps> = ({
   filePaneWidth,
   refreshRepository,
   conflictedFiles,
-  resolveConflict,
+  resolveConflict: _resolveConflict,
   unstagedCollapsed,
   setUnstagedCollapsed,
   unstagedFiles,
@@ -57,9 +58,11 @@ const FilePane: React.FC<FilePaneProps> = ({
   requestDiscardFile,
   requestDiscardSelected,
   hasRepo,
-  initializeGitRepo
+  initializeGitRepo,
+  onSelectConflictFile
 }) => {
   const isWorkingTreeClean = hasRepo && unstagedFiles.length === 0 && stagedFiles.length === 0 && conflictedFiles.length === 0;
+  const [conflictsCollapsed, setConflictsCollapsed] = useState(false);
 
   const [contextMenu, setContextMenu] = useState<{
     x: number;
@@ -100,39 +103,60 @@ const FilePane: React.FC<FilePaneProps> = ({
             <div className="clean-tree-title">Working Tree Clean</div>
             <div className="clean-tree-desc">No unstaged or staged changes detected</div>
           </div>
-        ) : (
-          <>
-            {/* Conflict File Panel */}
-            {conflictedFiles.length > 0 && (
-              <div className="file-group">
-                <div className="file-group-header" style={{ color: "var(--color-conflict)" }}>
-                  <span>Merge Conflicts</span>
-                  <AlertTriangle size={12} />
-                </div>
-                {conflictedFiles.map(file => (
-                  <div key={file} className="conflict-container">
-                    <span className="conflict-file-header">{file}</span>
-                    <div className="conflict-choices">
-                      <div className="conflict-card" onClick={() => resolveConflict(file, "ours")}>
-                        <div className="conflict-card-title">Keep Ours</div>
-                        <div className="conflict-card-desc">Accept Current</div>
+        ) : conflictedFiles.length > 0 ? (
+          /* Conflict Mode: Focused file tree for active conflicts */
+          <div className="file-group conflict-group">
+            <div 
+              className="file-group-header conflict-header"
+              onClick={() => setConflictsCollapsed(!conflictsCollapsed)}
+            >
+              <div className="file-group-header-left">
+                {conflictsCollapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
+                <span className="file-group-header-title" style={{ color: "var(--color-conflict)" }}>Merge Conflicts</span>
+                <span className="badge conflict-badge">{conflictedFiles.length}</span>
+              </div>
+              <div className="file-group-header-right">
+                <AlertTriangle size={12} style={{ color: "var(--color-conflict)" }} />
+              </div>
+            </div>
+
+            {!conflictsCollapsed && (
+              <div className="file-list-items" style={{ display: "flex", flexDirection: "column", gap: "2px", marginTop: "4px" }}>
+                {conflictedFiles.map(file => {
+                  const isSelected = selectedFile === file;
+                  const parts = file.split('/');
+                  const fileName = parts.pop() || file;
+                  const dirPath = parts.join('/');
+
+                  return (
+                    <div 
+                      key={file} 
+                      className={`file-item conflict-file-item ${isSelected ? "selected" : ""}`}
+                      onClick={() => {
+                        if (onSelectConflictFile) {
+                          onSelectConflictFile(file);
+                        }
+                      }}
+                      title={file}
+                    >
+                      <div className="file-item-left" style={{ flex: 1, display: "flex", alignItems: "center", gap: "6px", minWidth: 0 }}>
+                        <FileCode size={12} className="file-icon" style={{ color: "var(--color-conflict)", flexShrink: 0 }} />
+                        <div className="file-name" style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
+                          <span style={{ fontWeight: 600, color: isSelected ? "var(--color-text-bright)" : "var(--color-text-main)" }}>{fileName}</span>
+                          {dirPath && <span style={{ fontSize: "0.66rem", color: "var(--color-text-dark)" }}>{dirPath}/</span>}
+                        </div>
                       </div>
-                      <div className="conflict-card" onClick={() => resolveConflict(file, "theirs")}>
-                        <div className="conflict-card-title">Keep Theirs</div>
-                        <div className="conflict-card-desc">Accept Incoming</div>
+                      <div style={{ display: "flex", gap: "6px", alignItems: "center", flexShrink: 0 }}>
+                        <span className="status-badge conflict">Conflict</span>
                       </div>
                     </div>
-                    <button 
-                      style={{ width: "100%", padding: "4px", background: "var(--bg-active)", border: "1px solid var(--border-color)", borderRadius: "4px", color: "var(--color-text-bright)", fontSize: "0.75rem", cursor: "pointer" }}
-                      onClick={() => resolveConflict(file, "resolved")}
-                    >
-                      Mark Resolved
-                    </button>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
-
+          </div>
+        ) : (
+          <>
             {/* Unstaged Files */}
             <div className="file-group">
               <div 
@@ -487,4 +511,4 @@ const FilePane: React.FC<FilePaneProps> = ({
   );
 };
 
-export default FilePane;
+export default React.memo(FilePane);

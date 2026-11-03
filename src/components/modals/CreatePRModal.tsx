@@ -53,7 +53,7 @@ interface CreatePRModalProps {
   refreshRepository?: () => Promise<void>;
 }
 
-export const CreatePRModal: React.FC<CreatePRModalProps> = ({
+export const CreatePRModal: React.FC<CreatePRModalProps> = React.memo(({
   isOpen,
   onClose,
   repoPath,
@@ -1135,4 +1135,4 @@ export const CreatePRModal: React.FC<CreatePRModalProps> = ({
       </div>
     </div>
   );
-};
+});

@@ -26,6 +26,7 @@ import { CreatePRModal } from "./components/modals/CreatePRModal";
 import UpdateRestartPrompt from "./components/common/UpdateRestartPrompt";
 import ToastContainer from "./components/common/ToastContainer";
 import { formatGitAlertMessage } from "./utils/gitAlertUtils";
+import { safeGetItem } from "./utils/storageUtils";
 import type { AppUpdateInfo, UpdateStatus, UpdateDownloadProgress, GlobalSettings, WorkspaceHostingConfig } from "./types/settings";
 
 function App() {
@@ -116,7 +117,7 @@ function App() {
   const [stashNameInput, setStashNameInput] = useState("");
   
   // --- GITHUB INTEGRATION STATE ---
-  const [githubToken, setGithubToken] = useState<string | null>(localStorage.getItem("gh_token"));
+  const [githubToken, setGithubToken] = useState<string | null>(() => safeGetItem("gh_token"));
   const [githubUser, setGithubUser] = useState<GitHubUser | null>(null);
   const [githubRepos, setGithubRepos] = useState<GitHubRepo[]>([]);
   const [githubPRs, setGithubPRs] = useState<GitHubPR[]>([]);
@@ -699,8 +700,16 @@ function App() {
   };
 
   // --- REPO REFRESH CORE LOGIC ---
-  const refreshRepository = async (path: string = repoPath) => {
-    if (!path) return;
+  const isRefreshingRef = useRef(false);
+  const lastPRFetchRef = useRef<number>(0);
+  const filesRef = useRef<GitFileStatus[]>(files);
+  filesRef.current = files;
+  const currentBranchRef = useRef<string>(currentBranch);
+  currentBranchRef.current = currentBranch;
+
+  const refreshRepository = async (path: string = repoPath, isFull: boolean = true) => {
+    if (!path || isRefreshingRef.current) return;
+    isRefreshingRef.current = true;
     try {
       const statusRes = await invoke<GitStatusResult>("get_git_status", { repoPath: path });
       setFiles(statusRes.files);
@@ -902,63 +911,69 @@ function App() {
 
       setConflictedFiles(Array.from(cPaths));
 
-      const logRes = await invoke<CommitInfo[]>("get_git_log", { repoPath: path, limit: 2000 });
-      setCommits(logRes);
+      // Only fetch 2,000 commits & stashes during a full refresh (or initial load)
+      if (isFull) {
+        const logRes = await invoke<CommitInfo[]>("get_git_log", { repoPath: path, limit: 2000 });
+        setCommits(logRes);
 
-      setSelectedCommit(prev => {
-        if (!prev) return null;
-        const exists = logRes.some(c => c.id === prev.id);
-        if (!exists) {
-          setSelectedCommitDiffFiles([]);
-          setSelectedCommitFileDiff(null);
-          setSelectedCommitDiffFile(null);
-          return null;
-        }
-        return prev;
-      });
-
-      const stashRes = await invoke<GitCliResult>("run_git_cli_cmd", {
-        repoPath: path,
-        args: ["stash", "list"]
-      });
-      if (stashRes.exit_code === 0) {
-        const rawLines = stashRes.stdout.split("\n").filter(Boolean);
-        const parsed: StashEntry[] = rawLines.map((line, idx) => {
-          let displayTitle = line;
-          let branchName = "";
-
-          const tagMatch = line.match(/\[branch:(.+?)\]/);
-          if (tagMatch) {
-            branchName = tagMatch[1].trim();
-            displayTitle = line.replace(/\[branch:.+?\]\s*/, "").replace(/^stash@\{\d+\}:\s*/, "").trim();
-          } else {
-            const gitMatch = line.match(/stash@\{\d+\}:\s*(?:WIP on|On)\s+([^:]+):\s*(.*)/i);
-            if (gitMatch) {
-              branchName = gitMatch[1].trim();
-              displayTitle = gitMatch[2].trim() || gitMatch[1].trim();
-            } else {
-              const matchWip = line.match(/(?:WIP on|On)\s+([^\s:]+)/i);
-              if (matchWip) {
-                branchName = matchWip[1].trim();
-              }
-              displayTitle = line.replace(/^stash@\{\d+\}:\s*/, "").trim();
-            }
+        setSelectedCommit(prev => {
+          if (!prev) return null;
+          const exists = logRes.some(c => c.id === prev.id);
+          if (!exists) {
+            setSelectedCommitDiffFiles([]);
+            setSelectedCommitFileDiff(null);
+            setSelectedCommitDiffFile(null);
+            return null;
           }
-
-          displayTitle = displayTitle.replace(/^(?:WIP on|On)\s+[^:]+:\s*/i, "").trim() || `stash@{${idx}}`;
-
-          return {
-            originalIndex: idx,
-            rawText: line,
-            displayTitle,
-            branchName
-          };
+          return prev;
         });
-        setStashes(parsed);
-      }
 
-      if (remoteRes.exit_code === 0 && githubToken) {
-        fetchGitHubPRs(remoteRes.stdout.trim());
+        const stashRes = await invoke<GitCliResult>("run_git_cli_cmd", {
+          repoPath: path,
+          args: ["stash", "list"]
+        });
+        if (stashRes.exit_code === 0) {
+          const rawLines = stashRes.stdout.split("\n").filter(Boolean);
+          const parsed: StashEntry[] = rawLines.map((line, idx) => {
+            let displayTitle = line;
+            let branchName = "";
+
+            const tagMatch = line.match(/\[branch:(.+?)\]/);
+            if (tagMatch) {
+              branchName = tagMatch[1].trim();
+              displayTitle = line.replace(/\[branch:.+?\]\s*/, "").replace(/^stash@\{\d+\}:\s*/, "").trim();
+            } else {
+              const gitMatch = line.match(/stash@\{\d+\}:\s*(?:WIP on|On)\s+([^:]+):\s*(.*)/i);
+              if (gitMatch) {
+                branchName = gitMatch[1].trim();
+                displayTitle = gitMatch[2].trim() || gitMatch[1].trim();
+              } else {
+                const matchWip = line.match(/(?:WIP on|On)\s+([^\s:]+)/i);
+                if (matchWip) {
+                  branchName = matchWip[1].trim();
+                }
+                displayTitle = line.replace(/^stash@\{\d+\}:\s*/, "").trim();
+              }
+            }
+
+            displayTitle = displayTitle.replace(/^(?:WIP on|On)\s+[^:]+:\s*/i, "").trim() || `stash@{${idx}}`;
+
+            return {
+              originalIndex: idx,
+              rawText: line,
+              displayTitle,
+              branchName
+            };
+          });
+          setStashes(parsed);
+        }
+
+        // Throttle GitHub PR fetches to once per minute to avoid hitting API rate limits
+        const now = Date.now();
+        if (remoteRes.exit_code === 0 && githubToken && (now - lastPRFetchRef.current > 60000)) {
+          lastPRFetchRef.current = now;
+          fetchGitHubPRs(remoteRes.stdout.trim());
+        }
       }
 
     } catch (err: any) {
@@ -972,6 +987,8 @@ function App() {
       setStashes([]);
       setConflictedFiles([]);
       resetWorkspaceScopedState();
+    } finally {
+      isRefreshingRef.current = false;
     }
   };
 
@@ -1320,24 +1337,77 @@ function App() {
 
   const handleCheckoutBringChanges = async () => {
     if (!pendingCheckoutBranch) return;
-    const args = pendingCheckoutArgs || ["checkout", pendingCheckoutBranch];
+    const targetBranch = pendingCheckoutBranch;
+    const baseArgs = pendingCheckoutArgs || ["checkout", targetBranch];
+
+    // Construct 3-way merge checkout args (insert -m after checkout so Git brings working changes along)
+    const mergeArgs = [...baseArgs];
+    const checkoutIdx = mergeArgs.indexOf("checkout");
+    if (checkoutIdx !== -1 && !mergeArgs.includes("-m") && !mergeArgs.includes("--merge")) {
+      mergeArgs.splice(checkoutIdx + 1, 0, "-m");
+    }
+
     try {
+      // 1. Try git checkout -m first (carries over changes via 3-way merge)
       const res = await invoke<GitCliResult>("run_git_cli_cmd", {
         repoPath,
-        args
+        args: mergeArgs
       });
+
       if (res.exit_code === 0) {
         setDialogType(null);
         setPendingCheckoutBranch(null);
         setPendingCheckoutArgs(null);
         setErrorMessage(null);
-        await refreshRepository();
-      } else {
-        setErrorMessage(`Failed to switch branch:\n${res.stderr || res.stdout}`);
-        setDialogType(null);
-        setPendingCheckoutBranch(null);
-        setPendingCheckoutArgs(null);
+        await refreshRepository(repoPath, true);
+        return;
       }
+
+      // 2. Fallback: Stash carryover (handles untracked file collisions & complex index differences)
+      const stashTag = `stagenode-carryover-${Date.now()}`;
+      const stashRes = await invoke<GitCliResult>("run_git_cli_cmd", {
+        repoPath,
+        args: ["stash", "push", "-u", "-m", stashTag]
+      });
+
+      if (stashRes.exit_code === 0) {
+        const checkoutRes = await invoke<GitCliResult>("run_git_cli_cmd", {
+          repoPath,
+          args: baseArgs
+        });
+
+        if (checkoutRes.exit_code === 0) {
+          // Checkout succeeded on target branch! Now pop the carried changes.
+          const popRes = await invoke<GitCliResult>("run_git_cli_cmd", {
+            repoPath,
+            args: ["stash", "pop"]
+          });
+
+          setDialogType(null);
+          setPendingCheckoutBranch(null);
+          setPendingCheckoutArgs(null);
+          setErrorMessage(null);
+          await refreshRepository(repoPath, true);
+
+          if (popRes.exit_code !== 0 && popRes.stderr && !popRes.stderr.includes("conflict")) {
+            setErrorMessage(`Switched to ${targetBranch}, but some changes require manual stash pop:\n${popRes.stderr || popRes.stdout}`);
+          }
+          return;
+        } else {
+          // Checkout failed: restore stashed changes back onto original branch so nothing is lost
+          await invoke<GitCliResult>("run_git_cli_cmd", {
+            repoPath,
+            args: ["stash", "pop"]
+          });
+          setErrorMessage(`Failed to switch branch to ${targetBranch}:\n${checkoutRes.stderr || checkoutRes.stdout}`);
+        }
+      } else {
+        setErrorMessage(`Failed to carry over changes to ${targetBranch}:\n${res.stderr || res.stdout}`);
+      }
+
+      setDialogType(null);
+      setPendingCheckoutBranch(null);
+      setPendingCheckoutArgs(null);
     } catch (err: any) {
       setErrorMessage(err.toString());
       setDialogType(null);
@@ -1352,7 +1422,7 @@ function App() {
     try {
       const stashRes = await invoke<GitCliResult>("run_git_cli_cmd", {
         repoPath,
-        args: ["stash", "push", "-m", `Auto-stashed from Stagger before switching to ${pendingCheckoutBranch}`]
+        args: ["stash", "push", "-u", "-m", `Auto-stashed from Stagger before switching to ${pendingCheckoutBranch}`]
       });
       if (stashRes.exit_code !== 0) {
         setErrorMessage(`Failed to stash changes:\n${stashRes.stderr || stashRes.stdout}`);
@@ -1370,7 +1440,7 @@ function App() {
         setPendingCheckoutBranch(null);
         setPendingCheckoutArgs(null);
         setErrorMessage(null);
-        await refreshRepository();
+        await refreshRepository(repoPath, true);
       } else {
         setErrorMessage(`Failed to switch branch:\n${res.stderr || res.stdout}`);
         setDialogType(null);
@@ -1666,8 +1736,12 @@ function App() {
         method: "GET",
         body: null
       });
-      const user = JSON.parse(responseStr) as GitHubUser;
-      setGithubUser(user);
+      const user = JSON.parse(responseStr);
+      if (user && typeof user.login === "string") {
+        setGithubUser(user as GitHubUser);
+      } else {
+        setGithubUser(null);
+      }
       
       const reposStr = await invoke<string>("run_github_api_request", {
         token,
@@ -1675,9 +1749,16 @@ function App() {
         method: "GET",
         body: null
       });
-      setGithubRepos(JSON.parse(reposStr) as GitHubRepo[]);
+      const repos = JSON.parse(reposStr);
+      if (Array.isArray(repos)) {
+        setGithubRepos(repos as GitHubRepo[]);
+      } else {
+        setGithubRepos([]);
+      }
     } catch (err: any) {
       setErrorMessage("Failed to fetch GitHub Profile: " + err.toString());
+      setGithubUser(null);
+      setGithubRepos([]);
     }
   };
 
@@ -2120,7 +2201,7 @@ function App() {
         let args: string[];
         if (targetCommitForBranch) {
           if (checkoutNewBranch) {
-            args = ["checkout", "-b", branchName, targetCommitForBranch.id];
+            args = ["checkout", "-m", "-b", branchName, targetCommitForBranch.id];
           } else {
             args = ["branch", branchName, targetCommitForBranch.id];
           }
@@ -2291,13 +2372,42 @@ function App() {
     };
   }, [repoPath]);
 
-  // Periodic automatic status polling watcher (every 2 seconds)
+  // Periodic automatic status polling watcher (fast diff detection, zero unnecessary re-renders)
   useEffect(() => {
     if (!repoPath) return;
-    const interval = setInterval(() => {
-      refreshRepository();
-    }, 2000);
-    return () => clearInterval(interval);
+
+    let timer: any;
+    let isCancelled = false;
+
+    const poll = async () => {
+      if (isCancelled) return;
+      if (document.visibilityState === "visible" && !isRefreshingRef.current) {
+        try {
+          const statusRes = await invoke<GitStatusResult>("get_git_status", { repoPath });
+          const prevFiles = filesRef.current;
+          const filesChanged = 
+            statusRes.files.length !== prevFiles.length ||
+            statusRes.files.some((f, idx) => {
+              const p = prevFiles[idx];
+              return !p || p.path !== f.path || p.staged_status !== f.staged_status || p.unstaged_status !== f.unstaged_status;
+            });
+          const branchChanged = statusRes.current_branch !== currentBranchRef.current;
+
+          if (filesChanged || branchChanged) {
+            await refreshRepository(repoPath, false);
+          }
+        } catch (_) {}
+      }
+      if (!isCancelled) {
+        timer = setTimeout(poll, 3500);
+      }
+    };
+
+    timer = setTimeout(poll, 3500);
+    return () => {
+      isCancelled = true;
+      clearTimeout(timer);
+    };
   }, [repoPath]);
 
   // Proactive background auto-fetch: catches remote changes even before user pushes
@@ -2346,25 +2456,43 @@ function App() {
     };
   }, [repoPath, hasRepo, remoteUrl, isPushingRemote, isPullingRemote, isFetchingRemote]);
 
-  const stagedFiles = files.filter(f => f.staged_status !== null);
-  const unstagedFiles = files.filter(f => f.unstaged_status !== null);
+  const stagedFiles = React.useMemo(() => files.filter(f => f.staged_status !== null), [files]);
+  const unstagedFiles = React.useMemo(() => files.filter(f => f.unstaged_status !== null), [files]);
 
   const filteredCommits = React.useMemo(() => {
     if (!historySearchQuery.trim()) return commits;
     const q = historySearchQuery.toLowerCase();
     return commits.filter(commit =>
-      commit.message.toLowerCase().includes(q) ||
-      commit.author.toLowerCase().includes(q) ||
-      commit.short_id.toLowerCase().includes(q) ||
-      commit.id.toLowerCase().includes(q) ||
-      commit.branches.some(b => b.toLowerCase().includes(q))
+      (commit.message || "").toLowerCase().includes(q) ||
+      (commit.author || "").toLowerCase().includes(q) ||
+      (commit.short_id || "").toLowerCase().includes(q) ||
+      (commit.id || "").toLowerCase().includes(q) ||
+      (Array.isArray(commit.branches) && commit.branches.some(b => (b || "").toLowerCase().includes(q)))
     );
   }, [commits, historySearchQuery]);
 
-  const { paths: graphPaths, nodes: graphNodes } = calculateGraphPaths(filteredCommits);
+  const { paths: graphPaths, nodes: graphNodes } = React.useMemo(() => {
+    if (activeTab !== "history" || filteredCommits.length === 0) {
+      return { paths: [], nodes: [] };
+    }
+    return calculateGraphPaths(filteredCommits);
+  }, [filteredCommits, activeTab]);
+
+  const currentBranchStashes = React.useMemo(() => {
+    const normCurrent = (currentBranch || "").replace(/^refs\/heads\//, "").toLowerCase().trim();
+    return stashes.filter(s => {
+      if (!s || typeof s.branchName !== "string") return false;
+      const normStashBranch = s.branchName.replace(/^refs\/heads\//, "").toLowerCase().trim();
+      return normStashBranch === normCurrent;
+    });
+  }, [stashes, currentBranch]);
 
   // Active workspace directory name
-  const activeWorkspaceName = (workspaces.length > 0 && repoPath) ? (repoPath.split("/").pop() || repoPath) : "No Workspace";
+  const activeWorkspaceName = React.useMemo(() => {
+    return (workspaces.length > 0 && repoPath) 
+      ? (repoPath.replace(/[/\\]+$/, "").split(/[/\\]/).pop() || repoPath) 
+      : "No Workspace";
+  }, [workspaces, repoPath]);
 
   return (
     <div className="app-container">
@@ -2447,11 +2575,7 @@ function App() {
           isStashListExpanded={isStashListExpanded}
           setIsStashListExpanded={setIsStashListExpanded}
           startPushStash={startPushStash}
-          stashes={stashes.filter(s => {
-            const normCurrent = currentBranch.replace(/^refs\/heads\//, "").toLowerCase().trim();
-            const normStashBranch = s.branchName.replace(/^refs\/heads\//, "").toLowerCase().trim();
-            return normStashBranch === normCurrent;
-          })}
+          stashes={currentBranchStashes}
           selectedStashIndex={selectedStashIndex}
           dialogType={dialogType}
           openStashInspector={openStashInspector}
@@ -2583,6 +2707,7 @@ function App() {
                   requestDiscardSelected={requestDiscardSelected}
                   hasRepo={hasRepo}
                   initializeGitRepo={initializeGitRepo}
+                  onSelectConflictFile={selectConflictFile}
                 />
 
                 <div 
@@ -2618,23 +2743,25 @@ function App() {
                     />
                   )}
 
-                  <CommitBuilder 
-                    commitTitle={commitTitle}
-                    setCommitTitle={setCommitTitle}
-                    commitDesc={commitDesc}
-                    setCommitDesc={setCommitDesc}
-                    amendCommit={amendCommit}
-                    setAmendCommit={setAmendCommit}
-                    coAuthors={coAuthors}
-                    setCoAuthors={setCoAuthors}
-                    showCoAuthorInput={showCoAuthorInput}
-                    setShowCoAuthorInput={setShowCoAuthorInput}
-                    coAuthorInput={coAuthorInput}
-                    setCoAuthorInput={setCoAuthorInput}
-                    unstagedFiles={unstagedFiles}
-                    stagedFiles={stagedFiles}
-                    handleCommit={handleCommit}
-                  />
+                  {conflictedFiles.length === 0 && (
+                    <CommitBuilder 
+                      commitTitle={commitTitle}
+                      setCommitTitle={setCommitTitle}
+                      commitDesc={commitDesc}
+                      setCommitDesc={setCommitDesc}
+                      amendCommit={amendCommit}
+                      setAmendCommit={setAmendCommit}
+                      coAuthors={coAuthors}
+                      setCoAuthors={setCoAuthors}
+                      showCoAuthorInput={showCoAuthorInput}
+                      setShowCoAuthorInput={setShowCoAuthorInput}
+                      coAuthorInput={coAuthorInput}
+                      setCoAuthorInput={setCoAuthorInput}
+                      unstagedFiles={unstagedFiles}
+                      stagedFiles={stagedFiles}
+                      handleCommit={handleCommit}
+                    />
+                  )}
                 </div>
               </div>
             ) : (

@@ -189,4 +189,4 @@ const CommitBuilder: React.FC<CommitBuilderProps> = ({
   );
 };
 
-export default CommitBuilder;
+export default React.memo(CommitBuilder);
