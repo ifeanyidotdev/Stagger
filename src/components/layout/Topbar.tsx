@@ -1,13 +1,33 @@
-import React, { useRef, useEffect, useState } from 'react';
-import { invoke } from '@tauri-apps/api/core';
-import { getCurrentWindow } from '@tauri-apps/api/window';
-import { 
-  PanelLeft, Layers, History, FolderSync, LogOut, Settings, 
-  ArrowDown, ArrowUp, ArrowUpCircle, ArrowDownToLine, RefreshCw, 
-  Folder, ChevronDown, Check, X, FolderPlus, GitBranch 
-} from 'lucide-react';
-import type { GitHubUser } from '../../types/git';
-import type { AppUpdateInfo, UpdateStatus, UpdateDownloadProgress, SystemGitConfig, WorkspaceSettings } from '../../types/settings';
+import React, { useRef, useEffect, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import {
+  PanelLeft,
+  Layers,
+  History,
+  FolderSync,
+  LogOut,
+  Settings,
+  ArrowDown,
+  ArrowUp,
+  ArrowUpCircle,
+  ArrowDownToLine,
+  RefreshCw,
+  Folder,
+  ChevronDown,
+  Check,
+  X,
+  FolderPlus,
+  GitBranch,
+} from "lucide-react";
+import type { GitHubUser } from "../../types/git";
+import type {
+  AppUpdateInfo,
+  UpdateStatus,
+  UpdateDownloadProgress,
+  SystemGitConfig,
+  WorkspaceSettings,
+} from "../../types/settings";
 
 interface TopbarProps {
   sidebarCollapsed: boolean;
@@ -19,8 +39,8 @@ interface TopbarProps {
   removeWorkspace?: (e: React.MouseEvent, path: string) => void;
   isWorkspaceDropdownOpen?: boolean;
   setIsWorkspaceDropdownOpen?: (val: boolean) => void;
-  activeTab: 'workspace' | 'history';
-  setActiveTab: (val: 'workspace' | 'history') => void;
+  activeTab: "workspace" | "history";
+  setActiveTab: (val: "workspace" | "history") => void;
   currentBranch?: string;
   upstreamBranchName?: string | null;
   hasRepo?: boolean;
@@ -66,7 +86,7 @@ const Topbar: React.FC<TopbarProps> = ({
   githubUser,
   handleGitHubSignout,
   availableUpdate,
-  updateStatus = 'idle',
+  updateStatus = "idle",
   updateProgress,
   onStartDownload,
   onRestartApp,
@@ -76,18 +96,26 @@ const Topbar: React.FC<TopbarProps> = ({
   const profileMenuRef = useRef<HTMLDivElement>(null);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [avatarLoadError, setAvatarLoadError] = useState(false);
-  const [gitIdentity, setGitIdentity] = useState<{ name: string; email: string; avatarUrl?: string; handle?: string | null } | null>(null);
+  const [gitIdentity, setGitIdentity] = useState<{
+    name: string;
+    email: string;
+    avatarUrl?: string;
+    handle?: string | null;
+  } | null>(null);
 
   useEffect(() => {
     let isMounted = true;
     const fetchIdentity = async () => {
       try {
-        let name = '';
-        let email = '';
+        let name = "";
+        let email = "";
 
         if (repoPath) {
           try {
-            const ws = await invoke<WorkspaceSettings>('get_workspace_settings', { repoPath });
+            const ws = await invoke<WorkspaceSettings>(
+              "get_workspace_settings",
+              { repoPath },
+            );
             if (ws.local_user_name) name = ws.local_user_name.trim();
             if (ws.local_user_email) email = ws.local_user_email.trim();
           } catch (_) {}
@@ -95,7 +123,7 @@ const Topbar: React.FC<TopbarProps> = ({
 
         if (!name || !email) {
           try {
-            const sys = await invoke<SystemGitConfig>('get_system_git_config');
+            const sys = await invoke<SystemGitConfig>("get_system_git_config");
             if (!name && sys.user_name) name = sys.user_name.trim();
             if (!email && sys.user_email) email = sys.user_email.trim();
           } catch (_) {}
@@ -106,10 +134,12 @@ const Topbar: React.FC<TopbarProps> = ({
           return;
         }
 
-        let avatarUrl = '';
+        let avatarUrl = "";
         let handle: string | null = null;
         if (email) {
-          const ghMatch = email.match(/(?:^|\+)([a-zA-Z0-9-]+)@users\.noreply\.github\.com$/i);
+          const ghMatch = email.match(
+            /(?:^|\+)([a-zA-Z0-9-]+)@users\.noreply\.github\.com$/i,
+          );
           if (ghMatch) {
             handle = ghMatch[1];
             avatarUrl = `https://github.com/${ghMatch[1]}.png`;
@@ -117,9 +147,14 @@ const Topbar: React.FC<TopbarProps> = ({
             try {
               const clean = email.toLowerCase();
               const msgBuffer = new TextEncoder().encode(clean);
-              const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+              const hashBuffer = await crypto.subtle.digest(
+                "SHA-256",
+                msgBuffer,
+              );
               const hashArray = Array.from(new Uint8Array(hashBuffer));
-              const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+              const hashHex = hashArray
+                .map((b) => b.toString(16).padStart(2, "0"))
+                .join("");
               avatarUrl = `https://gravatar.com/avatar/${hashHex}?d=retro`;
             } catch (_) {}
           }
@@ -135,28 +170,47 @@ const Topbar: React.FC<TopbarProps> = ({
     };
 
     fetchIdentity();
-    return () => { isMounted = false; };
+    return () => {
+      isMounted = false;
+    };
   }, [repoPath]);
 
-  const activeAuthor = (githubUser && typeof githubUser.login === "string") ? {
-    fullName: githubUser.name || githubUser.login,
-    displayName: (githubUser.name ? String(githubUser.name).split(' ')[0] : githubUser.login),
-    avatarUrl: githubUser.avatar_url,
-    initial: String(githubUser.name || githubUser.login || 'U').slice(0, 1).toUpperCase(),
-    badgeLabel: `@${githubUser.login}`,
-  } : gitIdentity ? {
-    fullName: gitIdentity.name || (gitIdentity.handle ? `@${gitIdentity.handle}` : 'Git Author'),
-    displayName: gitIdentity.name ? String(gitIdentity.name).split(' ')[0] : (gitIdentity.handle || 'Git User'),
-    avatarUrl: gitIdentity.avatarUrl,
-    initial: String(gitIdentity.name || gitIdentity.handle || 'G').slice(0, 1).toUpperCase(),
-    badgeLabel: gitIdentity.handle ? `@${gitIdentity.handle}` : 'Git Author',
-  } : null;
+  const activeAuthor =
+    githubUser && typeof githubUser.login === "string"
+      ? {
+          fullName: githubUser.name || githubUser.login,
+          displayName: githubUser.name
+            ? String(githubUser.name).split(" ")[0]
+            : githubUser.login,
+          avatarUrl: githubUser.avatar_url,
+          initial: String(githubUser.name || githubUser.login || "U")
+            .slice(0, 1)
+            .toUpperCase(),
+          badgeLabel: `@${githubUser.login}`,
+        }
+      : gitIdentity
+        ? {
+            fullName:
+              gitIdentity.name ||
+              (gitIdentity.handle ? `@${gitIdentity.handle}` : "Git Author"),
+            displayName: gitIdentity.name
+              ? String(gitIdentity.name).split(" ")[0]
+              : gitIdentity.handle || "Git User",
+            avatarUrl: gitIdentity.avatarUrl,
+            initial: String(gitIdentity.name || gitIdentity.handle || "G")
+              .slice(0, 1)
+              .toUpperCase(),
+            badgeLabel: gitIdentity.handle
+              ? `@${gitIdentity.handle}`
+              : "Git Author",
+          }
+        : null;
 
   useEffect(() => {
     if (!isWorkspaceDropdownOpen) return;
     const handleClickOutside = (e: MouseEvent) => {
       if (
-        workspaceDropdownRef.current && 
+        workspaceDropdownRef.current &&
         !workspaceDropdownRef.current.contains(e.target as Node)
       ) {
         setIsWorkspaceDropdownOpen?.(false);
@@ -172,7 +226,7 @@ const Topbar: React.FC<TopbarProps> = ({
     if (!isProfileMenuOpen) return;
     const handleClickOutside = (e: MouseEvent) => {
       if (
-        profileMenuRef.current && 
+        profileMenuRef.current &&
         !profileMenuRef.current.contains(e.target as Node)
       ) {
         setIsProfileMenuOpen(false);
@@ -187,10 +241,14 @@ const Topbar: React.FC<TopbarProps> = ({
   const handleTitlebarMouseDown = async (e: React.MouseEvent) => {
     // Only primary (left) mouse button
     if (e.button !== 0) return;
-    
+
     // Check if clicked element or its parent is an interactive control or popover
     const target = e.target as HTMLElement;
-    if (target.closest('button, input, textarea, select, a, .ant-dropdown-popover, .ant-profile-popover, .workspace-menu-dropdown')) {
+    if (
+      target.closest(
+        "button, input, textarea, select, a, .ant-dropdown-popover, .ant-profile-popover, .workspace-menu-dropdown",
+      )
+    ) {
       return;
     }
 
@@ -207,8 +265,8 @@ const Topbar: React.FC<TopbarProps> = ({
   };
 
   return (
-    <div 
-      className="topbar ant-titlebar" 
+    <div
+      className="topbar ant-titlebar"
       data-tauri-drag-region
       onMouseDown={handleTitlebarMouseDown}
     >
@@ -225,10 +283,12 @@ const Topbar: React.FC<TopbarProps> = ({
 
         {/* Workspace Switcher */}
         <div className="ant-workspace-wrap" ref={workspaceDropdownRef}>
-          <button 
+          <button
             type="button"
             className="ant-workspace-trigger"
-            onClick={() => setIsWorkspaceDropdownOpen?.(!isWorkspaceDropdownOpen)}
+            onClick={() =>
+              setIsWorkspaceDropdownOpen?.(!isWorkspaceDropdownOpen)
+            }
             title="Switch Workspace Project"
           >
             <span className="ant-workspace-name">
@@ -236,7 +296,7 @@ const Topbar: React.FC<TopbarProps> = ({
             </span>
             <ChevronDown size={11} className="ant-chevron" />
           </button>
-          
+
           {isWorkspaceDropdownOpen && workspaces.length > 0 && (
             <div className="workspace-menu-dropdown ant-dropdown-popover">
               <div className="workspace-menu-header">
@@ -244,11 +304,11 @@ const Topbar: React.FC<TopbarProps> = ({
                 <span className="details-count-badge">{workspaces.length}</span>
               </div>
               <div className="workspace-menu-list">
-                {workspaces.map(wPath => {
+                {workspaces.map((wPath) => {
                   const name = wPath.split("/").pop() || wPath;
                   const isActive = repoPath === wPath;
                   return (
-                    <div 
+                    <div
                       key={wPath}
                       className={`workspace-menu-item ${isActive ? "active" : ""}`}
                       onClick={() => {
@@ -257,17 +317,40 @@ const Topbar: React.FC<TopbarProps> = ({
                       }}
                     >
                       <div className="workspace-item-content">
-                        <Folder size={13} style={{ color: isActive ? "var(--accent-purple-bright)" : "var(--color-text-muted)", flexShrink: 0 }} />
-                        <span className="workspace-menu-item-text" title={wPath}>
+                        <Folder
+                          size={13}
+                          style={{
+                            color: isActive
+                              ? "var(--accent-purple-bright)"
+                              : "var(--color-text-muted)",
+                            flexShrink: 0,
+                          }}
+                        />
+                        <span
+                          className="workspace-menu-item-text"
+                          title={wPath}
+                        >
                           {name}
                         </span>
                       </div>
-                      <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "4px",
+                        }}
+                      >
                         {isActive && (
-                          <Check size={12} style={{ color: "var(--color-staged)", flexShrink: 0 }} />
+                          <Check
+                            size={12}
+                            style={{
+                              color: "var(--color-staged)",
+                              flexShrink: 0,
+                            }}
+                          />
                         )}
                         {workspaces.length > 1 && (
-                          <button 
+                          <button
                             className="workspace-remove-btn"
                             onClick={(e) => {
                               e.stopPropagation();
@@ -284,10 +367,10 @@ const Topbar: React.FC<TopbarProps> = ({
                   );
                 })}
               </div>
-              
+
               <div className="workspace-menu-divider" />
-              
-              <button 
+
+              <button
                 className="workspace-menu-add-btn"
                 type="button"
                 onClick={() => {
@@ -307,23 +390,35 @@ const Topbar: React.FC<TopbarProps> = ({
 
         {/* Active Branch Display */}
         {hasRepo && currentBranch && (
-          <div 
-            className="ant-branch-wrap" 
+          <div
+            className="ant-branch-wrap"
             title={`Active Branch: ${currentBranch}${behindCount > 0 ? ` • Remote is ahead by ${behindCount} commit(s)` : ""}${unpushedCount > 0 ? ` • ${unpushedCount} unpushed commit(s)` : ""}`}
           >
             <span className="ant-branch-local">
-              <GitBranch size={11} strokeWidth={2.2} className="ant-branch-icon" />
-              <span className="ant-branch-name" title={currentBranch}>{currentBranch}</span>
+              <GitBranch
+                size={11}
+                strokeWidth={2.2}
+                className="ant-branch-icon"
+              />
+              <span className="ant-branch-name" title={currentBranch}>
+                {currentBranch}
+              </span>
             </span>
 
             {behindCount > 0 && (
-              <span className="ant-sync-tag behind" title={`Remote origin is ahead by ${behindCount} commit(s)`}>
+              <span
+                className="ant-sync-tag behind"
+                title={`Remote origin is ahead by ${behindCount} commit(s)`}
+              >
                 <ArrowDown size={9} />
                 <span>{behindCount}</span>
               </span>
             )}
             {unpushedCount > 0 && (
-              <span className="ant-sync-tag ahead" title={`${unpushedCount} unpushed commit(s) ready to push`}>
+              <span
+                className="ant-sync-tag ahead"
+                title={`${unpushedCount} unpushed commit(s) ready to push`}
+              >
                 <ArrowUp size={9} />
                 <span>{unpushedCount}</span>
               </span>
@@ -338,15 +433,15 @@ const Topbar: React.FC<TopbarProps> = ({
       {/* Center: View Tabs */}
       <div className="ant-titlebar-center">
         <div className="ant-view-tabs">
-          <button 
+          <button
             type="button"
             className={`ant-tab-btn ${activeTab === "workspace" ? "active" : ""}`}
             onClick={() => setActiveTab("workspace")}
           >
             <Layers size={12} strokeWidth={2} />
-            <span>Workspace Staging</span>
+            <span>Workspace</span>
           </button>
-          <button 
+          <button
             type="button"
             className={`ant-tab-btn ${activeTab === "history" ? "active" : ""}`}
             onClick={() => setActiveTab("history")}
@@ -362,39 +457,52 @@ const Topbar: React.FC<TopbarProps> = ({
 
       {/* Right side: Update notification, Settings icon & Profile Avatar / Sign In */}
       <div className="ant-titlebar-right">
-        {updateStatus === 'ready' && (
+        {updateStatus === "ready" && (
           <button
             type="button"
             className="ant-action-btn ant-update-btn"
             onClick={onRestartApp}
-            title={availableUpdate?.version ? `Stagger v${availableUpdate.version} ready. Click to restart.` : 'Update ready! Click to restart.'}
+            title={
+              availableUpdate?.version
+                ? `Stagger v${availableUpdate.version} ready. Click to restart.`
+                : "Update ready! Click to restart."
+            }
           >
             <RefreshCw size={11} className="spin-icon-hover" />
             <span>Restart</span>
           </button>
         )}
 
-        {updateStatus === 'downloading' && (
+        {updateStatus === "downloading" && (
           <span className="ant-downloading-text" title="Downloading update...">
             <ArrowDownToLine size={11} className="spin-icon" />
-            <span>{updateProgress?.percentage !== undefined ? `${updateProgress.percentage}%` : '...'}</span>
+            <span>
+              {updateProgress?.percentage !== undefined
+                ? `${updateProgress.percentage}%`
+                : "..."}
+            </span>
           </span>
         )}
 
-        {updateStatus !== 'ready' && updateStatus !== 'downloading' && availableUpdate?.available && (
-          <button
-            type="button"
-            className="ant-action-btn"
-            onClick={onStartDownload}
-            title={`Download v${availableUpdate.version}`}
-          >
-            <ArrowUpCircle size={11} style={{ color: "var(--accent-purple-bright)" }} />
-            <span>Update</span>
-          </button>
-        )}
+        {updateStatus !== "ready" &&
+          updateStatus !== "downloading" &&
+          availableUpdate?.available && (
+            <button
+              type="button"
+              className="ant-action-btn"
+              onClick={onStartDownload}
+              title={`Download v${availableUpdate.version}`}
+            >
+              <ArrowUpCircle
+                size={11}
+                style={{ color: "var(--accent-purple-bright)" }}
+              />
+              <span>Update</span>
+            </button>
+          )}
 
         {/* Global Settings icon */}
-        <button 
+        <button
           type="button"
           className="ant-icon-btn"
           onClick={() => onOpenSettings?.()}
@@ -413,10 +521,10 @@ const Topbar: React.FC<TopbarProps> = ({
               title={activeAuthor.fullName}
             >
               {activeAuthor.avatarUrl && !avatarLoadError ? (
-                <img 
-                  src={activeAuthor.avatarUrl} 
-                  className="ant-avatar-img" 
-                  alt="Avatar" 
+                <img
+                  src={activeAuthor.avatarUrl}
+                  className="ant-avatar-img"
+                  alt="Avatar"
                   onError={() => setAvatarLoadError(true)}
                 />
               ) : (
@@ -430,10 +538,10 @@ const Topbar: React.FC<TopbarProps> = ({
               <div className="ant-profile-popover">
                 <div className="ant-profile-header">
                   {activeAuthor.avatarUrl && !avatarLoadError ? (
-                    <img 
-                      src={activeAuthor.avatarUrl} 
-                      className="ant-profile-header-avatar" 
-                      alt="Avatar" 
+                    <img
+                      src={activeAuthor.avatarUrl}
+                      className="ant-profile-header-avatar"
+                      alt="Avatar"
                     />
                   ) : (
                     <div className="ant-profile-header-fallback">
@@ -441,22 +549,26 @@ const Topbar: React.FC<TopbarProps> = ({
                     </div>
                   )}
                   <div className="ant-profile-header-info">
-                    <span className="ant-profile-header-name">{activeAuthor.fullName}</span>
-                    <span className="ant-profile-header-badge">{activeAuthor.badgeLabel}</span>
+                    <span className="ant-profile-header-name">
+                      {activeAuthor.fullName}
+                    </span>
+                    <span className="ant-profile-header-badge">
+                      {activeAuthor.badgeLabel}
+                    </span>
                   </div>
                 </div>
 
-                <div 
+                <div
                   className="ant-profile-menu-item"
                   onClick={() => {
                     setIsProfileMenuOpen(false);
-                    onOpenSettings?.('global-identity');
+                    onOpenSettings?.("global-identity");
                   }}
                 >
                   <Settings size={13} style={{ opacity: 0.8 }} />
                   <span>Git Identity Settings...</span>
                 </div>
-                <div 
+                <div
                   className="ant-profile-menu-item"
                   onClick={() => {
                     setIsProfileMenuOpen(false);
@@ -469,7 +581,7 @@ const Topbar: React.FC<TopbarProps> = ({
                   <span>Clone Remote Repo...</span>
                 </div>
                 {githubToken && (
-                  <div 
+                  <div
                     className="ant-profile-menu-item danger"
                     onClick={() => {
                       setIsProfileMenuOpen(false);
@@ -489,4 +601,4 @@ const Topbar: React.FC<TopbarProps> = ({
   );
 };
 
-export default Topbar;
+export default React.memo(Topbar);

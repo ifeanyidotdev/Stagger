@@ -454,4 +454,4 @@ const HistoryView: React.FC<HistoryViewProps> = ({
   );
 };
 
-export default HistoryView;
+export default React.memo(HistoryView);

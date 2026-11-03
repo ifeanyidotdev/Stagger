@@ -202,4 +202,4 @@ const StagingCanvas: React.FC<StagingCanvasProps> = ({
   );
 };
 
-export default StagingCanvas;
+export default React.memo(StagingCanvas);
