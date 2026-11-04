@@ -1,6 +1,6 @@
 import React, { Component, type ReactNode } from "react";
-import { AlertTriangle, RotateCcw, Trash2, Copy, Check, ChevronDown, ChevronUp } from "lucide-react";
-import { clearWorkspaceCache, clearAllAppPreferences } from "../../utils/storageUtils";
+import { AlertTriangle, RotateCcw, Trash2, Copy, Check } from "lucide-react";
+import { clearWorkspaceCache } from "../../utils/storageUtils";
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -11,7 +11,6 @@ interface ErrorBoundaryState {
   hasError: boolean;
   error: Error | null;
   errorInfo: React.ErrorInfo | null;
-  showDetails: boolean;
   copied: boolean;
   resetting: boolean;
 }
@@ -21,7 +20,6 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     hasError: false,
     error: null,
     errorInfo: null,
-    showDetails: false,
     copied: false,
     resetting: false,
   };
@@ -50,17 +48,6 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     }
   };
 
-  private handleResetAllPreferences = (): void => {
-    this.setState({ resetting: true });
-    try {
-      clearAllAppPreferences();
-    } finally {
-      setTimeout(() => {
-        window.location.reload();
-      }, 150);
-    }
-  };
-
   private handleCopyError = async (): Promise<void> => {
     const { error, errorInfo } = this.state;
     const text = [
@@ -78,17 +65,13 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     } catch (_) {}
   };
 
-  private toggleDetails = (): void => {
-    this.setState(prev => ({ showDetails: !prev.showDetails }));
-  };
-
   public render(): ReactNode {
     if (this.state.hasError) {
       if (this.props.fallback) {
         return this.props.fallback;
       }
 
-      const { error, errorInfo, showDetails, copied, resetting } = this.state;
+      const { error, copied, resetting } = this.state;
       const errorMessage = error?.message || "An unexpected error occurred during rendering.";
 
       return (
@@ -150,63 +133,53 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
               Stagger encountered an unexpected rendering error on startup. Your git repositories and local files remain completely safe.
             </p>
 
-            {/* Error Message Pill */}
+            {/* Error Message Pane with Copy Button */}
             <div style={{
+              position: "relative",
               backgroundColor: "var(--bg-input, #11111b)",
               border: "1px solid var(--border-color, #313244)",
               borderRadius: "8px",
-              padding: "12px 14px",
-              fontSize: "0.78rem",
-              fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
-              color: "var(--color-conflict, #f38ba8)",
-              textAlign: "left",
-              wordBreak: "break-word",
-              marginBottom: "20px",
-              maxHeight: "100px",
-              overflowY: "auto",
+              marginBottom: "24px",
+              overflow: "hidden",
             }}>
-              {errorMessage}
-            </div>
-
-            {/* Collapsible Stack Trace */}
-            <div style={{ marginBottom: "24px", textAlign: "left" }}>
+              <div style={{
+                padding: "12px 42px 12px 14px",
+                fontSize: "0.78rem",
+                fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+                color: "var(--color-conflict, #f38ba8)",
+                textAlign: "left",
+                wordBreak: "break-word",
+                maxHeight: "110px",
+                overflowY: "auto",
+                lineHeight: 1.45,
+              }}>
+                {errorMessage}
+              </div>
               <button
                 type="button"
-                onClick={this.toggleDetails}
+                onClick={this.handleCopyError}
+                title={copied ? "Copied to clipboard" : "Copy error message"}
+                aria-label="Copy error message"
                 style={{
-                  background: "transparent",
-                  border: "none",
-                  color: "var(--color-text-muted, #a6adc8)",
-                  fontSize: "0.76rem",
-                  cursor: "pointer",
+                  position: "absolute",
+                  top: "8px",
+                  right: "8px",
                   display: "inline-flex",
                   alignItems: "center",
-                  gap: "6px",
-                  padding: "4px 0",
+                  justifyContent: "center",
+                  width: "26px",
+                  height: "26px",
+                  borderRadius: "5px",
+                  border: "1px solid var(--border-color, #313244)",
+                  backgroundColor: "var(--bg-panel, #181825)",
+                  color: copied ? "var(--color-staged, #a6e3a1)" : "var(--color-text-muted, #a6adc8)",
+                  cursor: "pointer",
+                  transition: "all 0.15s ease",
+                  padding: 0,
                 }}
               >
-                {showDetails ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-                <span>{showDetails ? "Hide technical details" : "Show technical details"}</span>
+                {copied ? <Check size={13} /> : <Copy size={13} />}
               </button>
-
-              {showDetails && (
-                <div style={{
-                  marginTop: "8px",
-                  backgroundColor: "var(--bg-card, #11111b)",
-                  border: "1px solid var(--border-color, #313244)",
-                  borderRadius: "6px",
-                  padding: "12px",
-                  fontSize: "0.72rem",
-                  fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
-                  color: "var(--color-text-muted, #a6adc8)",
-                  maxHeight: "180px",
-                  overflowY: "auto",
-                  whiteSpace: "pre-wrap",
-                  lineHeight: 1.45,
-                }}>
-                  {error?.stack || errorInfo?.componentStack || "No stack trace available."}
-                </div>
-              )}
             </div>
 
             {/* Action Buttons */}
@@ -230,7 +203,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
                   fontSize: "0.82rem",
                   border: "none",
                   borderRadius: "7px",
-                  padding: "8px 16px",
+                  padding: "8px 18px",
                   cursor: resetting ? "not-allowed" : "pointer",
                   transition: "opacity 0.15s ease",
                 }}
@@ -254,54 +227,12 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
                   fontWeight: 500,
                   border: "1px solid rgba(243, 139, 168, 0.3)",
                   borderRadius: "7px",
-                  padding: "8px 14px",
+                  padding: "8px 16px",
                   cursor: resetting ? "not-allowed" : "pointer",
                 }}
               >
                 <Trash2 size={13} />
                 <span>{resetting ? "Resetting..." : "Reset Workspace Cache"}</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={this.handleResetAllPreferences}
-                disabled={resetting}
-                title="Restores factory defaults across preferences and workspace cache"
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "6px",
-                  backgroundColor: "transparent",
-                  color: "var(--color-text-muted, #a6adc8)",
-                  fontSize: "0.82rem",
-                  fontWeight: 500,
-                  border: "1px solid var(--border-color, #313244)",
-                  borderRadius: "7px",
-                  padding: "8px 12px",
-                  cursor: resetting ? "not-allowed" : "pointer",
-                }}
-              >
-                <span>Reset All Settings</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={this.handleCopyError}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "6px",
-                  backgroundColor: "transparent",
-                  color: "var(--color-text-muted, #a6adc8)",
-                  fontSize: "0.82rem",
-                  border: "1px solid var(--border-color, #313244)",
-                  borderRadius: "7px",
-                  padding: "8px 12px",
-                  cursor: "pointer",
-                }}
-              >
-                {copied ? <Check size={13} style={{ color: "var(--color-staged, #a6e3a1)" }} /> : <Copy size={13} />}
-                <span>{copied ? "Copied" : "Copy Error"}</span>
               </button>
             </div>
           </div>
