@@ -2944,7 +2944,6 @@ function App() {
                       unstagedFiles={unstagedFiles}
                       stagedFiles={stagedFiles}
                       handleCommit={handleCommit}
-                      onUndoLastCommit={commits.length > 0 ? () => handleOpenRemoveCommit(commits[0]) : undefined}
                       commits={commits}
                     />
                   )}

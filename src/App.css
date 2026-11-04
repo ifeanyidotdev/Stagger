@@ -5641,6 +5641,28 @@ select.dialog-input option {
   background: rgba(255, 255, 255, 0.06);
 }
 
+.amend-commit-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(203, 166, 247, 0.08);
+  border: 1px solid rgba(203, 166, 247, 0.25);
+  color: var(--accent-purple-bright);
+  font-size: 0.72rem;
+  font-family: var(--font-sans);
+  font-weight: 500;
+  cursor: pointer;
+  padding: 3px 8px;
+  border-radius: 5px;
+  transition: var(--transition-quick);
+}
+
+.amend-commit-btn:hover {
+  color: #ffffff;
+  background: rgba(203, 166, 247, 0.2);
+  border-color: var(--accent-purple);
+}
+
 .commit-row-branch-btn {
   display: inline-flex;
   align-items: center;

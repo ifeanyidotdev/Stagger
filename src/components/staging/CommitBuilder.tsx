@@ -1,5 +1,5 @@
 import React from 'react';
-import { GitCommit, UserPlus, Users, Plus, X, RotateCcw } from 'lucide-react';
+import { GitCommit, UserPlus, Users, Plus, X } from 'lucide-react';
 import type { GitFileStatus, CommitInfo } from '../../types/git';
 
 interface CommitBuilderProps {
@@ -18,7 +18,6 @@ interface CommitBuilderProps {
   unstagedFiles: GitFileStatus[];
   stagedFiles: GitFileStatus[];
   handleCommit: () => void;
-  onUndoLastCommit?: () => void;
   commits?: CommitInfo[];
 }
 
@@ -38,20 +37,19 @@ const CommitBuilder: React.FC<CommitBuilderProps> = ({
   unstagedFiles: _unstagedFiles,
   stagedFiles,
   handleCommit,
-  onUndoLastCommit,
   commits = [],
 }) => {
   const isCommitReady = Boolean(commitTitle.trim() && (stagedFiles.length > 0 || amendCommit));
 
   const handleToggleAmend = (checked: boolean) => {
     setAmendCommit(checked);
-    if (checked && commits && commits.length > 0 && !commitTitle) {
+    if (checked && commits && commits.length > 0) {
       const rawMsg = commits[0].message || "";
       const lines = rawMsg.split("\n");
       const title = lines[0] || "";
       const desc = lines.slice(1).join("\n").replace(/^\n+/, "");
       setCommitTitle(title);
-      if (desc) setCommitDesc(desc);
+      setCommitDesc(desc);
     }
   };
 
@@ -184,18 +182,6 @@ const CommitBuilder: React.FC<CommitBuilderProps> = ({
             />
             <span>Amend last commit</span>
           </label>
-
-          {onUndoLastCommit && (
-            <button
-              type="button"
-              className="undo-commit-btn"
-              onClick={onUndoLastCommit}
-              title="Undo or remove the last commit"
-            >
-              <RotateCcw size={11} />
-              <span>Undo Last Commit</span>
-            </button>
-          )}
         </div>
 
         <button 

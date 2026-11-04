@@ -177,7 +177,7 @@ const Dialogs: React.FC<DialogsProps> = ({
   const [isTargetBranchDropdownOpen, setIsTargetBranchDropdownOpen] = useState(false);
   const [targetBranchSearch, setTargetBranchSearch] = useState('');
   const [pushTargetBranch, setPushTargetBranch] = useState(currentBranch || '');
-  const [removeCommitMode, setRemoveCommitMode] = useState<'mixed' | 'soft' | 'hard' | 'drop'>('mixed');
+  const [removeCommitMode, setRemoveCommitMode] = useState<'amend' | 'mixed' | 'soft' | 'hard' | 'drop'>('mixed');
   const [amendTitle, setAmendTitle] = useState('');
   const [amendDesc, setAmendDesc] = useState('');
   const [tagNameInput, setTagNameInput] = useState('');
@@ -194,7 +194,7 @@ const Dialogs: React.FC<DialogsProps> = ({
   }, [dialogType]);
 
   useEffect(() => {
-    if (dialogType === "amend-commit" && targetCommitForAction) {
+    if ((dialogType === "amend-commit" || dialogType === "remove-commit-confirm") && targetCommitForAction) {
       const rawMsg = targetCommitForAction.message || "";
       const lines = rawMsg.split("\n");
       const title = lines[0] || "";
@@ -309,8 +309,20 @@ const Dialogs: React.FC<DialogsProps> = ({
             )}
             {dialogType === "remove-commit-confirm" && (
               <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <Trash2 size={16} style={{ color: "var(--color-conflict)" }} />
-                <span>Remove Commit</span>
+                {targetCommitForAction && (
+                  (commits && commits.length > 0 && commits[0].id === targetCommitForAction.id) ||
+                  targetCommitForAction.branches?.some(b => b === currentBranch || b.endsWith(`/${currentBranch}`))
+                ) ? (
+                  <>
+                    <RotateCcw size={16} style={{ color: "var(--accent-purple-bright)" }} />
+                    <span>Undo or Amend Commit</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 size={16} style={{ color: "var(--color-conflict)" }} />
+                    <span>Remove Commit</span>
+                  </>
+                )}
               </span>
             )}
             {dialogType === "amend-commit" && (
@@ -913,10 +925,91 @@ const Dialogs: React.FC<DialogsProps> = ({
               ) : isHead ? (
                 <>
                   <p style={{ fontSize: "0.82rem", color: "var(--color-text-main)", lineHeight: 1.5, margin: 0 }}>
-                    Removing the latest commit on <strong style={{ color: "var(--color-text-bright)" }}>{currentBranch}</strong>. Choose how you want to handle the files:
+                    Managing the latest commit on <strong style={{ color: "var(--color-text-bright)" }}>{currentBranch}</strong>. Choose an action:
                   </p>
 
                   <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                    {/* Amend */}
+                    <label
+                      style={{
+                        display: "flex",
+                        alignItems: "flex-start",
+                        gap: "10px",
+                        padding: "10px 12px",
+                        background: removeCommitMode === "amend" ? "rgba(203, 166, 247, 0.08)" : "rgba(0, 0, 0, 0.15)",
+                        border: `1px solid ${removeCommitMode === "amend" ? "var(--accent-purple)" : "var(--border-color)"}`,
+                        borderRadius: "7px",
+                        cursor: "pointer",
+                        transition: "all 0.15s ease",
+                      }}
+                    >
+                      <input
+                        type="radio"
+                        name="removeCommitMode"
+                        checked={removeCommitMode === "amend"}
+                        onChange={() => setRemoveCommitMode("amend")}
+                        style={{ marginTop: "3px" }}
+                      />
+                      <div style={{ display: "flex", flexDirection: "column", gap: "2px", flex: 1 }}>
+                        <span style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--color-text-bright)", display: "flex", alignItems: "center", gap: "6px" }}>
+                          <Edit3 size={13} style={{ color: "var(--accent-purple-bright)" }} />
+                          Amend Commit
+                        </span>
+                        <span style={{ fontSize: "0.74rem", color: "var(--color-text-muted)" }}>
+                          Update the commit message and combine with currently staged changes.
+                        </span>
+                      </div>
+                    </label>
+
+                    {removeCommitMode === "amend" && (
+                      <div style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "10px",
+                        padding: "12px",
+                        background: "rgba(0, 0, 0, 0.25)",
+                        borderRadius: "7px",
+                        border: "1px solid var(--border-color)",
+                      }}>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                          <label style={{ fontSize: "0.73rem", fontWeight: 700, color: "var(--color-text-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                            Commit Summary
+                          </label>
+                          <input
+                            type="text"
+                            className="dialog-input"
+                            placeholder="Commit summary..."
+                            value={amendTitle}
+                            onChange={(e) => setAmendTitle(e.target.value)}
+                            style={{ width: "100%", boxSizing: "border-box" }}
+                            autoFocus
+                          />
+                        </div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                          <label style={{ fontSize: "0.73rem", fontWeight: 700, color: "var(--color-text-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                            Description (Optional)
+                          </label>
+                          <textarea
+                            className="dialog-input"
+                            placeholder="Add optional commit description..."
+                            value={amendDesc}
+                            onChange={(e) => setAmendDesc(e.target.value)}
+                            rows={2}
+                            style={{ width: "100%", boxSizing: "border-box", resize: "vertical", fontFamily: "var(--font-sans)" }}
+                          />
+                        </div>
+                        {stagedFiles && stagedFiles.length > 0 ? (
+                          <div style={{ fontSize: "0.73rem", color: "var(--color-staged)", fontWeight: 500 }}>
+                            ✓ {stagedFiles.length} staged file(s) will be included into this amended commit
+                          </div>
+                        ) : (
+                          <div style={{ fontSize: "0.73rem", color: "var(--color-text-muted)" }}>
+                            No newly staged files. Only the commit message will be amended.
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     {/* Mixed */}
                     <label
                       style={{
@@ -1090,24 +1183,39 @@ const Dialogs: React.FC<DialogsProps> = ({
                       alignItems: "center",
                       gap: "6px",
                     }}
-                    onClick={() => handleExecuteRemoveCommit?.(targetCommitForAction, removeCommitMode)}
-                    disabled={isExecutingCommitAction}
+                    onClick={() => {
+                      if (removeCommitMode === "amend") {
+                        handleExecuteAmendCommit?.(amendTitle, amendDesc);
+                      } else {
+                        handleExecuteRemoveCommit?.(targetCommitForAction, removeCommitMode);
+                      }
+                    }}
+                    disabled={isExecutingCommitAction || (removeCommitMode === "amend" && !amendTitle.trim())}
                   >
                     {isExecutingCommitAction ? (
                       <>
                         <RefreshCw size={13} className="spin-slow" />
-                        <span>Removing...</span>
+                        <span>{removeCommitMode === "amend" ? "Amending..." : "Removing..."}</span>
                       </>
                     ) : (
                       <>
-                        <Trash2 size={13} />
-                        <span>
-                          {removeCommitMode === "hard"
-                            ? "Discard Commit & Changes"
-                            : removeCommitMode === "drop"
-                              ? "Drop Commit"
-                              : "Undo Commit"}
-                        </span>
+                        {removeCommitMode === "amend" ? (
+                          <>
+                            <Edit3 size={13} />
+                            <span>Amend Commit</span>
+                          </>
+                        ) : (
+                          <>
+                            <Trash2 size={13} />
+                            <span>
+                              {removeCommitMode === "hard"
+                                ? "Discard Commit & Changes"
+                                : removeCommitMode === "drop"
+                                  ? "Drop Commit"
+                                  : "Undo Commit"}
+                            </span>
+                          </>
+                        )}
                       </>
                     )}
                   </button>
