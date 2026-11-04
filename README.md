@@ -7,18 +7,24 @@
 
 **Stagger** is a modern, lightweight desktop Git GUI client built for speed, clarity, and seamless workflow management. Powered by **Tauri v2**, **React 19**, **TypeScript**, and **Rust**, Stagger provides a visual workspace for staging changes, switching branches, stashing work, and creating pull requests without leaving your desktop interface.
 
-![Stagger Preview](assets/screenshot.png)
+### 🖥️ Workspace Staging
+![Stagger Workspace Staging](assets/screenshot.png)
+
+### 📊 Interactive History Graph
+![Stagger History Graph](assets/history-graph.png)
 
 ---
 
 ## ✨ Features
 
-- **⚡ Granular Git Staging**: Stage, unstage, discard, and view diffs for modified or untracked files with ease.
+- **⚡ Granular Staging & Interactive Mesh**: Stage, unstage, discard, and connect individual diff hunks visually using the node-based staging canvas.
+- **📊 Interactive History Graph**: Visualize commit topology DAG with branch lanes, merge tracks, release tags, commit search (by message, author, SHA, branch, or stash), and deep commit inspection with one-click actions (revert, cherry-pick, branch, tag).
 - **🌿 Branch Management**: Create, checkout, and merge branches smoothly with built-in protections and safety checks.
 - **🛡️ Smart Auto-Stashing**: Safely switch branches without losing uncommitted work thanks to automatic worktree stashing.
 - **📦 Stash Management**: Save, view, pop, apply, or drop stashes directly within the application.
 - **🚀 Pull Request Integration**: Draft and initiate GitHub/GitLab pull requests directly from your workspace.
-- **🎨 Modern Theme**: Premium aesthetic with intuitive navigation, keyboard shortcuts, and responsive layouts.
+- **👥 Real-Time Collaboration**: Built-in multiplayer mode for collaborating on repositories.
+- **🎨 Modern Theming**: Premium aesthetic with Catppuccin Mocha and Latte themes, intuitive navigation, keyboard shortcuts, and responsive layouts.
 
 ---
 
