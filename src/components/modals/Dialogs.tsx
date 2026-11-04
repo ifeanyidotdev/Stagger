@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Archive, X, Eye, FileCode, RefreshCw, FolderSync, Trash2, RefreshCcw, FolderPlus, GitMerge, GitCommit, Globe, ChevronDown, GitBranch, Check, Search, ArrowUpCircle, ArrowDown, Settings } from 'lucide-react';
-import type { GitHubRepo, DialogType, StashEntry, CommitInfo } from '../../types/git';
+import { Archive, X, Eye, FileCode, RefreshCw, FolderSync, Trash2, RefreshCcw, FolderPlus, GitMerge, GitCommit, Globe, ChevronDown, GitBranch, Check, Search, ArrowUpCircle, ArrowDown, Settings, RotateCcw, Edit3, Tag } from 'lucide-react';
+import type { GitHubRepo, DialogType, StashEntry, CommitInfo, GitFileStatus } from '../../types/git';
 import { invoke } from '@tauri-apps/api/core';
 
 interface DialogsProps {
@@ -10,6 +10,14 @@ interface DialogsProps {
   setTargetCommitForBranch?: (commit: CommitInfo | null) => void;
   targetCommitForPush?: CommitInfo | null;
   setTargetCommitForPush?: (commit: CommitInfo | null) => void;
+  targetCommitForAction?: CommitInfo | null;
+  setTargetCommitForAction?: (commit: CommitInfo | null) => void;
+  handleExecuteRevertCommit?: (commit: CommitInfo) => Promise<void>;
+  handleExecuteRemoveCommit?: (commit: CommitInfo, mode: 'soft' | 'mixed' | 'hard' | 'drop') => Promise<void>;
+  handleExecuteAmendCommit?: (title: string, desc: string) => Promise<void>;
+  handleExecuteCreateTag?: (tagName: string, tagMessage: string, commitSha: string) => Promise<void>;
+  isExecutingCommitAction?: boolean;
+  stagedFiles?: GitFileStatus[];
   isPushingCommit?: boolean;
   handleExecutePushCommit?: (commitSha: string, targetBranch: string, remote: string) => Promise<void>;
   commits?: CommitInfo[];
@@ -87,6 +95,14 @@ const Dialogs: React.FC<DialogsProps> = ({
   setTargetCommitForBranch,
   targetCommitForPush = null,
   setTargetCommitForPush,
+  targetCommitForAction = null,
+  setTargetCommitForAction,
+  handleExecuteRevertCommit,
+  handleExecuteRemoveCommit,
+  handleExecuteAmendCommit,
+  handleExecuteCreateTag,
+  isExecutingCommitAction = false,
+  stagedFiles = [],
   isPushingCommit = false,
   handleExecutePushCommit,
   commits = [],
@@ -161,9 +177,44 @@ const Dialogs: React.FC<DialogsProps> = ({
   const [isTargetBranchDropdownOpen, setIsTargetBranchDropdownOpen] = useState(false);
   const [targetBranchSearch, setTargetBranchSearch] = useState('');
   const [pushTargetBranch, setPushTargetBranch] = useState(currentBranch || '');
+  const [removeCommitMode, setRemoveCommitMode] = useState<'mixed' | 'soft' | 'hard' | 'drop'>('mixed');
+  const [amendTitle, setAmendTitle] = useState('');
+  const [amendDesc, setAmendDesc] = useState('');
+  const [tagNameInput, setTagNameInput] = useState('');
+  const [tagMessageInput, setTagMessageInput] = useState('');
   const targetBranchDropdownRef = useRef<HTMLDivElement>(null);
   const branchSearchInputRef = useRef<HTMLInputElement>(null);
   const restoreDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (dialogType === "create-tag") {
+      setTagNameInput('');
+      setTagMessageInput('');
+    }
+  }, [dialogType]);
+
+  useEffect(() => {
+    if (dialogType === "amend-commit" && targetCommitForAction) {
+      const rawMsg = targetCommitForAction.message || "";
+      const lines = rawMsg.split("\n");
+      const title = lines[0] || "";
+      const desc = lines.slice(1).join("\n").replace(/^\n+/, "");
+      setAmendTitle(title);
+      setAmendDesc(desc);
+    }
+  }, [dialogType, targetCommitForAction]);
+
+  useEffect(() => {
+    if (dialogType === "remove-commit-confirm") {
+      const isHead = Boolean(
+        targetCommitForAction && (
+          (commits && commits.length > 0 && commits[0].id === targetCommitForAction.id) ||
+          targetCommitForAction.branches?.some(b => b === currentBranch || b.endsWith(`/${currentBranch}`))
+        )
+      );
+      setRemoveCommitMode(isHead ? 'mixed' : 'drop');
+    }
+  }, [dialogType, targetCommitForAction, commits, currentBranch]);
 
   useEffect(() => {
     if (!isRestoreDropdownOpen) return;
@@ -250,6 +301,30 @@ const Dialogs: React.FC<DialogsProps> = ({
             {dialogType === "delete-branch-confirm" && "Delete Branch?"}
             {dialogType === "git-delete-force-confirm" && "Force Delete Branch?"}
             {dialogType === "discard-changes-confirm" && "Discard Unstaged Changes?"}
+            {dialogType === "revert-commit-confirm" && (
+              <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <RotateCcw size={16} style={{ color: "var(--accent-purple-bright)" }} />
+                <span>Revert Commit</span>
+              </span>
+            )}
+            {dialogType === "remove-commit-confirm" && (
+              <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <Trash2 size={16} style={{ color: "var(--color-conflict)" }} />
+                <span>Remove Commit</span>
+              </span>
+            )}
+            {dialogType === "amend-commit" && (
+              <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <Edit3 size={16} style={{ color: "var(--accent-purple-bright)" }} />
+                <span>Amend Latest Commit</span>
+              </span>
+            )}
+            {dialogType === "create-tag" && (
+              <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <Tag size={16} style={{ color: "var(--color-untracked)" }} />
+                <span>Create Tag on Commit</span>
+              </span>
+            )}
             {dialogType === "checkout-conflict" && "Uncommitted Changes"}
             {dialogType === "stash-name" && "Save Stash"}
             {dialogType === "merge-rebase" && "Merge / Rebase Branch"}
@@ -710,6 +785,526 @@ const Dialogs: React.FC<DialogsProps> = ({
                 onClick={handleExecuteDiscardChanges}
               >
                 Discard Changes
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* REVERT COMMIT CONFIRM DIALOG */}
+        {dialogType === "revert-commit-confirm" && targetCommitForAction && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+            <div style={{
+              background: "rgba(0, 0, 0, 0.25)",
+              border: "1px solid var(--border-color)",
+              borderRadius: "8px",
+              padding: "12px 14px",
+              display: "flex",
+              flexDirection: "column",
+              gap: "6px",
+            }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span className="commit-sha-badge" style={{ marginBottom: 0 }}>
+                  {targetCommitForAction.short_id || targetCommitForAction.id.substring(0, 8)}
+                </span>
+                <span style={{ fontSize: "0.72rem", color: "var(--color-text-muted)" }}>
+                  {new Date(targetCommitForAction.timestamp * 1000).toLocaleString()}
+                </span>
+              </div>
+              <div style={{ fontSize: "0.86rem", fontWeight: 500, color: "var(--color-text-bright)" }}>
+                {targetCommitForAction.message}
+              </div>
+              <div style={{ fontSize: "0.74rem", color: "var(--color-text-muted)" }}>
+                {targetCommitForAction.author}
+              </div>
+            </div>
+
+            <p style={{ fontSize: "0.82rem", color: "var(--color-text-main)", lineHeight: 1.5, margin: 0 }}>
+              This will create a new inverse commit that rolls back all the changes introduced by this commit. Your repository history is preserved safely.
+            </p>
+
+            <div className="dialog-actions" style={{ marginTop: "6px" }}>
+              <button
+                type="button"
+                className="dialog-button secondary"
+                onClick={() => {
+                  setDialogType(null);
+                  if (setTargetCommitForAction) setTargetCommitForAction(null);
+                }}
+                disabled={isExecutingCommitAction}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="dialog-button"
+                style={{
+                  background: "var(--accent-purple)",
+                  color: "#11111b",
+                  fontWeight: 600,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
+                }}
+                onClick={() => handleExecuteRevertCommit?.(targetCommitForAction)}
+                disabled={isExecutingCommitAction}
+              >
+                {isExecutingCommitAction ? (
+                  <>
+                    <RefreshCw size={13} className="spin-slow" />
+                    <span>Reverting...</span>
+                  </>
+                ) : (
+                  <>
+                    <RotateCcw size={13} />
+                    <span>Revert Commit</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* REMOVE COMMIT CONFIRM DIALOG */}
+        {dialogType === "remove-commit-confirm" && targetCommitForAction && (() => {
+          const isHead = Boolean(
+            (commits && commits.length > 0 && commits[0].id === targetCommitForAction.id) ||
+            targetCommitForAction.branches?.some(b => b === currentBranch || b.endsWith(`/${currentBranch}`))
+          );
+          const isRoot = !targetCommitForAction.parents || targetCommitForAction.parents.length === 0;
+
+          return (
+            <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+              <div style={{
+                background: "rgba(0, 0, 0, 0.25)",
+                border: "1px solid var(--border-color)",
+                borderRadius: "8px",
+                padding: "12px 14px",
+                display: "flex",
+                flexDirection: "column",
+                gap: "6px",
+              }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <span className="commit-sha-badge" style={{ marginBottom: 0 }}>
+                    {targetCommitForAction.short_id || targetCommitForAction.id.substring(0, 8)}
+                  </span>
+                  <span style={{ fontSize: "0.72rem", color: "var(--color-text-muted)" }}>
+                    {new Date(targetCommitForAction.timestamp * 1000).toLocaleString()}
+                  </span>
+                </div>
+                <div style={{ fontSize: "0.86rem", fontWeight: 500, color: "var(--color-text-bright)" }}>
+                  {targetCommitForAction.message}
+                </div>
+                <div style={{ fontSize: "0.74rem", color: "var(--color-text-muted)" }}>
+                  {targetCommitForAction.author}
+                </div>
+              </div>
+
+              {isRoot ? (
+                <div style={{
+                  padding: "10px 12px",
+                  background: "rgba(243, 139, 168, 0.12)",
+                  border: "1px solid rgba(243, 139, 168, 0.3)",
+                  borderRadius: "6px",
+                  fontSize: "0.8rem",
+                  color: "var(--color-conflict)",
+                }}>
+                  Cannot remove the root initial commit of the repository.
+                </div>
+              ) : isHead ? (
+                <>
+                  <p style={{ fontSize: "0.82rem", color: "var(--color-text-main)", lineHeight: 1.5, margin: 0 }}>
+                    Removing the latest commit on <strong style={{ color: "var(--color-text-bright)" }}>{currentBranch}</strong>. Choose how you want to handle the files:
+                  </p>
+
+                  <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                    {/* Mixed */}
+                    <label
+                      style={{
+                        display: "flex",
+                        alignItems: "flex-start",
+                        gap: "10px",
+                        padding: "10px 12px",
+                        background: removeCommitMode === "mixed" ? "rgba(203, 166, 247, 0.08)" : "rgba(0, 0, 0, 0.15)",
+                        border: `1px solid ${removeCommitMode === "mixed" ? "var(--accent-purple)" : "var(--border-color)"}`,
+                        borderRadius: "7px",
+                        cursor: "pointer",
+                        transition: "all 0.15s ease",
+                      }}
+                    >
+                      <input
+                        type="radio"
+                        name="removeCommitMode"
+                        checked={removeCommitMode === "mixed"}
+                        onChange={() => setRemoveCommitMode("mixed")}
+                        style={{ marginTop: "3px" }}
+                      />
+                      <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                        <span style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--color-text-bright)" }}>
+                          Keep changes in Working Tree (Unstaged)
+                        </span>
+                        <span style={{ fontSize: "0.74rem", color: "var(--color-text-muted)" }}>
+                          Undoes the commit. All modifications remain as unstaged files on disk.
+                        </span>
+                      </div>
+                    </label>
+
+                    {/* Soft */}
+                    <label
+                      style={{
+                        display: "flex",
+                        alignItems: "flex-start",
+                        gap: "10px",
+                        padding: "10px 12px",
+                        background: removeCommitMode === "soft" ? "rgba(203, 166, 247, 0.08)" : "rgba(0, 0, 0, 0.15)",
+                        border: `1px solid ${removeCommitMode === "soft" ? "var(--accent-purple)" : "var(--border-color)"}`,
+                        borderRadius: "7px",
+                        cursor: "pointer",
+                        transition: "all 0.15s ease",
+                      }}
+                    >
+                      <input
+                        type="radio"
+                        name="removeCommitMode"
+                        checked={removeCommitMode === "soft"}
+                        onChange={() => setRemoveCommitMode("soft")}
+                        style={{ marginTop: "3px" }}
+                      />
+                      <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                        <span style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--color-text-bright)" }}>
+                          Keep changes Staged
+                        </span>
+                        <span style={{ fontSize: "0.74rem", color: "var(--color-text-muted)" }}>
+                          Undoes the commit. All modifications stay staged in the index ready to re-commit.
+                        </span>
+                      </div>
+                    </label>
+
+                    {/* Hard */}
+                    <label
+                      style={{
+                        display: "flex",
+                        alignItems: "flex-start",
+                        gap: "10px",
+                        padding: "10px 12px",
+                        background: removeCommitMode === "hard" ? "rgba(243, 139, 168, 0.08)" : "rgba(0, 0, 0, 0.15)",
+                        border: `1px solid ${removeCommitMode === "hard" ? "var(--color-conflict)" : "var(--border-color)"}`,
+                        borderRadius: "7px",
+                        cursor: "pointer",
+                        transition: "all 0.15s ease",
+                      }}
+                    >
+                      <input
+                        type="radio"
+                        name="removeCommitMode"
+                        checked={removeCommitMode === "hard"}
+                        onChange={() => setRemoveCommitMode("hard")}
+                        style={{ marginTop: "3px" }}
+                      />
+                      <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                        <span style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--color-conflict)" }}>
+                          Discard changes completely
+                        </span>
+                        <span style={{ fontSize: "0.74rem", color: "var(--color-text-muted)" }}>
+                          Permanently deletes the commit and all file changes introduced by it.
+                        </span>
+                      </div>
+                    </label>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p style={{ fontSize: "0.82rem", color: "var(--color-text-main)", lineHeight: 1.5, margin: 0 }}>
+                    This commit is not the latest commit on branch <strong>{currentBranch}</strong>. You can drop it from your branch history:
+                  </p>
+
+                  <div style={{
+                    padding: "10px 12px",
+                    background: "rgba(0, 0, 0, 0.2)",
+                    border: "1px solid var(--border-color)",
+                    borderRadius: "7px",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "4px",
+                  }}>
+                    <span style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--color-text-bright)" }}>
+                      Drop this commit
+                    </span>
+                    <span style={{ fontSize: "0.74rem", color: "var(--color-text-muted)" }}>
+                      Replays subsequent commits on top of this commit's parent, removing this commit from the branch history.
+                    </span>
+                  </div>
+
+                  <div style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "8px 12px",
+                    background: "rgba(203, 166, 247, 0.06)",
+                    border: "1px solid rgba(203, 166, 247, 0.2)",
+                    borderRadius: "6px",
+                    fontSize: "0.76rem",
+                  }}>
+                    <span style={{ color: "var(--color-text-muted)" }}>
+                      Already pushed this commit? Reverting is safer:
+                    </span>
+                    <button
+                      type="button"
+                      style={{
+                        background: "transparent",
+                        border: "1px solid var(--accent-purple)",
+                        borderRadius: "4px",
+                        color: "var(--accent-purple-bright)",
+                        fontSize: "0.72rem",
+                        padding: "2px 8px",
+                        cursor: "pointer",
+                      }}
+                      onClick={() => setDialogType("revert-commit-confirm")}
+                    >
+                      Revert Instead
+                    </button>
+                  </div>
+                </>
+              )}
+
+              <div className="dialog-actions" style={{ marginTop: "6px" }}>
+                <button
+                  type="button"
+                  className="dialog-button secondary"
+                  onClick={() => {
+                    setDialogType(null);
+                    if (setTargetCommitForAction) setTargetCommitForAction(null);
+                  }}
+                  disabled={isExecutingCommitAction}
+                >
+                  Cancel
+                </button>
+                {!isRoot && (
+                  <button
+                    type="button"
+                    className="dialog-button"
+                    style={{
+                      background: removeCommitMode === "hard" ? "var(--color-conflict)" : "var(--accent-purple)",
+                      color: removeCommitMode === "hard" ? "#ffffff" : "#11111b",
+                      fontWeight: 600,
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "6px",
+                    }}
+                    onClick={() => handleExecuteRemoveCommit?.(targetCommitForAction, removeCommitMode)}
+                    disabled={isExecutingCommitAction}
+                  >
+                    {isExecutingCommitAction ? (
+                      <>
+                        <RefreshCw size={13} className="spin-slow" />
+                        <span>Removing...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Trash2 size={13} />
+                        <span>
+                          {removeCommitMode === "hard"
+                            ? "Discard Commit & Changes"
+                            : removeCommitMode === "drop"
+                              ? "Drop Commit"
+                              : "Undo Commit"}
+                        </span>
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* AMEND COMMIT DIALOG */}
+        {dialogType === "amend-commit" && targetCommitForAction && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+            <div style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              padding: "8px 12px",
+              background: "rgba(0, 0, 0, 0.25)",
+              border: "1px solid var(--border-color)",
+              borderRadius: "7px",
+            }}>
+              <span className="commit-sha-badge" style={{ marginBottom: 0 }}>
+                {targetCommitForAction.short_id || targetCommitForAction.id.substring(0, 8)}
+              </span>
+              <span style={{ fontSize: "0.74rem", color: "var(--color-text-muted)" }}>
+                {stagedFiles && stagedFiles.length > 0 ? (
+                  <span style={{ color: "var(--color-staged)", fontWeight: 500 }}>
+                    {stagedFiles.length} staged file(s) will be included
+                  </span>
+                ) : (
+                  <span>Commit message will be updated</span>
+                )}
+              </span>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+              <label style={{ fontSize: "0.74rem", fontWeight: 700, color: "var(--color-text-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                Commit Summary
+              </label>
+              <input
+                type="text"
+                className="dialog-input"
+                placeholder="Commit summary..."
+                value={amendTitle}
+                onChange={(e) => setAmendTitle(e.target.value)}
+                style={{ width: "100%", boxSizing: "border-box" }}
+                autoFocus
+              />
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+              <label style={{ fontSize: "0.74rem", fontWeight: 700, color: "var(--color-text-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                Description (Optional)
+              </label>
+              <textarea
+                className="dialog-input"
+                placeholder="Add optional commit description..."
+                value={amendDesc}
+                onChange={(e) => setAmendDesc(e.target.value)}
+                rows={3}
+                style={{ width: "100%", boxSizing: "border-box", resize: "vertical", fontFamily: "var(--font-sans)" }}
+              />
+            </div>
+
+            <div className="dialog-actions" style={{ marginTop: "4px" }}>
+              <button
+                type="button"
+                className="dialog-button secondary"
+                onClick={() => {
+                  setDialogType(null);
+                  if (setTargetCommitForAction) setTargetCommitForAction(null);
+                }}
+                disabled={isExecutingCommitAction}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="dialog-button"
+                style={{
+                  background: "var(--accent-purple)",
+                  color: "#11111b",
+                  fontWeight: 600,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
+                }}
+                onClick={() => handleExecuteAmendCommit?.(amendTitle, amendDesc)}
+                disabled={isExecutingCommitAction || !amendTitle.trim()}
+              >
+                {isExecutingCommitAction ? (
+                  <>
+                    <RefreshCw size={13} className="spin-slow" />
+                    <span>Amending...</span>
+                  </>
+                ) : (
+                  <>
+                    <Edit3 size={13} />
+                    <span>Amend Commit</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* CREATE TAG ON COMMIT DIALOG */}
+        {dialogType === "create-tag" && targetCommitForAction && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+            <div style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              padding: "8px 12px",
+              background: "rgba(0, 0, 0, 0.25)",
+              border: "1px solid var(--border-color)",
+              borderRadius: "7px",
+            }}>
+              <span className="commit-sha-badge" style={{ marginBottom: 0 }}>
+                {targetCommitForAction.short_id || targetCommitForAction.id.substring(0, 8)}
+              </span>
+              <span style={{ fontSize: "0.78rem", color: "var(--color-text-bright)", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "260px" }}>
+                {targetCommitForAction.message}
+              </span>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+              <label style={{ fontSize: "0.74rem", fontWeight: 700, color: "var(--color-text-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                Tag Name
+              </label>
+              <input
+                type="text"
+                className="dialog-input"
+                placeholder="e.g. v1.0.0, release-2.1..."
+                value={tagNameInput}
+                onChange={(e) => setTagNameInput(e.target.value)}
+                style={{ width: "100%", boxSizing: "border-box" }}
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && tagNameInput.trim()) {
+                    handleExecuteCreateTag?.(tagNameInput, tagMessageInput, targetCommitForAction.id);
+                  }
+                }}
+              />
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+              <label style={{ fontSize: "0.74rem", fontWeight: 700, color: "var(--color-text-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                Tag Message (Optional)
+              </label>
+              <textarea
+                className="dialog-input"
+                placeholder="Add an optional message for an annotated tag..."
+                value={tagMessageInput}
+                onChange={(e) => setTagMessageInput(e.target.value)}
+                rows={2}
+                style={{ width: "100%", boxSizing: "border-box", resize: "vertical", fontFamily: "var(--font-sans)" }}
+              />
+            </div>
+
+            <div className="dialog-actions" style={{ marginTop: "4px" }}>
+              <button
+                type="button"
+                className="dialog-button secondary"
+                onClick={() => {
+                  setDialogType(null);
+                  if (setTargetCommitForAction) setTargetCommitForAction(null);
+                }}
+                disabled={isExecutingCommitAction}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="dialog-button"
+                style={{
+                  background: "var(--accent-purple)",
+                  color: "#11111b",
+                  fontWeight: 600,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
+                }}
+                onClick={() => handleExecuteCreateTag?.(tagNameInput, tagMessageInput, targetCommitForAction.id)}
+                disabled={isExecutingCommitAction || !tagNameInput.trim()}
+              >
+                {isExecutingCommitAction ? (
+                  <>
+                    <RefreshCw size={13} className="spin-slow" />
+                    <span>Creating...</span>
+                  </>
+                ) : (
+                  <>
+                    <Tag size={13} />
+                    <span>Create Tag</span>
+                  </>
+                )}
               </button>
             </div>
           </div>

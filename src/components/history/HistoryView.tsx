@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { History, GitCommit, GitBranch, Archive, Globe, FileCode, ChevronRight, FileText, Copy, ArrowUpCircle } from 'lucide-react';
+import { History, GitCommit, GitBranch, Archive, Globe, FileCode, ChevronRight, FileText, Copy, ArrowUpCircle, RotateCcw, Trash2, Edit3, Tag } from 'lucide-react';
 import type { CommitInfo, DiffInfo } from '../../types/git';
 import type { GraphPath, GraphNode } from '../../utils/graphUtils';
 
@@ -24,6 +24,11 @@ interface HistoryViewProps {
   selectedCommitFileDiff: DiffInfo | null;
   onOpenCreateBranchFromCommit?: (commit: CommitInfo) => void;
   onOpenPushToCommit?: (commit: CommitInfo) => void;
+  onOpenRevertCommit?: (commit: CommitInfo) => void;
+  onOpenRemoveCommit?: (commit: CommitInfo) => void;
+  onOpenAmendCommit?: (commit: CommitInfo) => void;
+  onOpenCreateTag?: (commit: CommitInfo) => void;
+  currentBranch?: string;
 }
 
 const HistoryView: React.FC<HistoryViewProps> = ({
@@ -46,7 +51,12 @@ const HistoryView: React.FC<HistoryViewProps> = ({
   showCommitFileDiff,
   selectedCommitFileDiff,
   onOpenCreateBranchFromCommit,
-  onOpenPushToCommit
+  onOpenPushToCommit,
+  onOpenRevertCommit,
+  onOpenRemoveCommit,
+  onOpenAmendCommit,
+  onOpenCreateTag,
+  currentBranch,
 }) => {
   const [contextMenu, setContextMenu] = useState<{
     x: number;
@@ -206,7 +216,7 @@ const HistoryView: React.FC<HistoryViewProps> = ({
                               }}
                               title={isStash ? "Click to open Stash Inspector" : b}
                             >
-                              {isStash ? <Archive size={10} /> : isRemote ? <Globe size={10} /> : <GitBranch size={10} />}
+                              {isStash ? <Archive size={10} /> : isTag ? <Tag size={10} /> : isRemote ? <Globe size={10} /> : <GitBranch size={10} />}
                               {b}
                             </span>
                           );
@@ -276,6 +286,36 @@ const HistoryView: React.FC<HistoryViewProps> = ({
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", marginBottom: "8px" }}>
                 <div className="commit-sha-badge" style={{ marginBottom: 0 }}>{selectedCommit.id.substring(0, 10)}...</div>
                 <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                  {onOpenAmendCommit && (commits[0]?.id === selectedCommit.id || selectedCommit.branches?.some(b => b === currentBranch || b.endsWith(`/${currentBranch}`))) && (
+                    <button
+                      type="button"
+                      className="commit-header-icon-btn amend-btn"
+                      onClick={() => onOpenAmendCommit(selectedCommit)}
+                      title={`Amend this commit (${selectedCommit.id.substring(0, 8)})`}
+                    >
+                      <Edit3 size={13} />
+                    </button>
+                  )}
+                  {onOpenRevertCommit && (
+                    <button
+                      type="button"
+                      className="commit-header-icon-btn revert-btn"
+                      onClick={() => onOpenRevertCommit(selectedCommit)}
+                      title={`Revert this commit (${selectedCommit.id.substring(0, 8)})`}
+                    >
+                      <RotateCcw size={13} />
+                    </button>
+                  )}
+                  {onOpenRemoveCommit && (
+                    <button
+                      type="button"
+                      className="commit-header-icon-btn remove-btn"
+                      onClick={() => onOpenRemoveCommit(selectedCommit)}
+                      title={`Remove / Undo this commit (${selectedCommit.id.substring(0, 8)})`}
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  )}
                   {onOpenPushToCommit && (
                     <button
                       type="button"
@@ -294,6 +334,16 @@ const HistoryView: React.FC<HistoryViewProps> = ({
                       title={`Create branch starting at commit ${selectedCommit.id.substring(0, 8)}`}
                     >
                       <GitBranch size={14} />
+                    </button>
+                  )}
+                  {onOpenCreateTag && (
+                    <button
+                      type="button"
+                      className="commit-header-icon-btn tag-btn"
+                      onClick={() => onOpenCreateTag(selectedCommit)}
+                      title={`Create tag on commit ${selectedCommit.id.substring(0, 8)}`}
+                    >
+                      <Tag size={13} />
                     </button>
                   )}
                 </div>
@@ -398,6 +448,59 @@ const HistoryView: React.FC<HistoryViewProps> = ({
               {contextMenu.commit.short_id || contextMenu.commit.id.substring(0, 8)}
             </span>
           </div>
+          {onOpenAmendCommit && (commits[0]?.id === contextMenu.commit.id || contextMenu.commit.branches?.some(b => b === currentBranch || b.endsWith(`/${currentBranch}`))) && (
+            <button
+              type="button"
+              className="context-menu-item"
+              onClick={() => {
+                onOpenAmendCommit(contextMenu.commit);
+                setContextMenu(null);
+              }}
+            >
+              <Edit3 size={13} style={{ color: "var(--accent-purple-bright)" }} />
+              <span>Amend Commit...</span>
+            </button>
+          )}
+          {onOpenRevertCommit && (
+            <button
+              type="button"
+              className="context-menu-item"
+              onClick={() => {
+                onOpenRevertCommit(contextMenu.commit);
+                setContextMenu(null);
+              }}
+            >
+              <RotateCcw size={13} style={{ color: "var(--accent-purple-bright)" }} />
+              <span>Revert Commit...</span>
+            </button>
+          )}
+          {onOpenRemoveCommit && (
+            <button
+              type="button"
+              className="context-menu-item danger"
+              onClick={() => {
+                onOpenRemoveCommit(contextMenu.commit);
+                setContextMenu(null);
+              }}
+            >
+              <Trash2 size={13} style={{ color: "var(--color-conflict)" }} />
+              <span>Remove / Undo Commit...</span>
+            </button>
+          )}
+          {onOpenCreateTag && (
+            <button
+              type="button"
+              className="context-menu-item"
+              onClick={() => {
+                onOpenCreateTag(contextMenu.commit);
+                setContextMenu(null);
+              }}
+            >
+              <Tag size={13} style={{ color: "var(--color-untracked)" }} />
+              <span>Create Tag on Commit...</span>
+            </button>
+          )}
+          <div className="context-menu-divider" />
           {onOpenPushToCommit && (
             <button
               type="button"

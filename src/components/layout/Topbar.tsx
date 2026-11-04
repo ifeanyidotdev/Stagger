@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from "react";
+import React, { useRef, useEffect, useState, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
@@ -19,6 +19,7 @@ import {
   X,
   FolderPlus,
   GitBranch,
+  Search,
 } from "lucide-react";
 import type { GitHubUser } from "../../types/git";
 import type {
@@ -102,6 +103,45 @@ const Topbar: React.FC<TopbarProps> = ({
     avatarUrl?: string;
     handle?: string | null;
   } | null>(null);
+  const [workspaceSearch, setWorkspaceSearch] = useState("");
+  const workspaceSearchInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isWorkspaceDropdownOpen) {
+      const timer = setTimeout(() => {
+        workspaceSearchInputRef.current?.focus();
+      }, 50);
+      return () => clearTimeout(timer);
+    } else {
+      setWorkspaceSearch("");
+    }
+  }, [isWorkspaceDropdownOpen]);
+
+  const filteredWorkspaces = useMemo(() => {
+    const q = workspaceSearch.trim().toLowerCase();
+    if (!q) return workspaces;
+    return workspaces.filter((wPath) => {
+      const name = (wPath.split("/").pop() || wPath).toLowerCase();
+      return name.includes(q) || wPath.toLowerCase().includes(q);
+    });
+  }, [workspaces, workspaceSearch]);
+
+  const handleWorkspaceSearchKeyDown = (
+    e: React.KeyboardEvent<HTMLInputElement>,
+  ) => {
+    if (e.key === "Escape") {
+      e.stopPropagation();
+      if (workspaceSearch) {
+        setWorkspaceSearch("");
+      } else {
+        setIsWorkspaceDropdownOpen?.(false);
+      }
+    } else if (e.key === "Enter" && filteredWorkspaces.length > 0) {
+      e.stopPropagation();
+      selectWorkspace?.(filteredWorkspaces[0]);
+      setIsWorkspaceDropdownOpen?.(false);
+    }
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -301,71 +341,114 @@ const Topbar: React.FC<TopbarProps> = ({
             <div className="workspace-menu-dropdown ant-dropdown-popover">
               <div className="workspace-menu-header">
                 <span>Workspaces</span>
-                <span className="details-count-badge">{workspaces.length}</span>
+                <span className="details-count-badge">
+                  {workspaceSearch.trim()
+                    ? `${filteredWorkspaces.length}/${workspaces.length}`
+                    : workspaces.length}
+                </span>
               </div>
+
+              {/* Workspace Search Input */}
+              <div
+                className="workspace-search-wrap"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <Search size={12} className="workspace-search-icon" />
+                <input
+                  ref={workspaceSearchInputRef}
+                  type="text"
+                  className="workspace-search-input"
+                  placeholder="Filter workspaces..."
+                  value={workspaceSearch}
+                  onChange={(e) => setWorkspaceSearch(e.target.value)}
+                  onKeyDown={handleWorkspaceSearchKeyDown}
+                  spellCheck={false}
+                  autoComplete="off"
+                />
+                {workspaceSearch && (
+                  <button
+                    type="button"
+                    className="workspace-search-clear"
+                    onClick={() => {
+                      setWorkspaceSearch("");
+                      workspaceSearchInputRef.current?.focus();
+                    }}
+                    title="Clear filter"
+                  >
+                    <X size={11} />
+                  </button>
+                )}
+              </div>
+
               <div className="workspace-menu-list">
-                {workspaces.map((wPath) => {
-                  const name = wPath.split("/").pop() || wPath;
-                  const isActive = repoPath === wPath;
-                  return (
-                    <div
-                      key={wPath}
-                      className={`workspace-menu-item ${isActive ? "active" : ""}`}
-                      onClick={() => {
-                        selectWorkspace?.(wPath);
-                        setIsWorkspaceDropdownOpen?.(false);
-                      }}
-                    >
-                      <div className="workspace-item-content">
-                        <Folder
-                          size={13}
-                          style={{
-                            color: isActive
-                              ? "var(--accent-purple-bright)"
-                              : "var(--color-text-muted)",
-                            flexShrink: 0,
-                          }}
-                        />
-                        <span
-                          className="workspace-menu-item-text"
-                          title={wPath}
-                        >
-                          {name}
-                        </span>
-                      </div>
+                {filteredWorkspaces.length === 0 ? (
+                  <div className="workspace-menu-empty">
+                    No workspaces match "{workspaceSearch}"
+                  </div>
+                ) : (
+                  filteredWorkspaces.map((wPath) => {
+                    const name = wPath.split("/").pop() || wPath;
+                    const isActive = repoPath === wPath;
+                    return (
                       <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "4px",
+                        key={wPath}
+                        className={`workspace-menu-item ${isActive ? "active" : ""}`}
+                        onClick={() => {
+                          selectWorkspace?.(wPath);
+                          setIsWorkspaceDropdownOpen?.(false);
                         }}
                       >
-                        {isActive && (
-                          <Check
-                            size={12}
+                        <div className="workspace-item-content">
+                          <Folder
+                            size={13}
                             style={{
-                              color: "var(--color-staged)",
+                              color: isActive
+                                ? "var(--accent-purple-bright)"
+                                : "var(--color-text-muted)",
                               flexShrink: 0,
                             }}
                           />
-                        )}
-                        {workspaces.length > 1 && (
-                          <button
-                            className="workspace-remove-btn"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              removeWorkspace?.(e, wPath);
-                            }}
-                            title="Remove workspace from list"
-                            type="button"
+                          <span
+                            className="workspace-menu-item-text"
+                            title={wPath}
                           >
-                            <X size={11} />
-                          </button>
-                        )}
+                            {name}
+                          </span>
+                        </div>
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "4px",
+                          }}
+                        >
+                          {isActive && (
+                            <Check
+                              size={12}
+                              style={{
+                                color: "var(--color-staged)",
+                                flexShrink: 0,
+                              }}
+                            />
+                          )}
+                          {workspaces.length > 1 && (
+                            <button
+                              className="workspace-remove-btn"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                removeWorkspace?.(e, wPath);
+                              }}
+                              title="Remove workspace from list"
+                              type="button"
+                            >
+                              <X size={11} />
+                            </button>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })
+                )}
               </div>
 
               <div className="workspace-menu-divider" />
