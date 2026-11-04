@@ -501,7 +501,7 @@ const Sidebar: React.FC<SidebarProps> = ({
               </div>
               {isBranchListExpanded && (
                 <div className="branch-list">
-                  {branchList.map((bName) => {
+                  {(Array.isArray(branchList) ? branchList : []).map((bName) => {
                     const bInfo = allBranches.find(
                       (b) => !b.is_remote && b.name === bName,
                     );
@@ -739,7 +739,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                         No remote branches fetched
                       </span>
                     ) : (
-                      remoteBranches.map((rName) => (
+                      (Array.isArray(remoteBranches) ? remoteBranches : []).map((rName) => (
                         <div
                           key={rName}
                           className="branch-item remote-branch-item"
@@ -832,7 +832,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                     overflowY: "auto",
                   }}
                 >
-                  {githubPRs.map((pr) => (
+                  {Array.isArray(githubPRs) && githubPRs.map((pr) => (
                     <a
                       key={pr.number}
                       href={pr.html_url}
@@ -864,7 +864,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                       </div>
                     </a>
                   ))}
-                  {githubPRs.length === 0 && (
+                  {(!Array.isArray(githubPRs) || githubPRs.length === 0) && (
                     <span
                       style={{
                         fontSize: "0.75rem",
@@ -918,7 +918,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                 </div>
                 {isStashListExpanded && (
                   <div className="branch-list">
-                    {stashes.map((stash) => {
+                    {(Array.isArray(stashes) ? stashes : []).map((stash) => {
                       return (
                         <div
                           key={stash.originalIndex}
@@ -949,7 +949,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                         </div>
                       );
                     })}
-                    {stashes.length === 0 && (
+                    {(!Array.isArray(stashes) || stashes.length === 0) && (
                       <div
                         className="branch-item"
                         style={{
