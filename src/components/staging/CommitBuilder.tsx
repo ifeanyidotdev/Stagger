@@ -1,6 +1,6 @@
 import React from 'react';
 import { GitCommit, UserPlus, Users, Plus, X } from 'lucide-react';
-import type { GitFileStatus } from '../../types/git';
+import type { GitFileStatus, CommitInfo } from '../../types/git';
 
 interface CommitBuilderProps {
   commitTitle: string;
@@ -18,6 +18,7 @@ interface CommitBuilderProps {
   unstagedFiles: GitFileStatus[];
   stagedFiles: GitFileStatus[];
   handleCommit: () => void;
+  commits?: CommitInfo[];
 }
 
 const CommitBuilder: React.FC<CommitBuilderProps> = ({
@@ -35,9 +36,22 @@ const CommitBuilder: React.FC<CommitBuilderProps> = ({
   setCoAuthorInput,
   unstagedFiles: _unstagedFiles,
   stagedFiles,
-  handleCommit
+  handleCommit,
+  commits = [],
 }) => {
   const isCommitReady = Boolean(commitTitle.trim() && (stagedFiles.length > 0 || amendCommit));
+
+  const handleToggleAmend = (checked: boolean) => {
+    setAmendCommit(checked);
+    if (checked && commits && commits.length > 0) {
+      const rawMsg = commits[0].message || "";
+      const lines = rawMsg.split("\n");
+      const title = lines[0] || "";
+      const desc = lines.slice(1).join("\n").replace(/^\n+/, "");
+      setCommitTitle(title);
+      setCommitDesc(desc);
+    }
+  };
 
   const handleAddAuthor = () => {
     const val = coAuthorInput.trim().replace(/,/g, "");
@@ -164,7 +178,7 @@ const CommitBuilder: React.FC<CommitBuilderProps> = ({
             <input 
               type="checkbox" 
               checked={amendCommit}
-              onChange={(e) => setAmendCommit(e.target.checked)}
+              onChange={(e) => handleToggleAmend(e.target.checked)}
             />
             <span>Amend last commit</span>
           </label>

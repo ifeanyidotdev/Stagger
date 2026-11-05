@@ -815,6 +815,71 @@ button, input, textarea, select, a, .workspace-trigger-btn, .topbar-workspace-bt
   color: var(--color-text-muted);
 }
 
+.workspace-search-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  margin: 2px 2px 5px 2px;
+  transition: var(--transition-quick);
+}
+
+.workspace-search-wrap:focus-within {
+  border-color: var(--accent-purple);
+  box-shadow: 0 0 0 2px rgba(203, 166, 247, 0.15);
+}
+
+.workspace-search-icon {
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
+.workspace-search-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-family: var(--font-sans);
+  font-size: 0.76rem;
+  color: var(--color-text-bright);
+  padding: 2px 0;
+  min-width: 0;
+}
+
+.workspace-search-input::placeholder {
+  color: var(--color-text-muted);
+  opacity: 0.7;
+}
+
+.workspace-search-clear {
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  transition: var(--transition-quick);
+}
+
+.workspace-search-clear:hover {
+  color: var(--color-text-bright);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.workspace-menu-empty {
+  padding: 14px 8px;
+  text-align: center;
+  font-size: 0.74rem;
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
 .workspace-menu-list {
   display: flex;
   flex-direction: column;
@@ -5526,6 +5591,76 @@ select.dialog-input option {
   border-color: rgba(168, 85, 247, 0.4);
   background: rgba(168, 85, 247, 0.12);
   box-shadow: 0 2px 8px rgba(168, 85, 247, 0.2);
+}
+
+.commit-header-icon-btn.revert-btn:hover {
+  color: var(--accent-purple-bright);
+  border-color: rgba(203, 166, 247, 0.4);
+  background: rgba(203, 166, 247, 0.12);
+  box-shadow: 0 2px 8px rgba(203, 166, 247, 0.2);
+}
+
+.commit-header-icon-btn.amend-btn:hover {
+  color: var(--color-modified);
+  border-color: rgba(56, 189, 248, 0.4);
+  background: rgba(56, 189, 248, 0.12);
+  box-shadow: 0 2px 8px rgba(56, 189, 248, 0.2);
+}
+
+.commit-header-icon-btn.remove-btn:hover {
+  color: var(--color-conflict);
+  border-color: rgba(243, 139, 168, 0.4);
+  background: rgba(243, 139, 168, 0.12);
+  box-shadow: 0 2px 8px rgba(243, 139, 168, 0.2);
+}
+
+.commit-header-icon-btn.tag-btn:hover {
+  color: var(--color-untracked);
+  border-color: rgba(245, 158, 11, 0.4);
+  background: rgba(245, 158, 11, 0.12);
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.2);
+}
+
+.undo-commit-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  font-size: 0.72rem;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  padding: 3px 6px;
+  border-radius: 4px;
+  transition: var(--transition-quick);
+}
+
+.undo-commit-btn:hover {
+  color: var(--color-text-bright);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.amend-commit-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(203, 166, 247, 0.08);
+  border: 1px solid rgba(203, 166, 247, 0.25);
+  color: var(--accent-purple-bright);
+  font-size: 0.72rem;
+  font-family: var(--font-sans);
+  font-weight: 500;
+  cursor: pointer;
+  padding: 3px 8px;
+  border-radius: 5px;
+  transition: var(--transition-quick);
+}
+
+.amend-commit-btn:hover {
+  color: #ffffff;
+  background: rgba(203, 166, 247, 0.2);
+  border-color: var(--accent-purple);
 }
 
 .commit-row-branch-btn {

@@ -348,6 +348,8 @@ function App() {
   const [targetCommitForBranch, setTargetCommitForBranch] = useState<CommitInfo | null>(null);
   const [checkoutNewBranch, setCheckoutNewBranch] = useState<boolean>(true);
   const [targetCommitForPush, setTargetCommitForPush] = useState<CommitInfo | null>(null);
+  const [targetCommitForAction, setTargetCommitForAction] = useState<CommitInfo | null>(null);
+  const [isExecutingCommitAction, setIsExecutingCommitAction] = useState<boolean>(false);
   const [isPushingCommit, setIsPushingCommit] = useState<boolean>(false);
   const [pendingDiscardFiles, setPendingDiscardFiles] = useState<string[] | null>(null);
 
@@ -381,6 +383,8 @@ function App() {
     setIsLoadingConflict(false);
     setTargetCommitForBranch(null);
     setTargetCommitForPush(null);
+    setTargetCommitForAction(null);
+    setIsExecutingCommitAction(false);
     setPendingDiscardFiles(null);
   };
 
@@ -434,6 +438,175 @@ function App() {
       setErrorMessage(err.toString());
     } finally {
       setIsPushingCommit(false);
+    }
+  };
+
+  const handleOpenRevertCommit = (commit: CommitInfo) => {
+    setTargetCommitForAction(commit);
+    setDialogType("revert-commit-confirm");
+  };
+
+  const handleOpenRemoveCommit = (commit: CommitInfo) => {
+    setTargetCommitForAction(commit);
+    setDialogType("remove-commit-confirm");
+  };
+
+  const handleExecuteRevertCommit = async (commit: CommitInfo) => {
+    if (isExecutingCommitAction) return;
+    setIsExecutingCommitAction(true);
+    try {
+      const res = await invoke<GitCliResult>("run_git_cli_cmd", {
+        repoPath,
+        args: ["revert", commit.id, "--no-edit"]
+      });
+      if (res.exit_code === 0) {
+        addToast(
+          "success",
+          "Commit Reverted",
+          `Successfully created revert commit for ${commit.short_id || commit.id.substring(0, 8)}.`
+        );
+        setDialogType(null);
+        setTargetCommitForAction(null);
+        await refreshRepository();
+      } else {
+        const alert = formatGitAlertMessage(res.stderr || res.stdout, "error");
+        addToast("error", alert.title, alert.message);
+        await refreshRepository();
+      }
+    } catch (err: any) {
+      addToast("error", "Revert Error", err?.message || String(err));
+    } finally {
+      setIsExecutingCommitAction(false);
+    }
+  };
+
+  const handleOpenAmendCommit = (commit: CommitInfo) => {
+    setTargetCommitForAction(commit);
+    setDialogType("amend-commit");
+  };
+
+  const handleExecuteAmendCommit = async (title: string, desc: string) => {
+    if (!title.trim()) return;
+    if (isExecutingCommitAction) return;
+    setIsExecutingCommitAction(true);
+    let fullMsg = title.trim();
+    if (desc.trim()) fullMsg += `\n\n${desc.trim()}`;
+
+    try {
+      const res = await invoke<GitCliResult>("run_git_cli_cmd", {
+        repoPath,
+        args: ["commit", "--amend", "-m", fullMsg]
+      });
+
+      if (res.exit_code === 0) {
+        addToast("success", "Commit Amended", "Successfully amended the latest commit.");
+        setDialogType(null);
+        setTargetCommitForAction(null);
+        await refreshRepository();
+      } else {
+        const alert = formatGitAlertMessage(res.stderr || res.stdout, "error");
+        addToast("error", alert.title, alert.message);
+        await refreshRepository();
+      }
+    } catch (err: any) {
+      addToast("error", "Amend Failed", err?.message || String(err));
+    } finally {
+      setIsExecutingCommitAction(false);
+    }
+  };
+
+  const handleExecuteRemoveCommit = async (
+    commit: CommitInfo,
+    mode: "soft" | "mixed" | "hard" | "drop"
+  ) => {
+    if (isExecutingCommitAction) return;
+    setIsExecutingCommitAction(true);
+    try {
+      let args: string[] = [];
+      let successMessage = "";
+
+      if (mode === "soft") {
+        args = ["reset", "--soft", "HEAD~1"];
+        successMessage = `Commit ${commit.short_id || commit.id.substring(0, 8)} undone. Changes kept staged.`;
+      } else if (mode === "mixed") {
+        args = ["reset", "HEAD~1"];
+        successMessage = `Commit ${commit.short_id || commit.id.substring(0, 8)} undone. Changes kept in working directory.`;
+      } else if (mode === "hard") {
+        args = ["reset", "--hard", "HEAD~1"];
+        successMessage = `Commit ${commit.short_id || commit.id.substring(0, 8)} removed and changes discarded.`;
+      } else if (mode === "drop") {
+        if (commit.parents && commit.parents.length > 0) {
+          args = ["rebase", "--onto", commit.parents[0], commit.id];
+          successMessage = `Dropped commit ${commit.short_id || commit.id.substring(0, 8)} from branch history.`;
+        } else {
+          throw new Error("Cannot drop the initial root commit via rebase.");
+        }
+      }
+
+      const res = await invoke<GitCliResult>("run_git_cli_cmd", {
+        repoPath,
+        args
+      });
+
+      if (res.exit_code === 0) {
+        addToast("success", "Commit Removed", successMessage);
+        setDialogType(null);
+        setTargetCommitForAction(null);
+        await refreshRepository();
+      } else {
+        const alert = formatGitAlertMessage(res.stderr || res.stdout, "error");
+        addToast("error", alert.title, alert.message);
+        await refreshRepository();
+      }
+    } catch (err: any) {
+      addToast("error", "Operation Failed", err?.message || String(err));
+    } finally {
+      setIsExecutingCommitAction(false);
+    }
+  };
+
+  const handleOpenCreateTag = (commit: CommitInfo) => {
+    setTargetCommitForAction(commit);
+    setDialogType("create-tag");
+  };
+
+  const handleExecuteCreateTag = async (
+    tagName: string,
+    tagMessage: string,
+    commitSha: string
+  ) => {
+    const trimmedName = tagName.trim();
+    if (!trimmedName || isExecutingCommitAction) return;
+    setIsExecutingCommitAction(true);
+    try {
+      let args = ["tag"];
+      if (tagMessage.trim()) {
+        args.push("-a", trimmedName, "-m", tagMessage.trim(), commitSha);
+      } else {
+        args.push(trimmedName, commitSha);
+      }
+      const res = await invoke<GitCliResult>("run_git_cli_cmd", {
+        repoPath,
+        args
+      });
+      if (res.exit_code === 0) {
+        addToast(
+          "success",
+          "Tag Created",
+          `Created tag "${trimmedName}" on commit ${commitSha.substring(0, 8)}.`
+        );
+        setDialogType(null);
+        setTargetCommitForAction(null);
+        await refreshRepository();
+      } else {
+        const alert = formatGitAlertMessage(res.stderr || res.stdout, "error");
+        addToast("error", alert.title, alert.message);
+        await refreshRepository();
+      }
+    } catch (err: any) {
+      addToast("error", "Tag Creation Failed", err?.message || String(err));
+    } finally {
+      setIsExecutingCommitAction(false);
     }
   };
 
@@ -2140,14 +2313,18 @@ function App() {
       let args = ["commit"];
       if (amendCommit) {
         args.push("--amend");
-        args.push("--no-edit"); 
-      } else {
-        args.push("-m");
-        args.push(message);
       }
+      args.push("-m", message);
 
       const res = await invoke<GitCliResult>("run_git_cli_cmd", { repoPath, args });
       if (res.exit_code === 0) {
+        addToast(
+          "success",
+          amendCommit ? "Commit Amended" : "Committed",
+          amendCommit
+            ? `Successfully amended commit ${commits[0]?.short_id || ""}.`
+            : "Successfully created commit."
+        );
         setCommitTitle("");
         setCommitDesc("");
         setAmendCommit(false);
@@ -2158,10 +2335,11 @@ function App() {
         setSelectedFile(null);
         await refreshRepository();
       } else {
-        setErrorMessage(res.stderr);
+        const alert = formatGitAlertMessage(res.stderr || res.stdout, "error");
+        addToast("error", alert.title, alert.message);
       }
     } catch (err: any) {
-      setErrorMessage(err.toString());
+      addToast("error", "Commit Failed", err?.message || String(err));
     }
   };
 
@@ -2766,6 +2944,7 @@ function App() {
                       unstagedFiles={unstagedFiles}
                       stagedFiles={stagedFiles}
                       handleCommit={handleCommit}
+                      commits={commits}
                     />
                   )}
                 </div>
@@ -2792,6 +2971,11 @@ function App() {
                 selectedCommitFileDiff={selectedCommitFileDiff}
                 onOpenCreateBranchFromCommit={handleOpenCreateBranchFromCommit}
                 onOpenPushToCommit={handleOpenPushToCommit}
+                onOpenRevertCommit={handleOpenRevertCommit}
+                onOpenRemoveCommit={handleOpenRemoveCommit}
+                onOpenAmendCommit={handleOpenAmendCommit}
+                onOpenCreateTag={handleOpenCreateTag}
+                currentBranch={currentBranch}
               />
             )}
           </div>
@@ -2805,6 +2989,14 @@ function App() {
         setTargetCommitForBranch={setTargetCommitForBranch}
         targetCommitForPush={targetCommitForPush}
         setTargetCommitForPush={setTargetCommitForPush}
+        targetCommitForAction={targetCommitForAction}
+        setTargetCommitForAction={setTargetCommitForAction}
+        handleExecuteRevertCommit={handleExecuteRevertCommit}
+        handleExecuteRemoveCommit={handleExecuteRemoveCommit}
+        handleExecuteAmendCommit={handleExecuteAmendCommit}
+        handleExecuteCreateTag={handleExecuteCreateTag}
+        isExecutingCommitAction={isExecutingCommitAction}
+        stagedFiles={stagedFiles}
         isPushingCommit={isPushingCommit}
         handleExecutePushCommit={handleExecutePushCommit}
         commits={commits}
