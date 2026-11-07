@@ -348,7 +348,7 @@ const Dialogs: React.FC<DialogsProps> = ({
             )}
             {dialogType === "push-commit" && (
               <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <ArrowUpCircle size={16} style={{ color: "var(--color-staged)" }} />
+                <ArrowUpCircle size={16} style={{ color: "var(--accent-purple-bright)" }} />
                 <span>Push up to Selected Commit</span>
               </span>
             )}
@@ -2248,55 +2248,54 @@ const Dialogs: React.FC<DialogsProps> = ({
           const targetCommitIdx = commits ? commits.findIndex(c => c.id === targetCommitForPush.id) : -1;
           const commitsRemainingLocal = targetCommitIdx > 0 ? commits.slice(0, targetCommitIdx) : [];
           const isAlreadyRemote = targetCommitForPush.branches.some(b => b === `origin/${pushTargetBranch}` || b.startsWith("origin/"));
-          const isHead = targetCommitIdx === 0;
 
           return (
-            <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-              <div style={{ fontSize: "0.8rem", color: "var(--color-text-muted)", lineHeight: 1.4 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "13px" }}>
+              <div style={{ fontSize: "0.74rem", color: "var(--color-text-muted)", lineHeight: 1.45 }}>
                 Push your repository history up to this selected commit to remote. Any commits made after this commit will remain purely local and unpushed.
               </div>
 
               {/* Target Commit Summary Card */}
-              <div className="dialog-commit-summary-card">
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "6px" }}>
-                  <span className="commit-sha-badge" style={{ marginBottom: 0 }}>
+              <div className="dialog-commit-summary-card" style={{ padding: "9px 12px" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "5px" }}>
+                  <span className="commit-sha-badge" style={{ marginBottom: 0, fontSize: "0.7rem", padding: "2px 7px" }}>
                     {targetCommitForPush.short_id || targetCommitForPush.id.substring(0, 8)}
                   </span>
-                  <span style={{ fontSize: "0.72rem", color: "var(--color-text-muted)" }}>
+                  <span style={{ fontSize: "0.68rem", color: "var(--color-text-muted)" }}>
                     {new Date(targetCommitForPush.timestamp * 1000).toLocaleString()}
                   </span>
                 </div>
-                <div style={{ fontWeight: 600, fontSize: "0.85rem", color: "var(--color-text-bright)", marginBottom: "4px" }}>
+                <div style={{ fontWeight: 500, fontSize: "0.78rem", lineHeight: 1.42, color: "var(--color-text-bright)", marginBottom: "4px" }}>
                   {targetCommitForPush.message}
                 </div>
-                <div style={{ fontSize: "0.74rem", color: "var(--color-text-muted)" }}>
-                  Author: <strong>{targetCommitForPush.author}</strong>
+                <div style={{ fontSize: "0.7rem", color: "var(--color-text-muted)" }}>
+                  Author: <span style={{ color: "var(--color-text-main)" }}>{targetCommitForPush.author}</span>
                 </div>
               </div>
 
               {/* Remote & Branch Selection */}
-              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--color-text-bright)" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
+                <label style={{ fontSize: "0.72rem", fontWeight: 600, color: "var(--color-text-bright)" }}>
                   Target Remote Branch:
                 </label>
                 <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                   <div style={{
-                    padding: "6px 10px",
+                    padding: "5px 9px",
                     background: "var(--bg-panel-secondary)",
                     border: "1px solid var(--border-color)",
                     borderRadius: "6px",
-                    fontSize: "0.78rem",
+                    fontSize: "0.73rem",
                     color: "var(--color-text-muted)",
                     display: "flex",
                     alignItems: "center",
-                    gap: "6px"
+                    gap: "5px"
                   }}>
-                    <Globe size={13} style={{ color: "var(--accent-blue)" }} />
+                    <Globe size={12} style={{ color: "var(--accent-blue)" }} />
                     <span>origin /</span>
                   </div>
                   <select
                     className="dialog-input"
-                    style={{ flex: 1, padding: "6px 10px" }}
+                    style={{ flex: 1, padding: "5px 9px", fontSize: "0.75rem", height: "30px" }}
                     value={pushTargetBranch}
                     onChange={(e) => setPushTargetBranch(e.target.value)}
                   >
@@ -2307,71 +2306,25 @@ const Dialogs: React.FC<DialogsProps> = ({
                 </div>
               </div>
 
-              {/* Live Impact Breakdown */}
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
-                <div style={{
-                  padding: "10px",
-                  background: "rgba(16, 185, 129, 0.08)",
-                  border: "1px solid rgba(16, 185, 129, 0.25)",
-                  borderRadius: "8px",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "4px"
-                }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "6px", color: "var(--color-staged)", fontSize: "0.74rem", fontWeight: 600 }}>
-                    <ArrowUpCircle size={14} />
-                    <span>Pushed to Remote</span>
-                  </div>
-                  <div style={{ fontSize: "0.8rem", color: "var(--color-text-bright)", fontWeight: 500 }}>
-                    Up to {targetCommitForPush.short_id || targetCommitForPush.id.substring(0, 8)}
-                  </div>
-                  <div style={{ fontSize: "0.68rem", color: "var(--color-text-muted)" }}>
-                    {isHead ? "Includes all commits on this branch." : "Remote branch will update to this commit."}
-                  </div>
-                </div>
-
-                <div style={{
-                  padding: "10px",
-                  background: commitsRemainingLocal.length > 0 ? "rgba(245, 158, 11, 0.08)" : "rgba(255, 255, 255, 0.03)",
-                  border: commitsRemainingLocal.length > 0 ? "1px solid rgba(245, 158, 11, 0.25)" : "1px solid var(--border-color)",
-                  borderRadius: "8px",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "4px"
-                }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "6px", color: commitsRemainingLocal.length > 0 ? "var(--color-untracked)" : "var(--color-text-muted)", fontSize: "0.74rem", fontWeight: 600 }}>
-                    <Archive size={14} />
-                    <span>Remaining Local</span>
-                  </div>
-                  <div style={{ fontSize: "0.8rem", color: "var(--color-text-bright)", fontWeight: 500 }}>
-                    {commitsRemainingLocal.length} {commitsRemainingLocal.length === 1 ? "commit" : "commits"}
-                  </div>
-                  <div style={{ fontSize: "0.68rem", color: "var(--color-text-muted)" }}>
-                    {commitsRemainingLocal.length > 0 ? "Kept unpushed on your local branch." : "No subsequent commits."}
-                  </div>
-                </div>
-              </div>
-
               {/* List remaining unpushed commits preview if any */}
               {commitsRemainingLocal.length > 0 && (
                 <div style={{
                   background: "var(--bg-app)",
                   border: "1px solid var(--border-color)",
                   borderRadius: "6px",
-                  padding: "8px 10px",
-                  fontSize: "0.72rem",
-                  maxHeight: "110px",
+                  padding: "7px 10px",
+                  maxHeight: "105px",
                   overflowY: "auto",
                   display: "flex",
                   flexDirection: "column",
                   gap: "4px"
                 }}>
-                  <span style={{ color: "var(--color-text-muted)", fontWeight: 600, fontSize: "0.68rem", textTransform: "uppercase" }}>
+                  <span style={{ color: "var(--color-text-muted)", fontWeight: 600, fontSize: "0.65rem", letterSpacing: "0.04em", textTransform: "uppercase" }}>
                     Commits that will stay local (not pushed):
                   </span>
                   {commitsRemainingLocal.map(c => (
-                    <div key={c.id} style={{ display: "flex", alignItems: "center", gap: "6px", color: "var(--color-text-main)" }}>
-                      <span style={{ fontFamily: "var(--font-mono)", color: "var(--accent-purple-bright)", fontSize: "0.68rem" }}>
+                    <div key={c.id} style={{ display: "flex", alignItems: "center", gap: "6px", color: "var(--color-text-main)", fontSize: "0.7rem", lineHeight: 1.35 }}>
+                      <span style={{ fontFamily: "var(--font-mono)", color: "var(--accent-purple-bright)", fontSize: "0.66rem", flexShrink: 0 }}>
                         {c.short_id || c.id.substring(0, 7)}
                       </span>
                       <span style={{ textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
@@ -2384,17 +2337,17 @@ const Dialogs: React.FC<DialogsProps> = ({
 
               {isAlreadyRemote && (
                 <div style={{
-                  padding: "8px 10px",
+                  padding: "6px 9px",
                   background: "rgba(59, 130, 246, 0.1)",
                   border: "1px solid rgba(59, 130, 246, 0.3)",
                   borderRadius: "6px",
-                  fontSize: "0.74rem",
+                  fontSize: "0.71rem",
                   color: "#60a5fa",
                   display: "flex",
                   alignItems: "center",
                   gap: "6px"
                 }}>
-                  <Globe size={14} />
+                  <Globe size={13} />
                   <span>Notice: This commit already has a remote pointer pointing to it.</span>
                 </div>
               )}
@@ -2404,6 +2357,7 @@ const Dialogs: React.FC<DialogsProps> = ({
                 <button 
                   type="button" 
                   className="dialog-button secondary" 
+                  style={{ height: "32px", padding: "0 13px", fontSize: "0.75rem" }}
                   onClick={() => {
                     setDialogType(null);
                     if (setTargetCommitForPush) setTargetCommitForPush(null);
@@ -2414,16 +2368,8 @@ const Dialogs: React.FC<DialogsProps> = ({
                 </button>
                 <button
                   type="button"
-                  className="sync-button"
-                  style={{
-                    background: "var(--color-staged)",
-                    color: "#fff",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: "6px",
-                    padding: "6px 14px"
-                  }}
+                  className="dialog-button primary"
+                  style={{ height: "32px", padding: "0 14px", fontSize: "0.75rem", gap: "6px" }}
                   disabled={isPushingCommit || !pushTargetBranch}
                   onClick={() => {
                     if (handleExecutePushCommit && targetCommitForPush && pushTargetBranch) {
@@ -2431,7 +2377,7 @@ const Dialogs: React.FC<DialogsProps> = ({
                     }
                   }}
                 >
-                  <ArrowUpCircle size={14} className={isPushingCommit ? "spin-icon" : ""} />
+                  <ArrowUpCircle size={13} className={isPushingCommit ? "spin-icon" : ""} />
                   <span>{isPushingCommit ? "Pushing to Remote..." : `Push up to ${targetCommitForPush.short_id || targetCommitForPush.id.substring(0, 8)}`}</span>
                 </button>
               </div>
