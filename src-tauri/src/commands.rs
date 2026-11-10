@@ -210,6 +210,50 @@ pub async fn fetch_pull_requests(
     .map_err(|e| format!("Task execution error: {}", e))?
 }
 
+#[tauri::command]
+pub async fn fetch_pull_request_details(
+    payload: github::PullRequestDetailPayload,
+) -> Result<github::PullRequestDetailResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        github::fetch_pull_request_details_impl(&payload)
+    })
+    .await
+    .map_err(|e| format!("Task execution error: {}", e))?
+}
+
+#[tauri::command]
+pub async fn post_pull_request_comment(
+    payload: github::PostCommentPayload,
+) -> Result<github::PullRequestComment, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        github::post_pull_request_comment_impl(&payload)
+    })
+    .await
+    .map_err(|e| format!("Task execution error: {}", e))?
+}
+
+#[tauri::command]
+pub async fn merge_pull_request(
+    payload: github::MergePullRequestPayload,
+) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        github::merge_pull_request_impl(&payload)
+    })
+    .await
+    .map_err(|e| format!("Task execution error: {}", e))?
+}
+
+#[tauri::command]
+pub async fn update_pull_request_state(
+    payload: github::UpdatePullRequestStatePayload,
+) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        github::update_pull_request_state_impl(&payload)
+    })
+    .await
+    .map_err(|e| format!("Task execution error: {}", e))?
+}
+
 
 
 

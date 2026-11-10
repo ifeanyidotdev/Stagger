@@ -125,6 +125,106 @@ export interface FetchPullRequestsPayload {
   bitbucket_username?: string | null;
 }
 
+export interface PullRequestComment {
+  id: number;
+  user?: { login: string; avatar_url?: string } | null;
+  body: string;
+  created_at: string;
+  updated_at?: string | null;
+}
+
+export interface PullRequestCommit {
+  sha: string;
+  message: string;
+  author: string;
+  date?: string | null;
+}
+
+export interface PullRequestFileChange {
+  filename: string;
+  status: string;
+  additions: number;
+  deletions: number;
+  changes: number;
+  patch?: string | null;
+}
+
+export interface PullRequestFullDetail {
+  number: number;
+  title: string;
+  body?: string | null;
+  state: string;
+  draft?: boolean | null;
+  merged: boolean;
+  mergeable?: boolean | null;
+  mergeable_state?: string | null;
+  html_url: string;
+  user?: { login: string; avatar_url?: string } | null;
+  head_ref: string;
+  head_sha: string;
+  base_ref: string;
+  base_sha: string;
+  created_at: string;
+  updated_at: string;
+  comments: PullRequestComment[];
+  commits: PullRequestCommit[];
+  files: PullRequestFileChange[];
+  total_additions: number;
+  total_deletions: number;
+  provider: string;
+}
+
+export type MergeMethod = 'merge' | 'squash' | 'rebase';
+
+export interface PullRequestDetailPayload {
+  provider: string;
+  host_url: string;
+  owner: string;
+  repo: string;
+  full_path: string;
+  token: string;
+  pr_number: number;
+  bitbucket_username?: string | null;
+}
+
+export interface PostCommentPayload {
+  provider: string;
+  host_url: string;
+  owner: string;
+  repo: string;
+  full_path: string;
+  token: string;
+  pr_number: number;
+  body: string;
+  bitbucket_username?: string | null;
+}
+
+export interface MergePullRequestPayload {
+  provider: string;
+  host_url: string;
+  owner: string;
+  repo: string;
+  full_path: string;
+  token: string;
+  pr_number: number;
+  merge_method: string;
+  commit_title?: string | null;
+  commit_message?: string | null;
+  bitbucket_username?: string | null;
+}
+
+export interface UpdatePullRequestStatePayload {
+  provider: string;
+  host_url: string;
+  owner: string;
+  repo: string;
+  full_path: string;
+  token: string;
+  pr_number: number;
+  state: string;
+  bitbucket_username?: string | null;
+}
+
 export type DialogType = "branch" | "checkout" | "clone" | "publish" | "set-remote" | "pr-create" | "login" | "workspace-add" | "git-init-confirm" | "delete-branch-confirm" | "git-delete-force-confirm" | "checkout-conflict" | "stash-name" | "stash-inspector" | "merge-rebase" | "push-commit" | "pull-strategy" | "discard-changes-confirm" | "revert-commit-confirm" | "remove-commit-confirm" | "amend-commit" | "create-tag" | null;
 
 export type ToastType = "success" | "error" | "info" | "warning";
