@@ -17,6 +17,7 @@ import {
   Archive,
   RefreshCw,
   GitPullRequest,
+  ExternalLink,
 } from "lucide-react";
 import type { GitHubPR, StashEntry, BranchInfo } from "../../types/git";
 
@@ -70,6 +71,12 @@ interface SidebarProps {
   allBranches: BranchInfo[];
   onOpenFolderPicker?: () => void;
   onOpenCreatePRModal?: (sourceBranch?: string) => void;
+  activePRNumber?: number | null;
+  onSelectPR?: (pr: GitHubPR) => void;
+  onRefreshPRs?: () => void;
+  isFetchingPRs?: boolean;
+  hasHostingAuth?: boolean;
+  prTerm?: string;
 }
 
 const Sidebar: React.FC<SidebarProps> = ({
@@ -78,6 +85,12 @@ const Sidebar: React.FC<SidebarProps> = ({
   workspaces,
   onOpenFolderPicker,
   onOpenCreatePRModal,
+  activePRNumber,
+  onSelectPR,
+  onRefreshPRs,
+  isFetchingPRs,
+  hasHostingAuth,
+  prTerm,
   setDialogType,
   setDialogInput,
   isBranchListExpanded,
@@ -133,6 +146,8 @@ const Sidebar: React.FC<SidebarProps> = ({
     branch: string;
     isRemote: boolean;
   } | null>(null);
+
+  const [isPRListExpanded, setIsPRListExpanded] = useState(true);
 
   useEffect(() => {
     if (!branchContextMenu) return;
@@ -818,63 +833,168 @@ const Sidebar: React.FC<SidebarProps> = ({
             )}
 
             {/* Pull Requests Section */}
-            {githubToken && remoteUrl && (
+            {(hasHostingAuth || (githubToken && remoteUrl)) && (
               <div className="sidebar-section">
-                <div className="section-title">
-                  <span>Pull Requests</span>
-                </div>
                 <div
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "2px",
-                    maxHeight: "120px",
-                    overflowY: "auto",
-                  }}
+                  className="section-title"
+                  onClick={() => setIsPRListExpanded(!isPRListExpanded)}
+                  style={{ cursor: "pointer", userSelect: "none" }}
                 >
-                  {Array.isArray(githubPRs) && githubPRs.map((pr) => (
-                    <a
-                      key={pr.number}
-                      href={pr.html_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      style={{ textDecoration: "none" }}
-                    >
-                      <div
-                        className="branch-item"
-                        style={{ fontSize: "0.75rem", padding: "4px 8px" }}
-                      >
-                        <GitBranch
-                          size={12}
-                          style={{
-                            color: "var(--accent-blue)",
-                            marginRight: "6px",
-                          }}
-                        />
-                        <span
-                          style={{
-                            textOverflow: "ellipsis",
-                            overflow: "hidden",
-                            whiteSpace: "nowrap",
-                            maxWidth: "150px",
-                          }}
-                        >
-                          #{pr.number} {pr.title}
-                        </span>
-                      </div>
-                    </a>
-                  ))}
-                  {(!Array.isArray(githubPRs) || githubPRs.length === 0) && (
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "6px",
+                    }}
+                  >
                     <span
                       style={{
-                        fontSize: "0.75rem",
-                        color: "var(--color-text-muted)",
+                        transform: isPRListExpanded ? "rotate(90deg)" : "none",
+                        transition: "transform 0.15s ease",
+                        display: "inline-block",
+                        fontSize: "0.6rem",
                       }}
                     >
-                      No active pull requests
+                      ▶
                     </span>
-                  )}
+                    <span>
+                      {prTerm ? `${prTerm}s` : "Pull Requests"}{" "}
+                      ({Array.isArray(githubPRs) ? githubPRs.length : 0})
+                    </span>
+                  </div>
+
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: "6px",
+                      alignItems: "center",
+                    }}
+                  >
+                    {onRefreshPRs && (
+                      <span
+                        title={`Refresh ${prTerm ? `${prTerm}s` : "Pull Requests"}`}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          cursor: "pointer",
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onRefreshPRs();
+                        }}
+                      >
+                        <RefreshCcw
+                          size={13}
+                          className={isFetchingPRs ? "spin-icon" : ""}
+                        />
+                      </span>
+                    )}
+
+                    {onOpenCreatePRModal && (
+                      <span
+                        title={`Create ${prTerm || "Pull Request"}`}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          cursor: "pointer",
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onOpenCreatePRModal();
+                        }}
+                      >
+                        <Plus size={14} />
+                      </span>
+                    )}
+                  </div>
                 </div>
+
+                {isPRListExpanded && (
+                  <div className="branch-list pr-branch-list">
+                    {(!Array.isArray(githubPRs) || githubPRs.length === 0) ? (
+                      <span
+                        style={{
+                          fontSize: "0.73rem",
+                          color: "var(--color-text-dark)",
+                          padding: "4px 8px",
+                        }}
+                      >
+                        No active {prTerm ? `${prTerm.toLowerCase()}s` : "pull requests"}
+                      </span>
+                    ) : (
+                      githubPRs.map((pr) => {
+                        const isActive = activePRNumber === pr.number;
+                        return (
+                          <div
+                            key={pr.number}
+                            className={`branch-item ${isActive ? "active pr-active-sidebar-item" : ""}`}
+                            style={{
+                              fontSize: "0.75rem",
+                              padding: "4px 8px",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "space-between",
+                              cursor: "pointer",
+                              borderRadius: "6px",
+                            }}
+                            onClick={() => onSelectPR?.(pr)}
+                            title={`Click to review #${pr.number} ${pr.title} in workspace`}
+                          >
+                            <div
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                overflow: "hidden",
+                                flex: 1,
+                                minWidth: 0,
+                                gap: "6px",
+                              }}
+                            >
+                              <GitPullRequest
+                                size={12}
+                                style={{
+                                  color: isActive
+                                    ? "var(--accent-purple-bright)"
+                                    : "var(--accent-purple)",
+                                  flexShrink: 0,
+                                }}
+                              />
+                              <span
+                                style={{
+                                  textOverflow: "ellipsis",
+                                  overflow: "hidden",
+                                  whiteSpace: "nowrap",
+                                  color: isActive ? "var(--color-text-bright)" : undefined,
+                                  fontWeight: isActive ? 600 : 400,
+                                }}
+                              >
+                                #{pr.number} {pr.title}
+                              </span>
+                            </div>
+
+                            <a
+                              href={pr.html_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              title="Open in web browser"
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                color: "var(--color-text-muted)",
+                                marginLeft: "4px",
+                                flexShrink: 0,
+                                padding: "2px",
+                              }}
+                            >
+                              <ExternalLink size={10} />
+                            </a>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                )}
               </div>
             )}
 

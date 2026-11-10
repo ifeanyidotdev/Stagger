@@ -1,8 +1,20 @@
+import { invoke } from '@tauri-apps/api/core';
 import type {
   GitHostingProvider,
   GlobalSettings,
   WorkspaceHostingConfig,
 } from '../types/settings';
+import type {
+  GitHubPR,
+  PullRequestFullDetail,
+  PullRequestComment,
+  PullRequestDetailPayload,
+  PostCommentPayload,
+  MergePullRequestPayload,
+  UpdatePullRequestStatePayload,
+  FetchPullRequestsPayload,
+  MergeMethod,
+} from '../types/git';
 
 export interface ParsedRemoteInfo {
   host: string;
@@ -234,4 +246,117 @@ export function buildPrefilledBrowserPrUrl(
     default:
       return `${repoWebBase}/compare/${encBase}...${encHead}?quick_pull=1&title=${encTitle}&body=${encBody}`;
   }
+}
+
+function buildBasePayload(config: EffectiveHostingConfig) {
+  if (!config.remoteInfo) {
+    throw new Error('Repository remote is not configured or could not be parsed.');
+  }
+  return {
+    provider: config.provider,
+    host_url: config.hostUrl,
+    owner: config.remoteInfo.owner,
+    repo: config.remoteInfo.repo,
+    full_path: config.remoteInfo.fullPath,
+    token: config.token,
+    bitbucket_username: config.bitbucketUsername || null,
+  };
+}
+
+export async function fetchRemotePullRequests(
+  config: EffectiveHostingConfig
+): Promise<GitHubPR[]> {
+  const base = buildBasePayload(config);
+  const payload: FetchPullRequestsPayload = {
+    provider: base.provider,
+    host_url: base.host_url,
+    owner: base.owner,
+    repo: base.repo,
+    full_path: base.full_path,
+    token: base.token,
+    bitbucket_username: base.bitbucket_username,
+  };
+  return await invoke<GitHubPR[]>('fetch_pull_requests', { payload });
+}
+
+export async function fetchPullRequestDetails(
+  config: EffectiveHostingConfig,
+  prNumber: number
+): Promise<PullRequestFullDetail> {
+  const base = buildBasePayload(config);
+  const payload: PullRequestDetailPayload = {
+    ...base,
+    pr_number: prNumber,
+  };
+  return await invoke<PullRequestFullDetail>('fetch_pull_request_details', { payload });
+}
+
+export async function postPullRequestComment(
+  config: EffectiveHostingConfig,
+  prNumber: number,
+  body: string
+): Promise<PullRequestComment> {
+  const base = buildBasePayload(config);
+  const payload: PostCommentPayload = {
+    ...base,
+    pr_number: prNumber,
+    body,
+  };
+  return await invoke<PullRequestComment>('post_pull_request_comment', { payload });
+}
+
+export async function mergePullRequest(
+  config: EffectiveHostingConfig,
+  prNumber: number,
+  mergeMethod: MergeMethod,
+  commitTitle?: string,
+  commitMessage?: string
+): Promise<{ success: boolean; message: string; merged: boolean }> {
+  const base = buildBasePayload(config);
+  const payload: MergePullRequestPayload = {
+    ...base,
+    pr_number: prNumber,
+    merge_method: mergeMethod,
+    commit_title: commitTitle || null,
+    commit_message: commitMessage || null,
+  };
+  const res = await invoke<any>('merge_pull_request', { payload });
+  if (typeof res === 'string') {
+    return {
+      success: true,
+      message: res,
+      merged: true,
+    };
+  }
+  return {
+    success: Boolean(res?.success ?? res?.merged ?? true),
+    message: res?.message || 'Merged successfully',
+    merged: Boolean(res?.merged ?? true),
+  };
+}
+
+export async function updatePullRequestState(
+  config: EffectiveHostingConfig,
+  prNumber: number,
+  state: 'open' | 'closed'
+): Promise<{ success: boolean; message: string; state: string }> {
+  const base = buildBasePayload(config);
+  const payload: UpdatePullRequestStatePayload = {
+    ...base,
+    pr_number: prNumber,
+    state,
+  };
+  const res = await invoke<any>('update_pull_request_state', { payload });
+  if (typeof res === 'string') {
+    return {
+      success: true,
+      message: res,
+      state,
+    };
+  }
+  return {
+    success: Boolean(res?.success ?? true),
+    message: res?.message || `State updated to ${state}`,
+    state: res?.state || state,
+  };
 }

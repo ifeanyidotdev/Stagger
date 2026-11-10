@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { X, Layers, Globe, FolderGit2, ChevronRight, FolderOpen } from "lucide-react";
@@ -25,6 +25,18 @@ import SettingsModal, { type GlobalTab } from "./components/modals/SettingsModal
 import { CreatePRModal } from "./components/modals/CreatePRModal";
 import UpdateRestartPrompt from "./components/common/UpdateRestartPrompt";
 import ToastContainer from "./components/common/ToastContainer";
+import PRFilesPane from "./components/pr/PRFilesPane";
+import PRDiffViewer from "./components/pr/PRDiffViewer";
+import PRReviewBar from "./components/pr/PRReviewBar";
+import { 
+  resolveEffectiveHostingConfig, 
+  fetchRemotePullRequests, 
+  fetchPullRequestDetails, 
+  postPullRequestComment, 
+  mergePullRequest, 
+  updatePullRequestState 
+} from "./services/gitProviderService";
+import type { PullRequestFullDetail, MergeMethod } from "./types/git";
 import { formatGitAlertMessage } from "./utils/gitAlertUtils";
 import { safeGetItem } from "./utils/storageUtils";
 import type { AppUpdateInfo, UpdateStatus, UpdateDownloadProgress, GlobalSettings, WorkspaceHostingConfig } from "./types/settings";
@@ -121,6 +133,15 @@ function App() {
   const [githubUser, setGithubUser] = useState<GitHubUser | null>(null);
   const [githubRepos, setGithubRepos] = useState<GitHubRepo[]>([]);
   const [githubPRs, setGithubPRs] = useState<GitHubPR[]>([]);
+
+  // --- IN-WORKSPACE PULL REQUEST REVIEW MODE ---
+  const [activePR, setActivePR] = useState<PullRequestFullDetail | null>(null);
+  const [isLoadingPRDetails, setIsLoadingPRDetails] = useState<boolean>(false);
+  const [selectedPRFile, setSelectedPRFile] = useState<string | null>(null);
+  const [activePRDiffMode, setActivePRDiffMode] = useState<'unified' | 'split'>('unified');
+  const [isPRCommentsExpanded, setIsPRCommentsExpanded] = useState<boolean>(false);
+  const [isPRActionLoading, setIsPRActionLoading] = useState<boolean>(false);
+  const [isFetchingPRs, setIsFetchingPRs] = useState<boolean>(false);
 
   // --- WORKSPACE SWAP / DROPDOWN SELECTOR ---
   const [isWorkspaceDropdownOpen, setIsWorkspaceDropdownOpen] = useState(false);
@@ -386,6 +407,9 @@ function App() {
     setTargetCommitForAction(null);
     setIsExecutingCommitAction(false);
     setPendingDiscardFiles(null);
+    setActivePR(null);
+    setSelectedPRFile(null);
+    setIsPRCommentsExpanded(false);
   };
 
   const activeRepoRef = useRef<string>(repoPath);
@@ -1141,11 +1165,9 @@ function App() {
           setStashes(parsed);
         }
 
-        // Throttle GitHub PR fetches to once per minute to avoid hitting API rate limits
-        const now = Date.now();
-        if (remoteRes.exit_code === 0 && githubToken && (now - lastPRFetchRef.current > 60000)) {
-          lastPRFetchRef.current = now;
-          fetchGitHubPRs(remoteRes.stdout.trim());
+        // Throttle PR fetches to avoid hitting API rate limits
+        if (remoteRes.exit_code === 0) {
+          fetchPullRequests();
         }
       }
 
@@ -1992,25 +2014,241 @@ function App() {
     return null;
   };
 
-  const fetchGitHubPRs = async (url: string) => {
-    const ownerRepo = parseOwnerRepo(url);
-    if (!ownerRepo || !githubToken) return;
+  const effectiveHostingConfig = useMemo(() => {
+    return resolveEffectiveHostingConfig(globalSettings, workspaceHostingConfig, remoteUrl, githubToken);
+  }, [globalSettings, workspaceHostingConfig, remoteUrl, githubToken]);
+
+  const fetchPullRequests = async (force: boolean = false) => {
+    if (!effectiveHostingConfig.hasToken || !effectiveHostingConfig.remoteInfo) {
+      return;
+    }
+    const now = Date.now();
+    if (!force && now - lastPRFetchRef.current < 60000) {
+      return;
+    }
+    lastPRFetchRef.current = now;
+    setIsFetchingPRs(true);
     try {
-      const responseStr = await invoke<string>("run_github_api_request", {
-        token: githubToken,
-        path: `/repos/${ownerRepo.owner}/${ownerRepo.repo}/pulls`,
-        method: "GET",
-        body: null
-      });
-      const data = JSON.parse(responseStr);
-      if (Array.isArray(data)) {
-        setGithubPRs(data as GitHubPR[]);
-      } else {
-        setGithubPRs([]);
+      const prs = await fetchRemotePullRequests(effectiveHostingConfig);
+      setGithubPRs(Array.isArray(prs) ? prs : []);
+      if (activePR) {
+        try {
+          const fresh = await fetchPullRequestDetails(effectiveHostingConfig, activePR.number);
+          setActivePR(fresh);
+        } catch {
+          // ignore background detail refresh failure
+        }
       }
     } catch (err: any) {
-      console.error(err);
-      setGithubPRs([]);
+      console.error("Failed to fetch pull requests:", err);
+      if (force) {
+        addToast("error", "Failed to fetch pull requests", err?.message || String(err));
+      }
+    } finally {
+      setIsFetchingPRs(false);
+    }
+  };
+
+  const handleSelectPR = async (pr: GitHubPR) => {
+    if (!effectiveHostingConfig.hasToken || !effectiveHostingConfig.remoteInfo) {
+      addToast("warning", "Hosting Token Required", "Please configure your Git hosting access token in Settings to review pull requests.");
+      return;
+    }
+    setIsLoadingPRDetails(true);
+    setActiveTab("workspace");
+    try {
+      const detail = await fetchPullRequestDetails(effectiveHostingConfig, pr.number);
+      setActivePR(detail);
+      setSelectedPRFile(detail.files[0]?.filename || null);
+      setIsPRCommentsExpanded(false);
+    } catch (err: any) {
+      console.error("Failed to load PR details:", err);
+      addToast("error", "Failed to load Pull Request", err?.message || String(err));
+    } finally {
+      setIsLoadingPRDetails(false);
+    }
+  };
+
+  const handleExitPRMode = () => {
+    setActivePR(null);
+    setSelectedPRFile(null);
+    setIsPRCommentsExpanded(false);
+  };
+
+  const handlePostPRComment = async (body: string) => {
+    if (!activePR) return;
+    try {
+      const newComment = await postPullRequestComment(effectiveHostingConfig, activePR.number, body);
+      setActivePR(prev => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          comments: [...prev.comments, newComment],
+        };
+      });
+      addToast("success", "Comment Posted", `Your comment was posted to #${activePR.number}.`);
+    } catch (err: any) {
+      console.error("Failed to post comment:", err);
+      addToast("error", "Comment Failed", err?.message || String(err));
+      throw err;
+    }
+  };
+
+  const handleMergePR = async (method: MergeMethod, title?: string, message?: string) => {
+    if (!activePR) return;
+    setIsPRActionLoading(true);
+    try {
+      const res = await mergePullRequest(effectiveHostingConfig, activePR.number, method, title, message);
+      if (res && (res.merged || res.success)) {
+        addToast("success", "Pull Request Merged", `PR #${activePR.number} was merged successfully into ${activePR.base_ref}.`);
+        setActivePR(prev => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            merged: true,
+            state: 'closed',
+          };
+        });
+        try {
+          const freshPR = await fetchPullRequestDetails(effectiveHostingConfig, activePR.number);
+          setActivePR(freshPR);
+        } catch (fetchErr) {
+          console.warn("Could not refetch merged PR details:", fetchErr);
+        }
+        await refreshRepository();
+        await fetchPullRequests(true);
+      } else {
+        addToast("error", "Merge Failed", res.message || "Failed to merge pull request.");
+      }
+    } catch (err: any) {
+      console.error("Failed to merge PR:", err);
+      addToast("error", "Merge Error", err?.message || String(err));
+    } finally {
+      setIsPRActionLoading(false);
+    }
+  };
+
+  const handlePullBaseBranch = async (baseBranch: string) => {
+    if (!repoPath || isPRActionLoading) return;
+    setIsPRActionLoading(true);
+    try {
+      // 1. Fetch remote base branch
+      await invoke<GitCliResult>("run_git_cli_cmd", {
+        repoPath,
+        args: ["fetch", "origin", `${baseBranch}:${baseBranch}`]
+      });
+
+      if (currentBranch === baseBranch) {
+        const pullRes = await invoke<GitCliResult>("run_git_cli_cmd", {
+          repoPath,
+          args: ["pull", "--no-rebase", "origin", baseBranch]
+        });
+        if (pullRes.exit_code === 0) {
+          addToast("success", "Branch Updated", `Pulled latest changes into "${baseBranch}".`);
+        } else {
+          addToast("error", "Pull Failed", pullRes.stderr || pullRes.stdout || "Failed to pull branch.");
+        }
+      } else {
+        const coRes = await invoke<GitCliResult>("run_git_cli_cmd", {
+          repoPath,
+          args: ["checkout", baseBranch]
+        });
+        if (coRes.exit_code === 0) {
+          await invoke<GitCliResult>("run_git_cli_cmd", {
+            repoPath,
+            args: ["pull", "--no-rebase", "origin", baseBranch]
+          });
+          addToast("success", "Checked Out & Updated", `Switched to "${baseBranch}" and pulled latest changes.`);
+        } else {
+          addToast("info", "Branch Fetched", `Fetched latest changes for "${baseBranch}" from origin.`);
+        }
+      }
+      await refreshRepository();
+    } catch (err: any) {
+      console.error("Failed to pull base branch:", err);
+      addToast("error", "Sync Error", err?.message || String(err));
+    } finally {
+      setIsPRActionLoading(false);
+    }
+  };
+
+  const handleClosePR = async () => {
+    if (!activePR) return;
+    setIsPRActionLoading(true);
+    try {
+      await updatePullRequestState(effectiveHostingConfig, activePR.number, 'closed');
+      addToast("info", "Pull Request Closed", `PR #${activePR.number} has been closed.`);
+      setActivePR(prev => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          state: 'closed',
+        };
+      });
+      await fetchPullRequests(true);
+    } catch (err: any) {
+      console.error("Failed to close PR:", err);
+      addToast("error", "Close PR Failed", err?.message || String(err));
+    } finally {
+      setIsPRActionLoading(false);
+    }
+  };
+
+  const handleReopenPR = async () => {
+    if (!activePR) return;
+    setIsPRActionLoading(true);
+    try {
+      await updatePullRequestState(effectiveHostingConfig, activePR.number, 'open');
+      addToast("success", "Pull Request Reopened", `PR #${activePR.number} has been reopened.`);
+      setActivePR(prev => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          state: 'open',
+        };
+      });
+      await fetchPullRequests(true);
+    } catch (err: any) {
+      console.error("Failed to reopen PR:", err);
+      addToast("error", "Reopen PR Failed", err?.message || String(err));
+    } finally {
+      setIsPRActionLoading(false);
+    }
+  };
+
+  const handleCheckoutPRBranch = async () => {
+    if (!activePR || !repoPath) return;
+    setIsPRActionLoading(true);
+    try {
+      const headRef = activePR.head_ref;
+      await invoke<GitCliResult>("run_git_cli_cmd", {
+        repoPath,
+        args: ["fetch", "origin", `${headRef}:${headRef}`]
+      });
+      const res = await invoke<GitCliResult>("run_git_cli_cmd", {
+        repoPath,
+        args: ["checkout", headRef]
+      });
+      if (res.exit_code === 0) {
+        addToast("success", "Branch Checked Out", `Checked out "${headRef}" locally.`);
+        await refreshRepository();
+      } else {
+        const resFallback = await invoke<GitCliResult>("run_git_cli_cmd", {
+          repoPath,
+          args: ["checkout", "-B", headRef, `origin/${headRef}`]
+        });
+        if (resFallback.exit_code === 0) {
+          addToast("success", "Branch Checked Out", `Checked out "${headRef}" locally.`);
+          await refreshRepository();
+        } else {
+          addToast("error", "Checkout Failed", resFallback.stderr || res.stderr || "Could not checkout branch.");
+        }
+      }
+    } catch (err: any) {
+      console.error("Checkout error:", err);
+      addToast("error", "Checkout Error", err?.message || String(err));
+    } finally {
+      setIsPRActionLoading(false);
     }
   };
 
@@ -2770,6 +3008,12 @@ function App() {
           behindCount={behindCount}
           allBranches={allBranches}
           onOpenCreatePRModal={handleOpenCreatePR}
+          activePRNumber={activePR?.number || null}
+          onSelectPR={handleSelectPR}
+          onRefreshPRs={() => fetchPullRequests(true)}
+          isFetchingPRs={isFetchingPRs}
+          hasHostingAuth={effectiveHostingConfig.hasToken && Boolean(effectiveHostingConfig.remoteInfo)}
+          prTerm={effectiveHostingConfig.term}
         />
 
         {!sidebarCollapsed && (
@@ -2780,6 +3024,12 @@ function App() {
         )}
 
         <div className="main-panel">
+          {isLoadingPRDetails && (
+            <div className="pr-loading-overlay">
+              <div className="pr-loading-spinner" />
+              <span className="pr-loading-text">Loading pull request details...</span>
+            </div>
+          )}
           <div className="view-content">
             {workspaces.length === 0 || !repoPath ? (
               <div className="welcome-screen">
@@ -2863,92 +3113,132 @@ function App() {
                 </div>
               </div>
             ) : activeTab === "workspace" ? (
-              <div className="workspace-view">
-                <FilePane 
-                  filePaneWidth={filePaneWidth}
-                  refreshRepository={refreshRepository}
-                  conflictedFiles={conflictedFiles}
-                  resolveConflict={resolveConflict}
-                  unstagedCollapsed={unstagedCollapsed}
-                  setUnstagedCollapsed={setUnstagedCollapsed}
-                  unstagedFiles={unstagedFiles}
-                  checkedUnstaged={checkedUnstaged}
-                  setCheckedUnstaged={setCheckedUnstaged}
-                  stageSelectedUnstaged={stageSelectedUnstaged}
-                  stageAllUnstaged={stageAllUnstaged}
-                  selectedFile={selectedFile}
-                  selectFileForStaging={selectFileForStaging}
-                  stageWholeFile={stageWholeFile}
-                  stagedCollapsed={stagedCollapsed}
-                  setStagedCollapsed={setStagedCollapsed}
-                  stagedFiles={stagedFiles}
-                  checkedStaged={checkedStaged}
-                  setCheckedStaged={setCheckedStaged}
-                  unstageSelectedStaged={unstageSelectedStaged}
-                  unstageAllStaged={unstageAllStaged}
-                  unstageWholeFile={unstageWholeFile}
-                  requestDiscardFile={requestDiscardFile}
-                  requestDiscardSelected={requestDiscardSelected}
-                  hasRepo={hasRepo}
-                  initializeGitRepo={initializeGitRepo}
-                  onSelectConflictFile={selectConflictFile}
-                />
+              activePR ? (
+                <div className="workspace-view pr-workspace-view">
+                  <PRFilesPane
+                    pr={activePR}
+                    selectedFile={selectedPRFile}
+                    onSelectFile={(filename) => setSelectedPRFile(filename)}
+                    onExitPRMode={handleExitPRMode}
+                    width={filePaneWidth}
+                  />
 
-                <div 
-                  className={`resize-handle ${activeResizer === 'filepane' ? 'active' : ''}`}
-                  onMouseDown={() => setActiveResizer('filepane')}
-                />
+                  <div 
+                    className={`resize-handle ${activeResizer === 'filepane' ? 'active' : ''}`}
+                    onMouseDown={() => setActiveResizer('filepane')}
+                  />
 
-                <div className="staging-mesh-pane">
-                  {selectedFile && isConflictFile(selectedFile) ? (
-                    <ConflictResolver 
-                      selectedFile={selectedFile}
-                      resolveConflict={resolveConflict}
+                  <div className="staging-mesh-pane pr-mesh-pane">
+                    <PRDiffViewer
+                      file={activePR.files.find(f => f.filename === selectedPRFile) || activePR.files[0] || null}
+                      diffMode={activePRDiffMode}
+                      onChangeDiffMode={setActivePRDiffMode}
+                    />
+
+                    <PRReviewBar
+                      pr={activePR}
+                      isCommentsExpanded={isPRCommentsExpanded}
+                      onToggleComments={() => setIsPRCommentsExpanded(prev => !prev)}
+                      onPostComment={handlePostPRComment}
+                      onMergePR={handleMergePR}
+                      onClosePR={handleClosePR}
+                      onReopenPR={handleReopenPR}
+                      onCheckoutBranch={handleCheckoutPRBranch}
+                      onPullBaseBranch={handlePullBaseBranch}
+                      onExitPRMode={handleExitPRMode}
                       currentBranch={currentBranch}
-                      isLoadingConflict={isLoadingConflict}
-                      conflictOursContent={conflictOursContent}
-                      conflictTheirsContent={conflictTheirsContent}
-                      conflictDiffInfo={conflictDiffInfo}
+                      isActionLoading={isPRActionLoading}
                     />
-                  ) : (
-                    <StagingCanvas 
-                      canvasRef={canvasRef}
-                      handleCanvasMouseMove={handleCanvasMouseMove}
-                      handleCanvasMouseUp={handleCanvasMouseUp}
-                      canvasMinWidth={Math.max(...canvasNodes.map(n => n.x + 400), 750)}
-                      canvasMinHeight={Math.max(...canvasNodes.map(n => n.y + 260), 600)}
-                      collabPeers={collabPeers}
-                      conflictedFiles={conflictedFiles}
-                      selectedFile={selectedFile}
-                      canvasNodes={canvasNodes}
-                      draggingNodeId={draggingNodeId}
-                      handleNodeMouseDown={handleNodeMouseDown}
-                      setActiveDetailHunk={setActiveDetailHunk}
-                    />
-                  )}
-
-                  {conflictedFiles.length === 0 && (
-                    <CommitBuilder 
-                      commitTitle={commitTitle}
-                      setCommitTitle={setCommitTitle}
-                      commitDesc={commitDesc}
-                      setCommitDesc={setCommitDesc}
-                      amendCommit={amendCommit}
-                      setAmendCommit={setAmendCommit}
-                      coAuthors={coAuthors}
-                      setCoAuthors={setCoAuthors}
-                      showCoAuthorInput={showCoAuthorInput}
-                      setShowCoAuthorInput={setShowCoAuthorInput}
-                      coAuthorInput={coAuthorInput}
-                      setCoAuthorInput={setCoAuthorInput}
-                      unstagedFiles={unstagedFiles}
-                      stagedFiles={stagedFiles}
-                      handleCommit={handleCommit}
-                      commits={commits}
-                    />
-                  )}
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="workspace-view">
+                  <FilePane 
+                    filePaneWidth={filePaneWidth}
+                    refreshRepository={refreshRepository}
+                    conflictedFiles={conflictedFiles}
+                    resolveConflict={resolveConflict}
+                    unstagedCollapsed={unstagedCollapsed}
+                    setUnstagedCollapsed={setUnstagedCollapsed}
+                    unstagedFiles={unstagedFiles}
+                    checkedUnstaged={checkedUnstaged}
+                    setCheckedUnstaged={setCheckedUnstaged}
+                    stageSelectedUnstaged={stageSelectedUnstaged}
+                    stageAllUnstaged={stageAllUnstaged}
+                    selectedFile={selectedFile}
+                    selectFileForStaging={selectFileForStaging}
+                    stageWholeFile={stageWholeFile}
+                    stagedCollapsed={stagedCollapsed}
+                    setStagedCollapsed={setStagedCollapsed}
+                    stagedFiles={stagedFiles}
+                    checkedStaged={checkedStaged}
+                    setCheckedStaged={setCheckedStaged}
+                    unstageSelectedStaged={unstageSelectedStaged}
+                    unstageAllStaged={unstageAllStaged}
+                    unstageWholeFile={unstageWholeFile}
+                    requestDiscardFile={requestDiscardFile}
+                    requestDiscardSelected={requestDiscardSelected}
+                    hasRepo={hasRepo}
+                    initializeGitRepo={initializeGitRepo}
+                    onSelectConflictFile={selectConflictFile}
+                  />
+
+                  <div 
+                    className={`resize-handle ${activeResizer === 'filepane' ? 'active' : ''}`}
+                    onMouseDown={() => setActiveResizer('filepane')}
+                  />
+
+                  <div className="staging-mesh-pane">
+                    {selectedFile && isConflictFile(selectedFile) ? (
+                      <ConflictResolver 
+                        selectedFile={selectedFile}
+                        resolveConflict={resolveConflict}
+                        currentBranch={currentBranch}
+                        isLoadingConflict={isLoadingConflict}
+                        conflictOursContent={conflictOursContent}
+                        conflictTheirsContent={conflictTheirsContent}
+                        conflictDiffInfo={conflictDiffInfo}
+                      />
+                    ) : (
+                      <StagingCanvas 
+                        canvasRef={canvasRef}
+                        handleCanvasMouseMove={handleCanvasMouseMove}
+                        handleCanvasMouseUp={handleCanvasMouseUp}
+                        canvasMinWidth={Math.max(...canvasNodes.map(n => n.x + 400), 750)}
+                        canvasMinHeight={Math.max(...canvasNodes.map(n => n.y + 260), 600)}
+                        collabPeers={collabPeers}
+                        conflictedFiles={conflictedFiles}
+                        selectedFile={selectedFile}
+                        canvasNodes={canvasNodes}
+                        draggingNodeId={draggingNodeId}
+                        handleNodeMouseDown={handleNodeMouseDown}
+                        setActiveDetailHunk={setActiveDetailHunk}
+                      />
+                    )}
+
+                    {conflictedFiles.length === 0 && (
+                      <CommitBuilder 
+                        commitTitle={commitTitle}
+                        setCommitTitle={setCommitTitle}
+                        commitDesc={commitDesc}
+                        setCommitDesc={setCommitDesc}
+                        amendCommit={amendCommit}
+                        setAmendCommit={setAmendCommit}
+                        coAuthors={coAuthors}
+                        setCoAuthors={setCoAuthors}
+                        showCoAuthorInput={showCoAuthorInput}
+                        setShowCoAuthorInput={setShowCoAuthorInput}
+                        coAuthorInput={coAuthorInput}
+                        setCoAuthorInput={setCoAuthorInput}
+                        unstagedFiles={unstagedFiles}
+                        stagedFiles={stagedFiles}
+                        handleCommit={handleCommit}
+                        commits={commits}
+                      />
+                    )}
+                  </div>
+                </div>
+              )
             ) : (
               <HistoryView 
                 filteredCommits={filteredCommits}
